@@ -1,0 +1,16 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\Backend",
+    "\\Backend\\dotnet",
+    "\\Backend\\dotnet\\AuthService\\bin\\Debug",
+    "\\Backend\\dotnet\\AuthService\\obj\\Release",
+    "\\Backend\\dotnet\\AuthService\\Properties",
+    "\\Backend\\microservices",
+    "\\Backend\\microservices\\services\\api-gateway",
+    "\\Backend\\microservices\\services\\api-gateway\\src",
+    "\\Frontend\\lunchbox-app"
+  ],
+  "SelectedNode": "\\Backend\\microservices\\services",
+  "PreviewInSolutionExplorer": false
+}

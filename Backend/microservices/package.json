@@ -1,0 +1,19 @@
+{
+  "name": "lunchbox-microservices",
+  "private": true,
+  "version": "1.0.0",
+  "description": "LunchBox Delivery backend microservices with durable jobs",
+  "workspaces": [
+    "services/*"
+  ],
+  "scripts": {
+    "start": "docker compose up --build",
+    "start:detached": "docker compose up --build -d",
+    "stop": "docker compose down",
+    "dev:gateway": "npm --workspace services/api-gateway run dev",
+    "dev:menu": "npm --workspace services/menu-service run dev",
+    "dev:orders": "npm --workspace services/order-service run dev",
+    "dev:worker": "npm --workspace services/worker-service run dev",
+    "dev:auth": "npm --workspace services/auth-service run dev"
+  }
+}

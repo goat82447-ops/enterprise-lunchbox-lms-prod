@@ -1,0 +1,20 @@
+<svg width="480" height="320" viewBox="0 0 480 320" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="480" y2="320" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E9F7FF"/>
+      <stop offset="1" stop-color="#D8F3DC"/>
+    </linearGradient>
+  </defs>
+  <rect width="480" height="320" rx="24" fill="url(#bg)"/>
+  <circle cx="240" cy="112" r="46" fill="#FFD7B5"/>
+  <path d="M194 100C196 75 216 58 240 58C264 58 284 75 286 100V114H194V100Z" fill="#1F2937"/>
+  <ellipse cx="223" cy="111" rx="5" ry="4" fill="#334155"/>
+  <ellipse cx="257" cy="111" rx="5" ry="4" fill="#334155"/>
+  <path d="M223 129C230 136 250 136 257 129" stroke="#B45309" stroke-width="4" stroke-linecap="round"/>
+  <rect x="170" y="160" width="140" height="96" rx="22" fill="#2563EB"/>
+  <rect x="205" y="176" width="70" height="24" rx="10" fill="#F8FAFC"/>
+  <text x="240" y="193" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="12" font-weight="700" fill="#1E3A8A">RIDER</text>
+  <path d="M168 188C140 180 122 171 106 150" stroke="#FB923C" stroke-width="14" stroke-linecap="round"/>
+  <path d="M104 151L126 148L116 169" fill="#FB923C"/>
+  <rect x="70" y="264" width="340" height="10" rx="5" fill="#1F2937" fill-opacity="0.2"/>
+</svg>

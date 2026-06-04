@@ -1,0 +1,551 @@
+import { Component, OnDestroy, OnInit } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
+import { Router } from '@angular/router';
+import { Subject, takeUntil } from 'rxjs';
+import { AppUser, Booking, CaptainFeedbackComment } from '../../core/models/delivery.models';
+import { AuthService } from '../../core/services/auth.service';
+import { BookingService } from '../../core/services/booking.service';
+import { NotificationService } from '../../core/services/notification.service';
+import { SafeResourceUrlPipe } from '../../shared/pipes/safe-resource-url.pipe';
+
+@Component({
+  selector: 'app-captain-profile',
+  standalone: true,
+  imports: [CommonModule, FormsModule, SafeResourceUrlPipe],
+  template: `
+    <div class="container py-4" *ngIf="captain as c">
+      <h2 class="mb-3">Captain Profile</h2>
+
+      <div class="row g-4">
+        <div class="col-lg-4">
+          <div class="card p-3 h-100">
+            <div class="text-center">
+              <img class="dp-image mb-3" [src]="dpPreview || defaultDp" alt="Captain DP" />
+              <h5 class="mb-0">{{ c.displayName }}</h5>
+              <div class="text-muted small">{{ c.username }} • {{ c.captainVehicle || 'captain' }}</div>
+            </div>
+
+            <hr />
+
+            <label class="form-label">Update DP (profile photo)</label>
+            <input type="file" class="form-control form-control-sm mb-2" accept="image/*" (change)="onDpFileSelected($event)" />
+            <button class="btn btn-sm btn-primary" type="button" (click)="saveDp()" [disabled]="!dpPreview || savingDp">Save DP</button>
+          </div>
+        </div>
+
+        <div class="col-lg-8">
+          <div class="card p-3 mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <h5 class="mb-0">Captain Live Location</h5>
+              <button class="btn btn-sm btn-outline-primary" type="button" (click)="refreshCaptainLocation()">Refresh Location</button>
+            </div>
+            <div class="small text-muted mb-2">Current: {{ captainLocationLabel }}</div>
+            <div class="small text-danger mb-2" *ngIf="locationError">{{ locationError }}</div>
+            <iframe
+              [src]="captainMapUrl | safeResourceUrl"
+              width="100%"
+              height="220"
+              frameborder="0"
+              style="border: 1px solid #dee2e6; border-radius: 10px"
+              loading="lazy"
+              referrerpolicy="no-referrer-when-downgrade"
+            ></iframe>
+          </div>
+
+          <div class="card p-3 mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h5 class="mb-0">Captain Active Rides</h5>
+              <button class="btn btn-sm btn-outline-secondary" type="button" (click)="refreshActiveRides()">Refresh</button>
+            </div>
+
+            <div *ngIf="readyForPickupMessage" class="alert alert-success py-2 mb-2">
+              {{ readyForPickupMessage }}
+            </div>
+
+            <div *ngIf="activeRides.length === 0" class="text-muted small">
+              No active rides available now.
+            </div>
+
+            <div class="ride-card" *ngFor="let ride of activeRides">
+              <div class="d-flex justify-content-between align-items-start gap-2">
+                <div>
+                  <div class="fw-semibold">{{ ride.id }}</div>
+                  <div class="small text-muted">{{ ride.pickup.address }} → {{ ride.drop.address }}</div>
+                  <div class="small text-muted">Customer: {{ ride.userName }} • OTP: {{ ride.otp }}</div>
+                </div>
+                <span class="badge" [ngClass]="statusBadge(ride.status)">{{ ride.status }}</span>
+              </div>
+
+              <div class="d-flex gap-2 mt-2">
+                <button class="btn btn-sm btn-primary" type="button" (click)="openRideTracking(ride)">Open Tracking</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card p-3 mb-3" id="deliveries-section">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h5 class="mb-0">Jobs and Deliveries</h5>
+              <span class="badge text-bg-dark">{{ completedRides.length }}</span>
+            </div>
+
+            <div *ngIf="completedRides.length === 0" class="text-muted small">
+              No completed or cancelled rides yet.
+            </div>
+
+            <div
+              class="delivery-card"
+              [class.highlight]="highlightedDeliveryBookingId === ride.id"
+              *ngFor="let ride of completedRides"
+            >
+              <div class="d-flex justify-content-between align-items-start gap-2">
+                <div>
+                  <div class="fw-semibold">{{ ride.id }}</div>
+                  <div class="small text-muted">{{ ride.pickup.address }} → {{ ride.drop.address }}</div>
+                  <div class="small text-muted">Status: {{ ride.status }}</div>
+                </div>
+                <div class="text-end">
+                  <span class="badge" [ngClass]="ride.paymentDone ? 'text-bg-success' : 'text-bg-secondary'">
+                    {{ ride.paymentDone ? 'Paid' : 'Pending Payment' }}
+                  </span>
+                  <div class="small mt-1" *ngIf="ride.finalAmount">₹{{ ride.finalAmount | number: '1.0-0' }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card p-3 mb-3">
+            <h5 class="mb-3">Captain Performance</h5>
+            <div class="stats-grid">
+              <div class="stat-card">
+                <div class="label">Average Captain Rating</div>
+                <div class="value">{{ avgCaptainRating }}</div>
+              </div>
+              <div class="stat-card">
+                <div class="label">Average Ride Rating</div>
+                <div class="value">{{ avgRideRating }}</div>
+              </div>
+              <div class="stat-card">
+                <div class="label">Hearts Received</div>
+                <div class="value">{{ totalHearts }}</div>
+              </div>
+              <div class="stat-card">
+                <div class="label">Feedback Count</div>
+                <div class="value">{{ feedbackCount }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card p-3">
+            <h5 class="mb-3">Recent Customer Comments</h5>
+            <div *ngIf="recentComments.length === 0" class="text-muted">No customer comments yet.</div>
+            <div *ngFor="let item of recentComments" class="comment-card">
+              <div class="fw-semibold">{{ item.userName }} • {{ item.bookingId }}</div>
+              <div class="small text-muted mb-1">
+                Ride {{ item.rideRating || '-' }}/5 • Captain {{ item.captainRating || '-' }}/5
+                <span *ngIf="item.lovedCaptain"> • Captain ❤️</span>
+                <span *ngIf="item.lovedRide"> • Ride ❤️</span>
+              </div>
+              <div>{{ item.feedbackText || 'No written comment.' }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `,
+  styles: [
+    `
+      .dp-image {
+        width: 128px;
+        height: 128px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 3px solid #dee2e6;
+        background: #f8f9fa;
+      }
+
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 10px;
+      }
+
+      .stat-card {
+        border: 1px solid #dee2e6;
+        border-radius: 10px;
+        padding: 10px;
+      }
+
+      .stat-card .label {
+        font-size: 12px;
+        color: #6c757d;
+      }
+
+      .stat-card .value {
+        font-size: 22px;
+        font-weight: 700;
+      }
+
+      .comment-card {
+        border: 1px solid #e9ecef;
+        border-radius: 10px;
+        padding: 10px;
+        margin-bottom: 8px;
+      }
+
+      .ride-card {
+        border: 1px solid #e9ecef;
+        border-radius: 10px;
+        padding: 10px;
+        margin-bottom: 8px;
+        background: #fff;
+      }
+
+      .delivery-card {
+        border: 1px solid #e9ecef;
+        border-radius: 10px;
+        padding: 10px;
+        margin-bottom: 8px;
+        background: #fff;
+      }
+
+      .delivery-card.highlight {
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.15);
+      }
+    `
+  ]
+})
+export class CaptainProfileComponent implements OnInit, OnDestroy {
+  captain: AppUser | null = null;
+  dpPreview = '';
+  defaultDp = 'https://ui-avatars.com/api/?name=Captain&background=f8d7da&color=7a1632&size=128';
+  savingDp = false;
+
+  avgCaptainRating = 0;
+  avgRideRating = 0;
+  totalHearts = 0;
+  feedbackCount = 0;
+  recentComments: CaptainFeedbackComment[] = [];
+  activeRides: Booking[] = [];
+  completedRides: Booking[] = [];
+  captainMapUrl = 'https://www.google.com/maps?q=17.4372,78.4011&z=14&output=embed';
+  captainLocationLabel = 'Waiting for location permission...';
+  locationError = '';
+  private notifiedRideIds = new Set<string>();
+  private notifiedPaymentRideIds = new Set<string>();
+  private notificationPermissionAsked = false;
+  highlightedDeliveryBookingId = '';
+  readyForPickupMessage = '';
+
+  private readonly destroy$ = new Subject<void>();
+
+  constructor(
+    private authService: AuthService,
+    private bookingService: BookingService,
+    private router: Router,
+    private notifications: NotificationService,
+    private route: ActivatedRoute
+  ) {}
+
+  ngOnInit(): void {
+    this.authService.user$.pipe(takeUntil(this.destroy$)).subscribe((user) => {
+      this.captain = user;
+      this.dpPreview = user?.profileImageUrl || '';
+      this.defaultDp = `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.displayName || 'Captain')}&background=f8d7da&color=7a1632&size=128`;
+      this.loadStats();
+      this.refreshActiveRides();
+      this.refreshCaptainLocation();
+      this.ensureBrowserNotificationPermission();
+    });
+
+    this.route.queryParamMap.pipe(takeUntil(this.destroy$)).subscribe((params) => {
+      const focus = params.get('focus');
+      const bookingId = params.get('bookingId');
+
+      if (focus === 'deliveries' && bookingId) {
+        this.highlightedDeliveryBookingId = bookingId;
+        this.notifications.push(`Redirected to Jobs and Deliveries for ${bookingId}.`, 'info');
+        this.readyForPickupMessage = `Ride ${bookingId} ended. I am ready to pickup you for the next trip.`;
+      }
+    });
+
+    this.bookingService.bookings$.pipe(takeUntil(this.destroy$)).subscribe(() => {
+      this.refreshActiveRides();
+      this.notifyForIncomingRides();
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  onDpFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      this.dpPreview = String(reader.result || '');
+    };
+    reader.readAsDataURL(file);
+  }
+
+  saveDp(): void {
+    if (!this.dpPreview) {
+      return;
+    }
+
+    this.savingDp = true;
+    this.authService.updateProfileImage(this.dpPreview).subscribe({
+      next: (response) => {
+        this.savingDp = false;
+        this.authService.applyProfileImage(response.profileImageUrl);
+        this.notifications.push(response.message, 'success');
+      },
+      error: (error) => {
+        this.savingDp = false;
+        this.notifications.push(error?.error?.error || 'Failed to update profile image.', 'error');
+      }
+    });
+  }
+
+  openRideTracking(booking: Booking): void {
+    this.router.navigate(['/tracking', booking.id]);
+  }
+
+  refreshActiveRides(): void {
+    const captain = this.captain;
+    const active = this.bookingService
+      .getAllBookingsSnapshot()
+      .filter((booking) => booking.status !== 'completed' && booking.status !== 'cancelled');
+
+    if (!captain) {
+      this.activeRides = [];
+      return;
+    }
+
+    const captainId = String(captain.id || '').trim().toLowerCase();
+    const captainUserName = String(captain.username || '').trim().toLowerCase();
+    const captainDisplayName = String(captain.displayName || '').trim().toLowerCase();
+
+    const dedicatedRides = active.filter((booking) => {
+      if (booking.notificationTarget === 'all') {
+        return true;
+      }
+
+      const bookingCaptainId = String(booking.captainId || '').trim().toLowerCase();
+      const bookingCaptainName = String(booking.driverName || '').trim().toLowerCase();
+      const preferredCaptainId = String(booking.preferredCaptainId || '').trim().toLowerCase();
+      const preferredCaptainName = String(booking.preferredCaptainName || '').trim().toLowerCase();
+
+      return (
+        (bookingCaptainId && bookingCaptainId === captainId) ||
+        (bookingCaptainId && bookingCaptainId === captainUserName) ||
+        (preferredCaptainId && preferredCaptainId === captainId) ||
+        (preferredCaptainId && preferredCaptainId === captainUserName) ||
+        (bookingCaptainName && bookingCaptainName === captainDisplayName) ||
+        (bookingCaptainName && bookingCaptainName === captainUserName) ||
+        (preferredCaptainName && preferredCaptainName === captainDisplayName) ||
+        (preferredCaptainName && preferredCaptainName === captainUserName)
+      );
+    });
+
+    this.activeRides = dedicatedRides.sort(
+      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    );
+
+    const completed = this.bookingService
+      .getAllBookingsSnapshot()
+      .filter((booking) => booking.status === 'completed' || booking.status === 'cancelled')
+      .filter((booking) => {
+        if (booking.notificationTarget === 'all') {
+          return true;
+        }
+
+        const bookingCaptainId = String(booking.captainId || '').trim().toLowerCase();
+        const bookingCaptainName = String(booking.driverName || '').trim().toLowerCase();
+        const preferredCaptainId = String(booking.preferredCaptainId || '').trim().toLowerCase();
+        const preferredCaptainName = String(booking.preferredCaptainName || '').trim().toLowerCase();
+
+        return (
+          (bookingCaptainId && bookingCaptainId === captainId) ||
+          (bookingCaptainId && bookingCaptainId === captainUserName) ||
+          (preferredCaptainId && preferredCaptainId === captainId) ||
+          (preferredCaptainId && preferredCaptainId === captainUserName) ||
+          (bookingCaptainName && bookingCaptainName === captainDisplayName) ||
+          (bookingCaptainName && bookingCaptainName === captainUserName) ||
+          (preferredCaptainName && preferredCaptainName === captainDisplayName) ||
+          (preferredCaptainName && preferredCaptainName === captainUserName)
+        );
+      });
+
+    this.completedRides = completed.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+    this.updateReadyForPickupMessage();
+  }
+
+  refreshCaptainLocation(): void {
+    this.locationError = '';
+    if (!navigator.geolocation) {
+      this.locationError = 'Geolocation is not supported in this browser.';
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = Math.round(position.coords.latitude * 100000) / 100000;
+        const lng = Math.round(position.coords.longitude * 100000) / 100000;
+        this.captainLocationLabel = `${lat}, ${lng}`;
+        this.captainMapUrl = `https://www.google.com/maps?q=${lat},${lng}&z=15&output=embed`;
+      },
+      () => {
+        this.locationError = 'Location permission denied. Please allow location access.';
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }
+
+  private notifyForIncomingRides(): void {
+    for (const ride of this.activeRides) {
+      if (this.notifiedRideIds.has(ride.id)) {
+        continue;
+      }
+
+      this.notifiedRideIds.add(ride.id);
+      const message = `New ride ${ride.id}: ${ride.pickup.address} → ${ride.drop.address}`;
+      this.notifications.push(message, 'info');
+      this.playIncomingRideSound();
+
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        new Notification('New Ride Assigned', {
+          body: message,
+          tag: `ride-${ride.id}`
+        });
+      }
+    }
+
+    this.notifyForPaymentUpdates();
+  }
+
+  private notifyForPaymentUpdates(): void {
+    for (const ride of this.completedRides) {
+      if (!ride.paymentDone || this.notifiedPaymentRideIds.has(ride.id)) {
+        continue;
+      }
+
+      this.notifiedPaymentRideIds.add(ride.id);
+      const message = `Customer paid for ${ride.id}. Amount: Rs ${Math.round(ride.finalAmount || 0)}.`;
+      this.notifications.push(message, 'success');
+
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        new Notification('Payment Received', {
+          body: message,
+          tag: `payment-${ride.id}`
+        });
+      }
+    }
+  }
+
+  private updateReadyForPickupMessage(): void {
+    if (this.activeRides.length > 0) {
+      this.readyForPickupMessage = '';
+      return;
+    }
+
+    if (this.highlightedDeliveryBookingId) {
+      this.readyForPickupMessage = `Ride ${this.highlightedDeliveryBookingId} ended. I am ready to pickup you for the next trip.`;
+      return;
+    }
+
+    const latestCompletedRide = this.completedRides.find((ride) => ride.status === 'completed');
+    if (!latestCompletedRide) {
+      this.readyForPickupMessage = '';
+      return;
+    }
+
+    this.readyForPickupMessage = `Ride ${latestCompletedRide.id} ended. I am ready to pickup you for the next trip.`;
+  }
+
+  private ensureBrowserNotificationPermission(): void {
+    if (this.notificationPermissionAsked) {
+      return;
+    }
+
+    this.notificationPermissionAsked = true;
+    if (typeof Notification === 'undefined') {
+      return;
+    }
+
+    if (Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => void 0);
+    }
+  }
+
+  private playIncomingRideSound(): void {
+    const AudioCtx = (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext
+      || (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+
+    if (!AudioCtx) {
+      return;
+    }
+
+    const context = new AudioCtx();
+    const sequence = [0, 0.14, 0.28];
+    sequence.forEach((offset) => {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.type = 'sine';
+      oscillator.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, context.currentTime + offset);
+      gain.gain.exponentialRampToValueAtTime(0.08, context.currentTime + offset + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + offset + 0.1);
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start(context.currentTime + offset);
+      oscillator.stop(context.currentTime + offset + 0.12);
+    });
+
+    setTimeout(() => context.close().catch(() => void 0), 700);
+  }
+
+  statusBadge(status: Booking['status']): string {
+    if (status === 'assigned' || status === 'pickup_in_progress' || status === 'in_transit' || status === 'arriving') {
+      return 'text-bg-primary';
+    }
+
+    if (status === 'created') {
+      return 'text-bg-warning';
+    }
+
+    if (status === 'delivered') {
+      return 'text-bg-success';
+    }
+
+    return 'text-bg-secondary';
+  }
+
+  private loadStats(): void {
+    this.authService.getCaptainFeedbackStats().subscribe({
+      next: (stats) => {
+        this.avgCaptainRating = stats.avgCaptainRating;
+        this.avgRideRating = stats.avgRideRating;
+        this.totalHearts = stats.totalHearts;
+        this.feedbackCount = stats.feedbackCount;
+        this.recentComments = stats.recentComments || [];
+      },
+      error: (error) => {
+        this.avgCaptainRating = 0;
+        this.avgRideRating = 0;
+        this.totalHearts = 0;
+        this.feedbackCount = 0;
+        this.recentComments = [];
+        this.notifications.push(error?.error?.error || 'Failed to load captain feedback stats.', 'warning');
+      }
+    });
+  }
+}

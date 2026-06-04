@@ -1,0 +1,16 @@
+<svg width="360" height="120" viewBox="0 0 360 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="360" y2="120" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#EF233C"/>
+      <stop offset="1" stop-color="#F77F00"/>
+    </linearGradient>
+  </defs>
+  <rect width="360" height="120" rx="20" fill="url(#g)"/>
+  <rect x="22" y="28" width="66" height="52" rx="10" fill="#FFF" fill-opacity="0.94"/>
+  <path d="M31 47H79" stroke="#EF233C" stroke-width="6" stroke-linecap="round"/>
+  <path d="M31 61H73" stroke="#EF233C" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="43" cy="84" r="7" fill="#2D3142"/>
+  <circle cx="69" cy="84" r="7" fill="#2D3142"/>
+  <text x="102" y="60" fill="white" font-family="Segoe UI, Arial, sans-serif" font-size="24" font-weight="700">Lucnh box Delivary</text>
+  <text x="102" y="82" fill="white" font-family="Segoe UI, Arial, sans-serif" font-size="13" font-weight="500">Fast rides, food, parcels, and daily offers</text>
+</svg>

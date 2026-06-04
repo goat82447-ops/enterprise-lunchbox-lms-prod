@@ -1,0 +1,25 @@
+<svg width="960" height="240" viewBox="0 0 960 240" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="LunchBox Delivery banner">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="960" y2="240" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE4EA"/>
+      <stop offset="1" stop-color="#FFF7DA"/>
+    </linearGradient>
+    <linearGradient id="pill" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#BE123C"/>
+      <stop offset="1" stop-color="#EF4444"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="960" height="240" rx="24" fill="url(#bg)"/>
+  <circle cx="860" cy="44" r="58" fill="#FECACA" opacity="0.45"/>
+  <circle cx="66" cy="194" r="76" fill="#FDE68A" opacity="0.35"/>
+
+  <rect x="48" y="50" width="98" height="98" rx="49" fill="url(#pill)"/>
+  <text x="97" y="108" text-anchor="middle" fill="#FFFFFF" font-family="Segoe UI, Arial, sans-serif" font-size="34" font-weight="700">LB</text>
+
+  <text x="170" y="95" fill="#1F2937" font-family="Segoe UI, Arial, sans-serif" font-size="42" font-weight="700">LunchBox Delivery</text>
+  <text x="170" y="136" fill="#374151" font-family="Segoe UI, Arial, sans-serif" font-size="24">Fast pickup. Safe drops. Happy customers.</text>
+
+  <rect x="170" y="158" width="220" height="42" rx="21" fill="#FFFFFF" stroke="#FCA5A5"/>
+  <text x="280" y="185" text-anchor="middle" fill="#B91C1C" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="600">Welcome Back</text>
+</svg>
