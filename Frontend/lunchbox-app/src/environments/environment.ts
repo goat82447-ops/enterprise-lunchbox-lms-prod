@@ -1,7 +1,7 @@
 export const environment = {
   production: false,
-  authApiBase: 'http://localhost:3003',
-  parcelApiBase: 'http://localhost:3004',
+  authApiBase: 'http://localhost:3000',
+  parcelApiBase: 'http://localhost:3000',
   gatewayApiBase: 'http://localhost:3000',
   webSocketUrl: 'ws://localhost:3000/ws',
   googleMapsApiKey: 'AIzaSyDemoKeyForDevelopment',
