@@ -1,7 +1,10 @@
+using MongoDB.Bson.Serialization.Attributes;
+
 namespace ParcelService.Models;
 
 public sealed class ParcelBooking
 {
+    [BsonId]
     public int Id { get; set; }
 
     public string TrackingNumber { get; set; } = string.Empty;

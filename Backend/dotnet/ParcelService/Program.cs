@@ -1,6 +1,5 @@
 using ParcelService.Data;
 using ParcelService.Models;
-using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,8 +13,7 @@ builder.Services.AddCors(options =>
 			.AllowAnyMethod();
 	});
 });
-builder.Services.AddDbContext<ParcelDbContext>(options =>
-	options.UseSqlite($"Data Source={Path.Combine(builder.Environment.ContentRootPath, "parcel.db")}"));
+builder.Services.AddSingleton<ParcelDbContext>();
 
 var app = builder.Build();
 
@@ -24,8 +22,7 @@ app.UseCors();
 using (var scope = app.Services.CreateScope())
 {
 	var dbContext = scope.ServiceProvider.GetRequiredService<ParcelDbContext>();
-	dbContext.Database.EnsureCreated();
-	ParcelSeeder.Seed(dbContext);
+	await ParcelSeeder.SeedAsync(dbContext);
 }
 
 app.MapGet("/", () => Results.Ok(new
@@ -39,18 +36,16 @@ app.MapGet("/api/catalog", () => Results.Ok(ParcelCatalog.Create()));
 
 app.MapGet("/api/bookings", async (ParcelDbContext dbContext) =>
 {
-	var bookings = await dbContext.Bookings
-		.AsNoTracking()
-		.OrderByDescending(booking => booking.CreatedAtUtc)
-		.Select(booking => BookingSummary.FromEntity(booking))
-		.ToListAsync();
+	var bookings = (await dbContext.GetBookingsAsync())
+		.Select(BookingSummary.FromEntity)
+		.ToList();
 
 	return Results.Ok(bookings);
 });
 
 app.MapGet("/api/bookings/{id:int}", async (int id, ParcelDbContext dbContext) =>
 {
-	var booking = await dbContext.Bookings.AsNoTracking().FirstOrDefaultAsync(item => item.Id == id);
+	var booking = await dbContext.FindBookingByIdAsync(id);
 	if (booking is null)
 	{
 		return Results.NotFound(new { message = "Booking not found." });
@@ -102,15 +97,14 @@ app.MapPost("/api/bookings", async (CreateBookingRequest request, ParcelDbContex
 		EventTimeUtc = DateTime.UtcNow.AddMinutes(4)
 	});
 
-	dbContext.Bookings.Add(booking);
-	await dbContext.SaveChangesAsync();
+	await dbContext.CreateBookingAsync(booking);
 
 	return Results.Created($"/api/bookings/{booking.Id}", BookingDetails.FromEntity(booking));
 });
 
 app.MapPost("/api/bookings/{id:int}/verify-pin", async (int id, VerifyDeliveryPinRequest request, ParcelDbContext dbContext) =>
 {
-	var booking = await dbContext.Bookings.FirstOrDefaultAsync(item => item.Id == id);
+	var booking = await dbContext.FindBookingByIdAsync(id);
 	if (booking is null)
 	{
 		return Results.NotFound(new { message = "Booking not found." });
@@ -128,7 +122,7 @@ app.MapPost("/api/bookings/{id:int}/verify-pin", async (int id, VerifyDeliveryPi
 			VehicleLongitude = booking.VehicleLongitude,
 			EventTimeUtc = DateTime.UtcNow
 		});
-		await dbContext.SaveChangesAsync();
+		await dbContext.ReplaceBookingAsync(booking);
 	}
 
 	return Results.Ok(new DeliveryPinVerificationResponse(
@@ -139,10 +133,7 @@ app.MapPost("/api/bookings/{id:int}/verify-pin", async (int id, VerifyDeliveryPi
 
 app.MapGet("/api/bookings/{id:int}/tracking", async (int id, ParcelDbContext dbContext) =>
 {
-	var booking = await dbContext.Bookings
-		.AsNoTracking()
-		.Include(item => item.TrackingEvents.OrderBy(eventItem => eventItem.EventTimeUtc))
-		.FirstOrDefaultAsync(item => item.Id == id);
+	var booking = await dbContext.FindBookingByIdAsync(id);
 
 	if (booking is null)
 	{

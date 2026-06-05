@@ -3,12 +3,13 @@ import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable, interval, throwError } from 'rxjs';
 import { catchError, switchMap } from 'rxjs/operators';
 import { Order } from '../models';
+import { environment } from '../../environments/environment';
 
 @Injectable({
   providedIn: 'root'
 })
 export class OrderService {
-  private apiUrl = 'https://lunchbox-api-gateway.onrender.com/api/orders';
+  private apiUrl = `${environment.gatewayApiBase}/api/orders`;
   private currentOrderSubject = new BehaviorSubject<Order | null>(null);
   public currentOrder$: Observable<Order | null> = this.currentOrderSubject.asObservable();
 

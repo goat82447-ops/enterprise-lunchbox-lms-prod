@@ -3,12 +3,13 @@ import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable, throwError } from 'rxjs';
 import { catchError, tap } from 'rxjs/operators';
 import { User } from '../models';
+import { environment } from '../../environments/environment';
 
 @Injectable({
   providedIn: 'root'
 })
 export class UserService {
-  private apiUrl = 'https://lunchbox-api-gateway.onrender.com/api/users';
+  private apiUrl = `${environment.gatewayApiBase}/api/users`;
   private currentUserSubject = new BehaviorSubject<User | null>(this.loadFromLocalStorage());
   public currentUser$: Observable<User | null> = this.currentUserSubject.asObservable();
 

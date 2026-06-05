@@ -1,6 +1,5 @@
 using AuthService.Data;
 using AuthService.Models;
-using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,8 +13,7 @@ builder.Services.AddCors(options =>
             .AllowAnyMethod();
     });
 });
-builder.Services.AddDbContext<AuthDbContext>(options =>
-    options.UseSqlite($"Data Source={Path.Combine(builder.Environment.ContentRootPath, "auth.db")}"));
+builder.Services.AddSingleton<AuthDbContext>();
 
 var app = builder.Build();
 
@@ -24,8 +22,7 @@ app.UseCors();
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
-    dbContext.Database.EnsureCreated();
-    AuthSeeder.Seed(dbContext);
+    await AuthSeeder.SeedAsync(dbContext);
 }
 
 app.MapGet("/", () => Results.Ok(new
@@ -37,25 +34,27 @@ app.MapGet("/", () => Results.Ok(new
 
 app.MapGet("/api/auth/demo-user", async (AuthDbContext dbContext) =>
 {
-    var user = await dbContext.Users
-        .AsNoTracking()
-        .Select(account => new
-        {
-            account.Id,
-            account.FullName,
-            account.Email,
-            account.MobileNumber,
-            account.DefaultPickupAddress
-        })
-        .FirstAsync();
+    var account = await dbContext.GetFirstUserAsync();
+    if (account is null)
+    {
+        return Results.NotFound(new { message = "User was not found." });
+    }
+
+    var user = new
+    {
+        account.Id,
+        account.FullName,
+        account.Email,
+        account.MobileNumber,
+        account.DefaultPickupAddress
+    };
 
     return Results.Ok(user);
 });
 
 app.MapPost("/api/auth/login", async (LoginRequest request, AuthDbContext dbContext) =>
 {
-    var account = await dbContext.Users.FirstOrDefaultAsync(user =>
-        user.Email == request.Email && user.Password == request.Password);
+    var account = await dbContext.FindUserByCredentialsAsync(request.Email, request.Password);
 
     if (account is null)
     {
@@ -64,7 +63,7 @@ app.MapPost("/api/auth/login", async (LoginRequest request, AuthDbContext dbCont
 
     account.LastLoginAtUtc = DateTime.UtcNow;
     account.LastIssuedPin = account.SecurityPin;
-    await dbContext.SaveChangesAsync();
+    await dbContext.ReplaceUserAsync(account);
 
     return Results.Ok(new LoginResponse(
         account.Id,
@@ -78,7 +77,7 @@ app.MapPost("/api/auth/login", async (LoginRequest request, AuthDbContext dbCont
 
 app.MapPost("/api/auth/verify-pin", async (VerifyPinRequest request, AuthDbContext dbContext) =>
 {
-    var account = await dbContext.Users.FirstOrDefaultAsync(user => user.Id == request.UserId);
+    var account = await dbContext.FindUserByIdAsync(request.UserId);
     if (account is null)
     {
         return Results.NotFound(new { message = "User was not found." });

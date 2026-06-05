@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { BehaviorSubject, Observable } from 'rxjs';
+import { environment } from '../../../environments/environment';
 import {
   AppUser,
   CaptainDirectoryItem,
@@ -17,7 +18,7 @@ import {
 
 const STORAGE_KEY = 'delivery_app_user';
 const SESSION_KEY = 'delivery_session_token';
-const AUTH_API_BASE = 'https://lunchbox-auth-service.onrender.com';
+const AUTH_API_BASE = environment.authApiBase;
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {

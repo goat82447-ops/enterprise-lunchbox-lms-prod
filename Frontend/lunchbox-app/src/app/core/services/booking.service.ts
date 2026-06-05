@@ -4,9 +4,10 @@ import { BehaviorSubject, Observable, catchError, fromEvent, interval, map, of, 
 import { Booking, BookingRequest, BookingStatus } from '../models/delivery.models';
 import { NotificationService } from './notification.service';
 import { AuthService } from './auth.service';
+import { environment } from '../../../environments/environment';
 
 const STORAGE_KEY = 'delivery_bookings';
-const BOOKINGS_API = 'https://lunchbox-auth-service.onrender.com/api/bookings';
+const BOOKINGS_API = `${environment.parcelApiBase}/api/bookings`;
 
 @Injectable({ providedIn: 'root' })
 export class BookingService {
@@ -46,7 +47,7 @@ export class BookingService {
         if (!bookings) {
           return;
         }
-        this.persist(bookings);
+        this.persist(this.mergeServerWithLocal(bookings));
       });
   }
 
@@ -372,7 +373,7 @@ export class BookingService {
         return;
       }
 
-      this.persist(serverBookings);
+      this.persist(this.mergeServerWithLocal(serverBookings));
       if (forceNotify) {
         this.notifications.push('Live ride sync connected to backend.', 'info');
       }
@@ -408,7 +409,62 @@ export class BookingService {
       return;
     }
 
+    const localTempIdx = existing.findIndex((item) => this.isLikelyLocalTempMatch(item, serverBooking));
+    if (localTempIdx >= 0) {
+      existing[localTempIdx] = {
+        ...existing[localTempIdx],
+        ...serverBooking
+      };
+      this.persist(existing);
+      return;
+    }
+
     this.persist([serverBooking, ...existing]);
+  }
+
+  private mergeServerWithLocal(serverBookings: Booking[]): Booking[] {
+    const local = this.bookingsSubject.value;
+    const serverIds = new Set(serverBookings.map((item) => item.id));
+
+    const keepLocal = local.filter((item) => {
+      if (serverIds.has(item.id)) {
+        return false;
+      }
+
+      const recentMinutes = this.minutesSince(item.updatedAt || item.createdAt);
+      const active = item.status !== 'completed' && item.status !== 'cancelled';
+      const localTempId = item.id.startsWith('BK-');
+
+      return localTempId && active && recentMinutes <= 30;
+    });
+
+    return [...serverBookings, ...keepLocal].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+  }
+
+  private isLikelyLocalTempMatch(localBooking: Booking, serverBooking: Booking): boolean {
+    if (!localBooking.id.startsWith('BK-')) {
+      return false;
+    }
+
+    const closeInTime = Math.abs(
+      new Date(localBooking.createdAt).getTime() - new Date(serverBooking.createdAt).getTime()
+    ) <= 10 * 60 * 1000;
+
+    return closeInTime &&
+      localBooking.userId === serverBooking.userId &&
+      localBooking.serviceType === serverBooking.serviceType &&
+      localBooking.vehicleType === serverBooking.vehicleType &&
+      localBooking.pickup.address === serverBooking.pickup.address &&
+      localBooking.drop.address === serverBooking.drop.address;
+  }
+
+  private minutesSince(isoTime?: string): number {
+    if (!isoTime) {
+      return Number.POSITIVE_INFINITY;
+    }
+    return (Date.now() - new Date(isoTime).getTime()) / 60000;
   }
 
   private progressBooking(booking: Booking): Booking {

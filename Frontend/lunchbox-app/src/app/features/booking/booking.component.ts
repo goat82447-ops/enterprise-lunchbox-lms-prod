@@ -35,6 +35,9 @@ type PopularPlace = {
   captainHint: string;
 };
 
+const LAST_LOCATION_KEY = 'delivery_last_location';
+const RECENT_LOCATIONS_KEY = 'delivery_recent_locations';
+
 @Component({
   selector: 'app-booking',
   standalone: true,
@@ -43,6 +46,52 @@ type PopularPlace = {
     <div class="container py-4">
       <h2 class="mb-3">Book Delivery</h2>
       <p class="text-muted">Uber-style matching: pick from live nearby captains and confirm instantly.</p>
+
+      <div class="status-banner mb-4" *ngIf="latestPendingAcceptanceBooking as pending">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+          <div>
+            <div class="status-banner-title">Captain acceptance pending</div>
+            <div class="small mb-1">
+              Ride <strong>{{ pending.id }}</strong> is waiting for captain approval.
+              <span *ngIf="pendingAcceptanceCount > 1">You also have {{ pendingAcceptanceCount - 1 }} more pending request(s).</span>
+            </div>
+            <div class="small text-muted">Requested at {{ pending.createdAt | date: 'short' }}</div>
+          </div>
+          <button class="btn btn-sm btn-warning" type="button" (click)="openTracking(pending)">Open Pending Ride</button>
+        </div>
+      </div>
+
+      <div class="card p-3 mb-4 voice-command-card">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <div>
+            <h6 class="mb-1">Voice Booking Assistant</h6>
+            <small class="text-muted">Say: "Book trip from Hitech City Metro to Gachibowli Circle"</small>
+          </div>
+          <button
+            type="button"
+            class="btn btn-sm"
+            [ngClass]="isVoiceListening ? 'btn-danger' : 'btn-outline-primary'"
+            [disabled]="!voiceSupported"
+            (click)="toggleVoiceBooking()"
+          >
+            {{ isVoiceListening ? 'Stop Listening' : 'Start Voice Booking' }}
+          </button>
+        </div>
+        <div class="small mt-2" *ngIf="!voiceSupported">Voice command is not supported in this browser. Use Chrome/Edge for mic booking.</div>
+        <div class="small mt-2 text-danger" *ngIf="micPermissionDenied">Microphone permission is blocked. Allow mic access in browser and retry.</div>
+        <div class="small mt-2 text-primary" *ngIf="pendingVehicleSelection">
+          Route captured. Say vehicle type now: car, bike, or auto. It will book immediately.
+        </div>
+        <div class="input-group input-group-sm mt-2">
+          <input
+            class="form-control"
+            placeholder="Type command: book order from A to B"
+            [(ngModel)]="voiceCommandText"
+          />
+          <button class="btn btn-outline-secondary" type="button" (click)="applyVoiceCommandText()">Apply Command</button>
+        </div>
+        <div class="small mt-2" *ngIf="voiceSupported && voiceTranscript">Heard: {{ voiceTranscript }}</div>
+      </div>
 
       <div class="card p-3 mb-4 how-to-book-card">
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
@@ -163,7 +212,7 @@ type PopularPlace = {
               <button class="btn btn-outline-primary btn-sm" type="button" (click)="allowCurrentLocation('pickup')">Allow Current Location</button>
               <select class="form-select form-select-sm preset-select" [ngModel]="selectedPickupPreset" (ngModelChange)="applyPickupPreset($event)">
                 <option value="">Select pickup location</option>
-                <option *ngFor="let p of locationPresets" [value]="p.name">{{ p.name }}</option>
+                <option *ngFor="let p of pickupLocationSuggestions" [value]="p.name">{{ p.name }}</option>
               </select>
             </div>
             <input class="form-control mb-2" placeholder="Pickup address" [(ngModel)]="pickupAddress" />
@@ -243,7 +292,7 @@ type PopularPlace = {
               <button class="btn btn-outline-primary btn-sm" type="button" (click)="allowCurrentLocation('drop')">Allow Current Location</button>
               <select class="form-select form-select-sm preset-select" [ngModel]="selectedDropPreset" (ngModelChange)="applyDropPreset($event)">
                 <option value="">Select drop location</option>
-                <option *ngFor="let p of locationPresets" [value]="p.name">{{ p.name }}</option>
+                <option *ngFor="let p of dropLocationSuggestions" [value]="p.name">{{ p.name }}</option>
               </select>
             </div>
             <input class="form-control mb-2" placeholder="Drop address" [(ngModel)]="dropAddress" />
@@ -256,11 +305,12 @@ type PopularPlace = {
             <input class="form-control mb-3" placeholder="Ex: Ring doorbell, fragile package, call on arrival" [(ngModel)]="rideNotes" />
 
             <div class="fare-box mb-4">
-              <div><strong>Estimated Fare:</strong> ₹{{ estimatedFare }}</div>
+              <div><strong>Estimated Fare:</strong> ₹{{ totalEstimatedFare }}</div>
               <small class="text-muted">Calculated using distance + traffic + weather + vehicle type.</small>
               <div class="small mt-2">Distance fare: ₹{{ fareBreakdown.distanceFare }}</div>
               <div class="small">Traffic: {{ trafficCondition | titlecase }} (x{{ fareBreakdown.trafficMultiplier }})</div>
               <div class="small">Weather: {{ weatherCondition | titlecase }} (x{{ fareBreakdown.weatherMultiplier }})</div>
+              <div class="small text-danger" *ngIf="availabilitySurcharge > 0">Captain availability fee: +₹{{ availabilitySurcharge }}</div>
               <div class="small text-muted mt-1">{{ fareStatusMessage }}</div>
             </div>
 
@@ -506,6 +556,27 @@ type PopularPlace = {
         background: #fff;
       }
 
+      .voice-command-card {
+        border: 1px solid #dbeafe;
+        background: linear-gradient(135deg, #f8fbff 0%, #ffffff 100%);
+      }
+
+      .status-banner {
+        border: 1px solid #ffe69c;
+        border-left: 5px solid #ffc107;
+        border-radius: 12px;
+        padding: 12px;
+        background: linear-gradient(135deg, #fff8e1 0%, #fffdf5 100%);
+      }
+
+      .status-banner-title {
+        font-size: 14px;
+        font-weight: 700;
+        color: #8a6d00;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+      }
+
       @media (max-width: 576px) {
         .captain-grid {
           grid-template-columns: 1fr;
@@ -568,6 +639,8 @@ export class BookingComponent implements OnDestroy {
     { name: 'Banjara Hills Road 12', lat: 17.4148, lng: 78.4359 },
     { name: 'Secunderabad Station', lat: 17.4399, lng: 78.4983 }
   ];
+  pickupLocationSuggestions: LocationPreset[] = [];
+  dropLocationSuggestions: LocationPreset[] = [];
   selectedPickupPreset = '';
   selectedDropPreset = '';
   bookingHistory: Booking[] = [];
@@ -577,6 +650,16 @@ export class BookingComponent implements OnDestroy {
   private historySubscription?: Subscription;
   private routeQueryParamsSubscription?: Subscription;
   private liveFareRequestCounter = 0;
+  private speechRecognition: any | null = null;
+  voiceSupported = false;
+  isVoiceListening = false;
+  voiceTranscript = '';
+  voiceCommandText = '';
+  micPermissionDenied = false;
+  private captainFallbackNoticeShown = false;
+  pendingVehicleSelection = false;
+  private pendingVoiceTrip?: { from: string; to: string; note?: string };
+  availabilitySurcharge = 0;
 
   pickupAddress = 'Pickup Point';
   pickupLat = 17.4372;
@@ -596,11 +679,13 @@ export class BookingComponent implements OnDestroy {
   ) {
     this.currentUser = this.auth.getCurrentUser();
     this.profileImageUrl = this.currentUser?.profileImageUrl || this.buildUserAvatar(this.currentUser);
+    this.initializeVoiceBooking();
     this.loadLiveLocationDefaults();
     this.refreshNearbyCaptains();
     this.refreshHandle = setInterval(() => this.refreshNearbyCaptains(), 12000);
     this.nearbyHotels = this.generateNearbyHotels();
     this.popularPlaces = this.buildPopularPlaces();
+    this.refreshLocationSuggestions();
 
     const user = this.auth.getCurrentUser();
     if (user) {
@@ -608,6 +693,7 @@ export class BookingComponent implements OnDestroy {
         this.bookingHistory = [...items].sort(
           (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         );
+        this.refreshLocationSuggestions();
       });
     }
 
@@ -638,18 +724,57 @@ export class BookingComponent implements OnDestroy {
 
     this.historySubscription?.unsubscribe();
     this.routeQueryParamsSubscription?.unsubscribe();
+
+    if (this.speechRecognition) {
+      this.speechRecognition.onresult = null;
+      this.speechRecognition.onerror = null;
+      this.speechRecognition.onend = null;
+      this.speechRecognition.stop();
+    }
+  }
+
+  toggleVoiceBooking(): void {
+    if (!this.voiceSupported || !this.speechRecognition) {
+      this.notifications.push('Voice booking is not supported on this browser.', 'warning');
+      return;
+    }
+
+    if (this.isVoiceListening) {
+      this.speechRecognition.stop();
+      return;
+    }
+
+    this.requestMicPermissionAndStart();
+  }
+
+  applyVoiceCommandText(): void {
+    const command = this.voiceCommandText.trim();
+    if (!command) {
+      this.notifications.push('Type a command like: book order from A to B', 'warning');
+      return;
+    }
+
+    this.voiceTranscript = command;
+    this.voiceCommandText = '';
+    this.handleVoiceCommand(command);
   }
 
   refreshNearbyCaptains(): void {
     this.auth.getCaptains().subscribe({
       next: (captains) => {
-        this.nearbyCaptains = captains.map((captain, index) => this.toNearbyCaptain(captain, index));
+        const mapped = captains.map((captain, index) => this.toNearbyCaptain(captain, index));
+        this.nearbyCaptains = mapped.length > 0 ? mapped : this.generateFallbackNearbyCaptains();
+
+        if (mapped.length === 0 && !this.captainFallbackNoticeShown) {
+          this.captainFallbackNoticeShown = true;
+          this.notifications.push('Live captains unavailable. Showing nearby fallback captains.', 'warning');
+        }
 
         const matchesVehicle = this.nearbyCaptains.filter((captain) => captain.vehicleType === this.vehicleType);
         const currentSelected = this.selectedCaptain
-          ? matchesVehicle.find((captain) => captain.id === this.selectedCaptain?.id)
+          ? matchesVehicle.find((captain) => captain.id === this.selectedCaptain?.id && this.isCaptainAvailable(captain))
           : undefined;
-        const firstAvailable = currentSelected || matchesVehicle.find((captain) => captain.availability !== 'busy') || matchesVehicle[0];
+        const firstAvailable = currentSelected || matchesVehicle.find((captain) => this.isCaptainAvailable(captain));
 
         if (firstAvailable) {
           this.selectCaptain(firstAvailable);
@@ -660,8 +785,15 @@ export class BookingComponent implements OnDestroy {
         this.popularPlaces = this.buildPopularPlaces();
       },
       error: () => {
-        this.nearbyCaptains = [];
-        this.selectedCaptain = null;
+        this.nearbyCaptains = this.generateFallbackNearbyCaptains();
+        const matchesVehicle = this.nearbyCaptains.filter((captain) => captain.vehicleType === this.vehicleType);
+        this.selectedCaptain = matchesVehicle.find((captain) => this.isCaptainAvailable(captain)) || null;
+
+        if (!this.captainFallbackNoticeShown) {
+          this.captainFallbackNoticeShown = true;
+          this.notifications.push('Captain API not reachable. Showing nearby fallback captains.', 'warning');
+        }
+
         this.popularPlaces = this.buildPopularPlaces();
       }
     });
@@ -669,6 +801,10 @@ export class BookingComponent implements OnDestroy {
 
   get filteredNearbyCaptains(): NearbyCaptain[] {
     return this.nearbyCaptains.filter((captain) => captain.vehicleType === this.vehicleType);
+  }
+
+  get totalEstimatedFare(): number {
+    return Math.max(0, Math.round(this.estimatedFare + this.availabilitySurcharge));
   }
 
   onVehicleTypeChange(vehicleType: VehicleType): void {
@@ -679,7 +815,12 @@ export class BookingComponent implements OnDestroy {
       this.updateEstimatedFare(2.5, this.vehicleType);
       return;
     }
-    const next = list.find((captain) => captain.availability !== 'busy') || list[0];
+    const next = list.find((captain) => this.isCaptainAvailable(captain));
+    if (!next) {
+      this.selectedCaptain = null;
+      this.updateEstimatedFare(2.5, this.vehicleType);
+      return;
+    }
     this.selectCaptain(next);
   }
 
@@ -688,9 +829,14 @@ export class BookingComponent implements OnDestroy {
       this.selectedCaptain = null;
       return;
     }
+    if (!this.isCaptainAvailable(captain)) {
+      this.selectedCaptain = null;
+      return;
+    }
     this.selectedCaptain = captain;
     this.vehicleType = captain.vehicleType;
     this.updateEstimatedFare(captain.distanceKm, captain.vehicleType);
+    this.clearAvailabilitySurcharge();
   }
 
   onServiceTypeChange(serviceType: ServiceType): void {
@@ -810,6 +956,7 @@ export class BookingComponent implements OnDestroy {
           this.pickupLat = lat;
           this.pickupLng = lng;
           this.pickupAddress = label;
+          this.saveRecentLocation('pickup', { name: label, lat, lng });
           this.refreshNearbyCaptains();
           if (this.serviceType === 'food') {
             this.nearbyHotels = this.generateNearbyHotels();
@@ -820,10 +967,13 @@ export class BookingComponent implements OnDestroy {
           this.dropLat = lat;
           this.dropLng = lng;
           this.dropAddress = label;
+          this.saveRecentLocation('drop', { name: label, lat, lng });
           if (this.selectedCaptain) {
             this.updateEstimatedFare(this.selectedCaptain.distanceKm, this.selectedCaptain.vehicleType);
           }
         }
+
+        this.refreshLocationSuggestions();
 
         this.notifications.push(`${target === 'pickup' ? 'Pickup' : 'Drop'} location captured successfully.`, 'success');
       },
@@ -843,12 +993,14 @@ export class BookingComponent implements OnDestroy {
     this.pickupAddress = preset.name;
     this.pickupLat = preset.lat;
     this.pickupLng = preset.lng;
+    this.saveRecentLocation('pickup', preset);
     this.refreshNearbyCaptains();
     if (this.serviceType === 'food') {
       this.nearbyHotels = this.generateNearbyHotels();
       this.showAllHotels = false;
     }
     this.popularPlaces = this.buildPopularPlaces();
+    this.refreshLocationSuggestions();
   }
 
   applyDropPreset(name: string): void {
@@ -860,9 +1012,11 @@ export class BookingComponent implements OnDestroy {
     this.dropAddress = preset.name;
     this.dropLat = preset.lat;
     this.dropLng = preset.lng;
+    this.saveRecentLocation('drop', preset);
     if (this.selectedCaptain) {
       this.updateEstimatedFare(this.selectedCaptain.distanceKm, this.selectedCaptain.vehicleType);
     }
+    this.refreshLocationSuggestions();
   }
 
   bookNow(): void {
@@ -875,6 +1029,12 @@ export class BookingComponent implements OnDestroy {
 
     if (!this.selectedCaptain) {
       this.notifications.push('Please select a captain from nearby list.', 'warning');
+      return;
+    }
+
+    if (!this.isCaptainAvailable(this.selectedCaptain)) {
+      this.selectedCaptain = null;
+      this.applyCaptainNotReadyFee(this.vehicleType);
       return;
     }
 
@@ -921,9 +1081,13 @@ export class BookingComponent implements OnDestroy {
       notificationTarget: this.notificationTarget,
       preferredCaptainId: this.notificationTarget === 'preferred' ? this.selectedCaptain.id : undefined,
       preferredCaptainName: this.notificationTarget === 'preferred' ? this.selectedCaptain.name : undefined,
-      estimatedFare: this.estimatedFare,
+      estimatedFare: this.totalEstimatedFare,
       rideNotes: this.rideNotes.trim() || undefined
     };
+
+    this.saveRecentLocation('pickup', { name: request.pickup.address, lat: request.pickup.lat, lng: request.pickup.lng });
+    this.saveRecentLocation('drop', { name: request.drop.address, lat: request.drop.lat, lng: request.drop.lng });
+    this.refreshLocationSuggestions();
 
     const booking = this.bookingService.createBooking(currentUser.id, currentUser.displayName, request);
     this.notifications.push(`Booking ${booking.id} created. OTP ${booking.otp} sent as notification.`, 'success');
@@ -939,7 +1103,10 @@ export class BookingComponent implements OnDestroy {
         estimatedFare: booking.estimatedFare
       })
       .subscribe({ error: () => void 0 });
-    this.router.navigate(['/tracking', booking.id]);
+    this.notifications.push(
+      `Ride request ${booking.id} sent. Waiting for captain acceptance. Once accepted, start ride with OTP from tracking/history.`,
+      'info'
+    );
   }
 
   rebookFromHistory(historyBooking: Booking): void {
@@ -988,6 +1155,15 @@ export class BookingComponent implements OnDestroy {
         String(item.recipientPhone || '').toLowerCase().includes(search)
       );
     });
+  }
+
+  get pendingAcceptanceCount(): number {
+    return this.bookingHistory.filter((item) => item.status === 'created').length;
+  }
+
+  get latestPendingAcceptanceBooking(): Booking | null {
+    const pending = this.bookingHistory.find((item) => item.status === 'created');
+    return pending || null;
   }
 
   callLink(phone: string): string {
@@ -1178,6 +1354,123 @@ export class BookingComponent implements OnDestroy {
     return `Near 1-${houseNo} ${landmarks[index]}`;
   }
 
+  private refreshLocationSuggestions(): void {
+    this.pickupLocationSuggestions = this.buildLocationSuggestions('pickup');
+    this.dropLocationSuggestions = this.buildLocationSuggestions('drop');
+  }
+
+  private buildLocationSuggestions(target: 'pickup' | 'drop'): LocationPreset[] {
+    const suggestions = new Map<string, LocationPreset & { score: number }>();
+    const reference = target === 'pickup'
+      ? { lat: Number(this.pickupLat), lng: Number(this.pickupLng) }
+      : { lat: Number(this.dropLat), lng: Number(this.dropLng) };
+
+    const addSuggestion = (suggestion: LocationPreset, score: number): void => {
+      if (!suggestion.name.trim()) {
+        return;
+      }
+
+      const key = suggestion.name.trim().toLowerCase();
+      const existing = suggestions.get(key);
+      if (!existing || score > existing.score) {
+        suggestions.set(key, {
+          name: suggestion.name.trim(),
+          lat: this.round(suggestion.lat),
+          lng: this.round(suggestion.lng),
+          score
+        });
+      }
+    };
+
+    this.readRecentLocations()
+      .filter((item) => item.target === target)
+      .forEach((item, index) => {
+        addSuggestion(
+          { name: item.name, lat: item.lat, lng: item.lng },
+          300 - index * 25 + this.distancePreferenceBoost(reference.lat, reference.lng, item.lat, item.lng)
+        );
+      });
+
+    this.bookingHistory
+      .slice()
+      .sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime())
+      .forEach((booking, index) => {
+        const point = target === 'pickup' ? booking.pickup : booking.drop;
+        addSuggestion(
+          { name: point.address, lat: point.lat, lng: point.lng },
+          220 - index * 10 + this.distancePreferenceBoost(reference.lat, reference.lng, point.lat, point.lng)
+        );
+      });
+
+    const currentAddress = target === 'pickup' ? this.pickupAddress : this.dropAddress;
+    const currentLat = target === 'pickup' ? Number(this.pickupLat) : Number(this.dropLat);
+    const currentLng = target === 'pickup' ? Number(this.pickupLng) : Number(this.dropLng);
+    if (currentAddress && currentAddress !== 'Pickup Point' && currentAddress !== 'Drop Point') {
+      addSuggestion({ name: currentAddress, lat: currentLat, lng: currentLng }, 260);
+    }
+
+    this.locationPresets.forEach((preset, index) => {
+      addSuggestion(
+        preset,
+        80 - index * 4 + this.distancePreferenceBoost(reference.lat, reference.lng, preset.lat, preset.lng)
+      );
+    });
+
+    return [...suggestions.values()]
+      .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+      .slice(0, 8)
+      .map(({ name, lat, lng }) => ({ name, lat, lng }));
+  }
+
+  private distancePreferenceBoost(fromLat: number, fromLng: number, toLat: number, toLng: number): number {
+    const deltaLat = fromLat - toLat;
+    const deltaLng = fromLng - toLng;
+    const distance = Math.sqrt(deltaLat * deltaLat + deltaLng * deltaLng);
+    return Math.max(0, 25 - distance * 100);
+  }
+
+  private saveRecentLocation(target: 'pickup' | 'drop', location: LocationPreset): void {
+    const capturedAt = new Date().toISOString();
+    const next = [
+      { target, name: location.name.trim(), lat: this.round(location.lat), lng: this.round(location.lng), capturedAt },
+      ...this.readRecentLocations().filter(
+        (item) => !(item.target === target && item.name.trim().toLowerCase() === location.name.trim().toLowerCase())
+      )
+    ].slice(0, 12);
+
+    localStorage.setItem(RECENT_LOCATIONS_KEY, JSON.stringify(next));
+    if (target === 'pickup') {
+      localStorage.setItem(LAST_LOCATION_KEY, JSON.stringify({
+        lat: this.round(location.lat),
+        lng: this.round(location.lng),
+        address: location.name.trim(),
+        capturedAt
+      }));
+    }
+  }
+
+  private readRecentLocations(): Array<{ target: 'pickup' | 'drop'; name: string; lat: number; lng: number; capturedAt: string }> {
+    const raw = localStorage.getItem(RECENT_LOCATIONS_KEY);
+    if (!raw) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as Array<{ target?: 'pickup' | 'drop'; name?: string; lat?: number; lng?: number; capturedAt?: string }>;
+      return parsed.filter(
+        (item): item is { target: 'pickup' | 'drop'; name: string; lat: number; lng: number; capturedAt: string } =>
+          (item.target === 'pickup' || item.target === 'drop') &&
+          typeof item.name === 'string' &&
+          typeof item.lat === 'number' &&
+          typeof item.lng === 'number' &&
+          typeof item.capturedAt === 'string'
+      );
+    } catch {
+      localStorage.removeItem(RECENT_LOCATIONS_KEY);
+      return [];
+    }
+  }
+
   onProfileImageError(event: Event): void {
     const image = event.target as HTMLImageElement | null;
     if (!image) {
@@ -1227,21 +1520,327 @@ export class BookingComponent implements OnDestroy {
   }
 
   private loadLiveLocationDefaults(): void {
-    const raw = localStorage.getItem('delivery_last_location');
+    const raw = localStorage.getItem(LAST_LOCATION_KEY);
     if (!raw) {
       return;
     }
 
     try {
-      const parsed = JSON.parse(raw) as { lat?: number; lng?: number };
+      const parsed = JSON.parse(raw) as { lat?: number; lng?: number; address?: string };
       if (typeof parsed.lat === 'number' && typeof parsed.lng === 'number') {
         this.pickupLat = this.round(parsed.lat);
         this.pickupLng = this.round(parsed.lng);
-        this.pickupAddress = this.dynamicCurrentLocationLabel(this.pickupLat, this.pickupLng);
+        this.pickupAddress = parsed.address?.trim() || this.dynamicCurrentLocationLabel(this.pickupLat, this.pickupLng);
       }
     } catch {
       // Ignore malformed cached location.
     }
+  }
+
+  private initializeVoiceBooking(): void {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const maybeWindow = window as any;
+    const SpeechRecognitionCtor = maybeWindow.SpeechRecognition || maybeWindow.webkitSpeechRecognition;
+
+    if (!SpeechRecognitionCtor) {
+      this.voiceSupported = false;
+      return;
+    }
+
+    this.voiceSupported = true;
+    this.speechRecognition = new SpeechRecognitionCtor();
+    this.speechRecognition.lang = (typeof navigator !== 'undefined' && navigator.language) ? navigator.language : 'en-IN';
+    this.speechRecognition.continuous = false;
+    this.speechRecognition.interimResults = true;
+    this.speechRecognition.maxAlternatives = 1;
+
+    this.speechRecognition.onresult = (event: any) => {
+      let finalText = '';
+      let interimText = '';
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = String(event.results[i][0]?.transcript || '').trim();
+        if (!transcript) {
+          continue;
+        }
+
+        if (event.results[i].isFinal) {
+          finalText = `${finalText} ${transcript}`.trim();
+        } else {
+          interimText = `${interimText} ${transcript}`.trim();
+        }
+      }
+
+      this.voiceTranscript = finalText || interimText;
+
+      if (finalText) {
+        this.handleVoiceCommand(finalText);
+      }
+    };
+
+    this.speechRecognition.onerror = (event: any) => {
+      this.isVoiceListening = false;
+      if (event?.error === 'not-allowed' || event?.error === 'service-not-allowed') {
+        this.micPermissionDenied = true;
+        this.notifications.push('Microphone permission denied. Please allow mic access.', 'error');
+        return;
+      }
+
+      this.notifications.push('Voice recognition failed. Please try again.', 'error');
+    };
+
+    this.speechRecognition.onend = () => {
+      this.isVoiceListening = false;
+    };
+  }
+
+  private handleVoiceCommand(command: string): void {
+    const selectedVehicle = this.extractVehicleType(command);
+
+    if (this.pendingVehicleSelection && this.pendingVoiceTrip) {
+      if (!selectedVehicle) {
+        this.notifications.push('Please say vehicle type only: car, bike, or auto.', 'warning');
+        return;
+      }
+
+      this.applyVoiceTrip(this.pendingVoiceTrip.from, this.pendingVoiceTrip.to, this.pendingVoiceTrip.note);
+      this.applyVehicleFromVoice(selectedVehicle);
+
+      const availableCaptain = this.findAvailableCaptainForVehicle(selectedVehicle);
+      if (!availableCaptain) {
+        this.applyCaptainNotReadyFee(selectedVehicle);
+        this.pendingVehicleSelection = false;
+        this.pendingVoiceTrip = undefined;
+        return;
+      }
+
+      this.selectCaptain(availableCaptain);
+      this.clearAvailabilitySurcharge();
+      this.pendingVehicleSelection = false;
+      this.pendingVoiceTrip = undefined;
+      this.notifications.push(`Vehicle selected: ${selectedVehicle.toUpperCase()}. Booking ride now...`, 'success');
+      this.bookNow();
+      return;
+    }
+
+    const parsed = this.parseVoiceTripCommand(command);
+    if (!parsed) {
+      this.notifications.push('Could not understand command. Say: book trip from A to B', 'warning');
+      return;
+    }
+
+    this.applyVoiceTrip(parsed.from, parsed.to, parsed.note);
+
+    if (parsed.vehicleType) {
+      this.applyVehicleFromVoice(parsed.vehicleType);
+      const availableCaptain = this.findAvailableCaptainForVehicle(parsed.vehicleType);
+      if (!availableCaptain) {
+        this.applyCaptainNotReadyFee(parsed.vehicleType);
+        return;
+      }
+      this.selectCaptain(availableCaptain);
+      this.clearAvailabilitySurcharge();
+    }
+
+    if (!parsed.vehicleType) {
+      this.pendingVoiceTrip = { from: parsed.from, to: parsed.to, note: parsed.note };
+      this.pendingVehicleSelection = true;
+      this.notifications.push('Trip route captured. Now say vehicle type: car, bike, or auto.', 'info');
+      return;
+    }
+
+    this.pendingVehicleSelection = false;
+    this.pendingVoiceTrip = undefined;
+
+    if (parsed.autoBook) {
+      this.bookNow();
+    }
+  }
+
+  private applyVoiceTrip(from: string, to: string, note?: string): void {
+    this.pickupAddress = from;
+    this.dropAddress = to;
+
+    const pickupCoords = this.estimateCoordsFromAddress(from, this.pickupLat, this.pickupLng);
+    const dropCoords = this.estimateCoordsFromAddress(to, this.dropLat, this.dropLng);
+
+    this.pickupLat = pickupCoords.lat;
+    this.pickupLng = pickupCoords.lng;
+    this.dropLat = dropCoords.lat;
+    this.dropLng = dropCoords.lng;
+
+    if (note) {
+      this.rideNotes = note;
+    }
+
+    this.saveRecentLocation('pickup', { name: this.pickupAddress, lat: this.pickupLat, lng: this.pickupLng });
+    this.saveRecentLocation('drop', { name: this.dropAddress, lat: this.dropLat, lng: this.dropLng });
+    this.refreshLocationSuggestions();
+    this.refreshNearbyCaptains();
+    this.popularPlaces = this.buildPopularPlaces();
+
+    if (this.serviceType === 'food') {
+      this.nearbyHotels = this.generateNearbyHotels();
+      this.showAllHotels = false;
+    }
+
+    if (this.selectedCaptain) {
+      this.updateEstimatedFare(this.selectedCaptain.distanceKm, this.selectedCaptain.vehicleType);
+    }
+
+    this.notifications.push(`Trip updated by voice: ${from} -> ${to}`, 'success');
+  }
+
+  private applyVehicleFromVoice(vehicleType: VehicleType): void {
+    this.vehicleType = vehicleType;
+    this.onVehicleTypeChange(vehicleType);
+  }
+
+  private findAvailableCaptainForVehicle(vehicleType: VehicleType): NearbyCaptain | undefined {
+    const list = this.nearbyCaptains.filter((captain) => captain.vehicleType === vehicleType);
+    return list.find((captain) => this.isCaptainAvailable(captain));
+  }
+
+  private isCaptainAvailable(captain: NearbyCaptain): boolean {
+    return captain.availability !== 'busy';
+  }
+
+  private applyCaptainNotReadyFee(vehicleType: VehicleType): void {
+    this.selectedCaptain = null;
+    this.availabilitySurcharge = 10;
+    this.notifications.push(
+      `Captains are not ready for ${vehicleType.toUpperCase()} right now. Add ₹10 extra to continue when captain becomes available.`,
+      'warning'
+    );
+  }
+
+  private clearAvailabilitySurcharge(): void {
+    this.availabilitySurcharge = 0;
+  }
+
+  private parseVoiceTripCommand(command: string): { from: string; to: string; note?: string; autoBook: boolean; vehicleType?: VehicleType } | null {
+    const normalized = command
+      .toLowerCase()
+      .replace(/[.,!?]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const autoBook = normalized.includes('book now') || normalized.includes('confirm booking') || normalized.includes('confirm trip');
+
+    const fromToMatch = normalized.match(/(?:book|create|plan)?\s*(?:a\s+)?(?:trip|ride|delivery|order|booking)?\s*from\s+(.+?)\s+to\s+(.+?)(?:\s+(?:by|with|using)\s+(car|bike|auto|scooter|van|truck))?(?:\s+with\s+note\s+(.+))?$/i);
+    if (!fromToMatch) {
+      return null;
+    }
+
+    const from = this.toAddressLabel(fromToMatch[1]);
+    const to = this.toAddressLabel(fromToMatch[2]);
+    const vehicleType = this.extractVehicleType(fromToMatch[3] || normalized);
+    const note = fromToMatch[4] ? this.toAddressLabel(fromToMatch[4]) : undefined;
+
+    if (!from || !to) {
+      return null;
+    }
+
+    return { from, to, note, autoBook, vehicleType };
+  }
+
+  private extractVehicleType(text: string): VehicleType | undefined {
+    const normalized = String(text || '').toLowerCase();
+    if (/\b(bike|motorbike)\b/.test(normalized)) {
+      return 'bike';
+    }
+    if (/\b(auto|rickshaw)\b/.test(normalized)) {
+      return 'auto';
+    }
+    if (/\b(car|cab)\b/.test(normalized)) {
+      return 'car';
+    }
+    if (/\b(scooter)\b/.test(normalized)) {
+      return 'scooter';
+    }
+    if (/\b(van)\b/.test(normalized)) {
+      return 'van';
+    }
+    if (/\b(truck|lorry)\b/.test(normalized)) {
+      return 'truck';
+    }
+    return undefined;
+  }
+
+  private toAddressLabel(text: string): string {
+    return text
+      .split(' ')
+      .filter(Boolean)
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ')
+      .trim();
+  }
+
+  private estimateCoordsFromAddress(address: string, fallbackLat: number, fallbackLng: number): { lat: number; lng: number } {
+    const hash = this.hashNumber(address.toLowerCase());
+    const latOffset = ((hash % 160) - 80) / 10000;
+    const lngOffset = (((hash / 160) % 160) - 80) / 10000;
+
+    return {
+      lat: this.round(fallbackLat + latOffset),
+      lng: this.round(fallbackLng + lngOffset)
+    };
+  }
+
+  private async requestMicPermissionAndStart(): Promise<void> {
+    this.micPermissionDenied = false;
+    this.voiceTranscript = '';
+
+    try {
+      if (typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((track) => track.stop());
+      }
+    } catch {
+      this.micPermissionDenied = true;
+      this.notifications.push('Microphone permission denied. You can use the typed command box instead.', 'warning');
+      return;
+    }
+
+    try {
+      this.isVoiceListening = true;
+      this.speechRecognition.start();
+      this.notifications.push('Listening... Say: book order from pickup to drop', 'info');
+    } catch {
+      this.isVoiceListening = false;
+      this.notifications.push('Could not start voice recognition. Try the typed command box.', 'error');
+    }
+  }
+
+  private generateFallbackNearbyCaptains(): NearbyCaptain[] {
+    const baseCaptains: Array<{ name: string; phone: string; vehicleType: VehicleType; rating: number }> = [
+      { name: 'Captain Ravi', phone: '9999900003', vehicleType: 'bike', rating: 4.7 },
+      { name: 'Captain Priya', phone: '9999900004', vehicleType: 'auto', rating: 4.8 },
+      { name: 'Captain Arjun', phone: '9999900005', vehicleType: 'car', rating: 4.9 }
+    ];
+
+    const seed = this.hashNumber(`${this.pickupLat}:${this.pickupLng}:${this.dropLat}:${this.dropLng}`);
+
+    return baseCaptains.map((captain, index) => {
+      const distanceKm = this.round(0.6 + ((seed + index * 11) % 35) / 10);
+      const etaMinutes = Math.max(3, Math.round(distanceKm * 2.8));
+      const availability: NearbyCaptain['availability'] = (seed + index) % 4 === 0 ? 'arriving' : 'available';
+
+      return {
+        id: `fallback-${captain.vehicleType}-${index + 1}`,
+        name: captain.name,
+        phone: captain.phone,
+        vehicleType: captain.vehicleType,
+        vehicleLabel: `${captain.vehicleType.toUpperCase()} • fallback nearby`,
+        rating: captain.rating,
+        etaMinutes,
+        distanceKm,
+        availability
+      };
+    });
   }
 
   private buildPopularPlaces(): PopularPlace[] {

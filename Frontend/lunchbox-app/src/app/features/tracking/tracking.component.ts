@@ -25,6 +25,23 @@ import { SafeResourceUrlPipe } from '../../shared/pipes/safe-resource-url.pipe';
         <div class="col-lg-5">
           <div class="card p-3 h-100">
             <h5>{{ booking.id }}<span class="badge bg-success ms-2" *ngIf="isLiveTracking">🔴 LIVE</span></h5>
+            <div class="progress-timeline mb-3" *ngIf="booking.status === 'assigned' || booking.status === 'pickup_in_progress' || booking.status === 'in_transit'">
+              <div class="progress-step" [class.completed]="isStageCompleted(0)" [class.active]="isStageActive(0)">
+                <div class="step-icon">✓</div>
+                <div class="step-label">Accepted</div>
+              </div>
+              <div class="progress-line" [class.completed]="isStageCompleted(0)"></div>
+              <div class="progress-step" [class.completed]="isStageCompleted(1)" [class.active]="isStageActive(1)">
+                <div class="step-icon">→</div>
+                <div class="step-label">Reaching</div>
+              </div>
+              <div class="progress-line" [class.completed]="isStageCompleted(1)"></div>
+              <div class="progress-step" [class.completed]="isStageCompleted(2)" [class.active]="isStageActive(2)">
+                <div class="step-icon">📍</div>
+                <div class="step-label">Arrived</div>
+              </div>
+            </div>
+
             <p class="mb-1"><strong>Status:</strong> {{ statusLabel(booking.status) }}</p>
             <p class="mb-1"><strong>Service:</strong> {{ booking.serviceType }}</p>
             <p class="mb-1"><strong>Vehicle:</strong> {{ booking.vehicleType }}</p>
@@ -34,6 +51,8 @@ import { SafeResourceUrlPipe } from '../../shared/pipes/safe-resource-url.pipe';
             <p class="mb-1"><strong>Current Location:</strong> {{ currentLocationAddress }}</p>
             <p class="mb-1"><strong>Coordinates:</strong> {{ currentLat | number: '1.5-5' }}, {{ currentLng | number: '1.5-5' }}</p>
             <p class="mb-1"><strong>Distance to Drop:</strong> {{ distanceToDrop | number: '1.2-2' }} km</p>
+            <p class="mb-1" *ngIf="showPickupApproachInfo(booking)"><strong>Distance to Pickup:</strong> {{ distanceToPickup | number: '1.2-2' }} km</p>
+            <p class="mb-1" *ngIf="showPickupApproachInfo(booking)"><strong>ETA to Pickup:</strong> {{ pickupEtaMinutes }} min</p>
             <p class="mb-1"><strong>Payable Amount:</strong> ₹{{ payableAmount | number: '1.0-0' }}</p>
             <p class="mb-1"><strong>Ride Will End In:</strong> {{ estimatedTime }} min</p>
             <p class="mb-1"><strong>Driver:</strong> {{ booking.driverName }} ({{ booking.driverPhone }})</p>
@@ -47,7 +66,21 @@ import { SafeResourceUrlPipe } from '../../shared/pipes/safe-resource-url.pipe';
               <small>📍 Live location updates every 2 seconds</small>
             </div>
 
-            <div class="card p-2 mb-2" *ngIf="booking.status === 'created' && !booking.otpVerified && isCustomer()">
+            <div class="card p-2 mb-2 border-warning" *ngIf="showPickupApproachInfo(booking) && isCustomer()">
+              <div class="small fw-semibold text-warning-emphasis">Captain is approaching pickup</div>
+              <div class="small">Captain is about {{ distanceToPickup | number: '1.1-1' }} km away and should arrive in around {{ pickupEtaMinutes }} min.</div>
+              <div class="small text-muted">Captain live location: {{ currentLocationAddress }}</div>
+            </div>
+
+            <div class="card p-2 mb-2 border-primary" *ngIf="showPickupApproachInfo(booking) && isCaptain()">
+              <div class="small fw-semibold text-primary">Pickup guidance for captain</div>
+              <div class="small">You are {{ distanceToPickup | number: '1.1-1' }} km away from pickup. Estimated arrival: {{ pickupEtaMinutes }} min.</div>
+              <div class="small text-muted">Customer: {{ customerDisplayName(booking) }}</div>
+              <div class="small text-muted">Pickup point: {{ booking.pickup.address }}</div>
+              <div class="small text-muted" *ngIf="booking.recipientPhone">Customer phone: {{ booking.recipientPhone }}</div>
+            </div>
+
+            <div class="card p-2 mb-2" *ngIf="booking.status === 'assigned' && !booking.otpVerified && isCustomer()">
               <label class="form-label mb-1"><strong>Start Ride OTP</strong></label>
               <div class="d-flex gap-2 flex-wrap">
                 <input class="form-control form-control-sm otp-input" placeholder="Enter 6-digit OTP" [(ngModel)]="customerOtpInput" />
@@ -55,6 +88,12 @@ import { SafeResourceUrlPipe } from '../../shared/pipes/safe-resource-url.pipe';
               </div>
             </div>
             <div class="card p-2 mb-2" *ngIf="booking.status === 'created' && isCaptain()">
+              <label class="form-label mb-1"><strong>Captain Ride Acceptance</strong></label>
+              <div class="d-flex gap-2 flex-wrap">
+                <button class="btn btn-sm btn-primary" type="button" (click)="approveRideAsCaptain(booking)">Accept Ride</button>
+              </div>
+            </div>
+            <div class="card p-2 mb-2" *ngIf="booking.status === 'assigned' && isCaptain()">
               <label class="form-label mb-1"><strong>Captain OTP Start</strong></label>
               <div class="d-flex gap-2 flex-wrap">
                 <input class="form-control form-control-sm otp-input" placeholder="Enter customer OTP" [(ngModel)]="captainOtpInput" />
@@ -66,9 +105,53 @@ import { SafeResourceUrlPipe } from '../../shared/pipes/safe-resource-url.pipe';
               <a class="btn btn-sm btn-outline-success" [href]="whatsAppLink(booking.driverPhone)" target="_blank" rel="noopener">WhatsApp Captain</a>
               <a class="btn btn-sm btn-outline-dark" [href]="shareTripWhatsAppLink(booking)" target="_blank" rel="noopener">Share Live Trip</a>
               <button class="btn btn-sm btn-outline-danger" type="button" *ngIf="canTriggerSos()" (click)="triggerSos(booking)">SOS</button>
-              <button class="btn btn-sm btn-danger" type="button" *ngIf="canCancelRide(booking)" (click)="cancelRide(booking)">Cancel Ride</button>
+              <button class="btn btn-sm btn-danger" type="button" *ngIf="canCancelRide(booking)" (click)="showCancelDialog = true">Cancel Ride</button>
             </div>
-            <div class="alert alert-secondary mb-0">{{ booking.notification }}</div>
+            <div class="alert alert-secondary mb-3">{{ booking.notification }}</div>
+
+            <!-- Live Chat Board -->
+            <div class="chat-board mb-3" *ngIf="booking.status === 'assigned' || booking.status === 'pickup_in_progress' || booking.status === 'in_transit'">
+              <div class="chat-header">
+                <strong>Live Chat</strong>
+                <span class="badge bg-primary" *ngIf="unreadMessageCount > 0">{{ unreadMessageCount }} new</span>
+              </div>
+              <div class="chat-messages">
+                <div class="message" *ngFor="let msg of chatMessages" [class.from-captain]="msg.role === 'captain'" [class.from-customer]="msg.role === 'customer'">
+                  <div class="message-role">{{ msg.role === 'captain' ? 'Captain' : 'You' }}</div>
+                  <div class="message-text">{{ msg.text }}</div>
+                  <div class="message-time">{{ msg.time | date: 'HH:mm' }}</div>
+                </div>
+              </div>
+              <div class="quick-messages mb-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" *ngFor="let qm of quickMessages" (click)="sendQuickMessage(qm, booking)">{{ qm }}</button>
+              </div>
+              <div class="d-flex gap-2 p-2">
+                <input class="form-control form-control-sm" placeholder="Type message..." [(ngModel)]="chatInput" (keydown.enter)="sendChatMessage(booking)" />
+                <button class="btn btn-sm btn-primary" type="button" (click)="sendChatMessage(booking)">Send</button>
+              </div>
+            </div>
+
+            <!-- Cancel Ride Dialog -->
+            <div class="modal-overlay" *ngIf="showCancelDialog" (click)="showCancelDialog = false">
+              <div class="modal-content" (click)="$event.stopPropagation()">
+                <div class="modal-header">
+                  <h5 class="modal-title">Why are you cancelling?</h5>
+                  <button type="button" class="btn-close" (click)="showCancelDialog = false">×</button>
+                </div>
+                <div class="modal-body">
+                  <p class="text-muted mb-3">Select a reason to help us improve</p>
+                  <div class="reason-list">
+                    <button type="button" class="reason-btn" *ngFor="let reason of cancelReasons" (click)="confirmCancelRide(booking, reason)">
+                      <div class="reason-icon">{{ reason.icon }}</div>
+                      <div class="reason-text">
+                        <div class="reason-title">{{ reason.label }}</div>
+                        <div class="reason-desc">{{ reason.desc }}</div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
 
             <div class="card p-3 mt-3" *ngIf="booking.status === 'completed' && isCustomer() && !booking.paymentDone">
               <h6 class="mb-2">Complete Payment</h6>
@@ -144,7 +227,300 @@ import { SafeResourceUrlPipe } from '../../shared/pipes/safe-resource-url.pipe';
         </div>
       </div>
     </div>
-  `
+  `,
+  styles: [`
+    .progress-timeline {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      padding: 12px;
+      background: #f8f9fa;
+      border-radius: 10px;
+      border: 1px solid #dee2e6;
+      margin-bottom: 12px;
+    }
+
+    .progress-step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+      z-index: 2;
+    }
+
+    .step-icon {
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      font-size: 16px;
+      font-weight: 700;
+      background: #e9ecef;
+      color: #6c757d;
+      transition: all 0.3s ease;
+    }
+
+    .progress-step.active .step-icon {
+      background: #0d6efd;
+      color: #fff;
+      box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15);
+    }
+
+    .progress-step.completed .step-icon {
+      background: #28a745;
+      color: #fff;
+    }
+
+    .step-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #6c757d;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .progress-step.active .step-label {
+      color: #0d6efd;
+    }
+
+    .progress-step.completed .step-label {
+      color: #28a745;
+    }
+
+    .progress-line {
+      flex: 1;
+      height: 3px;
+      background: #dee2e6;
+      margin: 0 -2px;
+      position: relative;
+      z-index: 1;
+      transition: background 0.3s ease;
+    }
+
+    .progress-line.completed {
+      background: #28a745;
+    }
+
+    .chat-board {
+      border: 1px solid #dee2e6;
+      border-radius: 10px;
+      background: #fff;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      max-height: 420px;
+    }
+
+    .chat-header {
+      background: #f8f9fa;
+      padding: 10px 12px;
+      border-bottom: 1px solid #dee2e6;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      background: #fafbfc;
+    }
+
+    .message {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      max-width: 85%;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: #e9ecef;
+      font-size: 13px;
+    }
+
+    .message.from-customer {
+      align-self: flex-end;
+      background: #0d6efd;
+      color: #fff;
+    }
+
+    .message.from-captain {
+      align-self: flex-start;
+      background: #e9ecef;
+      color: #000;
+    }
+
+    .message-role {
+      font-weight: 600;
+      font-size: 12px;
+      opacity: 0.7;
+    }
+
+    .message-text {
+      word-break: break-word;
+    }
+
+    .message-time {
+      font-size: 11px;
+      opacity: 0.6;
+      margin-top: 2px;
+    }
+
+    .quick-messages {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      padding: 8px 12px;
+      background: #f8f9fa;
+      border-top: 1px solid #dee2e6;
+    }
+
+    .quick-messages .btn {
+      font-size: 11px;
+      padding: 4px 8px;
+      white-space: nowrap;
+    }
+
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .modal-content {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+      max-width: 420px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+
+    .modal-header {
+      padding: 16px;
+      border-bottom: 1px solid #dee2e6;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-title {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .btn-close {
+      background: none;
+      border: none;
+      font-size: 20px;
+      cursor: pointer;
+      color: #6c757d;
+      padding: 0;
+    }
+
+    .btn-close:hover {
+      color: #000;
+    }
+
+    .modal-body {
+      padding: 16px;
+    }
+
+    .reason-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .reason-btn {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      padding: 12px;
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+      background: #fff;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.2s ease;
+    }
+
+    .reason-btn:hover {
+      border-color: #dc3545;
+      background: #fff5f6;
+    }
+
+    .reason-icon {
+      font-size: 20px;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .reason-text {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .reason-title {
+      font-weight: 600;
+      font-size: 13px;
+      color: #000;
+    }
+
+    .reason-desc {
+      font-size: 12px;
+      color: #6c757d;
+    }
+
+    @media (max-width: 576px) {
+      .progress-timeline {
+        gap: 2px;
+      }
+
+      .step-icon {
+        width: 28px;
+        height: 28px;
+        font-size: 14px;
+      }
+
+      .step-label {
+        font-size: 10px;
+      }
+
+      .chat-board {
+        max-height: 300px;
+      }
+
+      .message {
+        max-width: 90%;
+        font-size: 12px;
+      }
+
+      .quick-messages .btn {
+        font-size: 10px;
+        padding: 3px 6px;
+      }
+    }
+  `]
 })
 export class TrackingComponent implements OnInit, OnDestroy {
   private static readonly AUTO_CLOSE_DELAY_MS = 5 * 60 * 1000;
@@ -167,15 +543,42 @@ export class TrackingComponent implements OnInit, OnDestroy {
   currentLng = 0;
   currentLocationAddress = '';
   distanceToDrop = 0;
+  distanceToPickup = 0;
+  pickupEtaMinutes = 0;
   estimatedTime = 0;
   payableAmount = 0;
+  readonly PICKUP_ARRIVAL_THRESHOLD = 0.2; // 200 meters
   autoCloseRemainingSeconds = 0;
   isAutoClosePending = false;
+  showCancelDialog = false;
+  chatMessages: Array<{ role: 'captain' | 'customer'; text: string; time: Date }> = [];
+  chatInput = '';
+  unreadMessageCount = 0;
+  quickMessages = [
+    'On the way',
+    'Arrived at location',
+    'Traffic is heavy',
+    'Thanks for waiting',
+    'Your OTP is ready',
+    'I\'m 5 mins away',
+    'Need directions?'
+  ];
+  cancelReasons = [
+    { icon: '📍', label: 'Wrong Location', desc: 'Captain heading to wrong place' },
+    { icon: '⏱️', label: 'Taking Too Long', desc: 'Captain is taking too long to arrive' },
+    { icon: '🚗', label: 'Driver Not Coming', desc: 'Captain is not moving or not coming' },
+    { icon: '💬', label: 'Communication Issue', desc: 'Cannot reach captain' },
+    { icon: '❌', label: 'Changed My Mind', desc: 'No longer need the ride' },
+    { icon: '⚠️', label: 'Safety Concern', desc: 'Safety or security issue' },
+    { icon: '🔧', label: 'Technical Issue', desc: 'App or booking issue' },
+    { icon: '📝', label: 'Other', desc: 'Different reason' }
+  ];
   private readonly destroy$ = new Subject<void>();
   private autoCloseTimeoutId?: ReturnType<typeof setTimeout>;
   private autoCloseIntervalId?: ReturnType<typeof setInterval>;
   private autoCloseDueAt = 0;
   private captainPaymentRedirectHandled = false;
+  private statusRedirectHandled = false;
 
   constructor(
     private route: ActivatedRoute,
@@ -208,6 +611,7 @@ export class TrackingComponent implements OnInit, OnDestroy {
             this.payableAmount = this.calculatePayableAmount(booking);
             this.syncAutoCloseTracking(booking);
             this.handleCaptainPostPaymentRedirect(booking);
+            this.handleMainPageRedirectForTerminalStatus(booking);
             if (!booking.feedbackSubmitted) {
               this.rideRating = 5;
               this.captainRating = 5;
@@ -270,20 +674,35 @@ export class TrackingComponent implements OnInit, OnDestroy {
   private updateDistanceAndTime(booking: Booking): void {
     if (booking.status === 'completed' || booking.status === 'delivered' || booking.status === 'cancelled') {
       this.distanceToDrop = 0;
+      this.distanceToPickup = 0;
+      this.pickupEtaMinutes = 0;
       this.estimatedTime = 0;
       return;
     }
 
-    const distance = this.haversineDistance(
+    const distanceToDrop = this.haversineDistance(
       booking.currentLocation.lat,
       booking.currentLocation.lng,
       booking.drop.lat,
       booking.drop.lng
     );
-    this.distanceToDrop = distance;
+    this.distanceToDrop = distanceToDrop;
+
+    const distanceToPickup = this.haversineDistance(
+      booking.currentLocation.lat,
+      booking.currentLocation.lng,
+      booking.pickup.lat,
+      booking.pickup.lng
+    );
+    this.distanceToPickup = distanceToPickup;
+
     // Keep ETA dynamic with live distance while never dropping below 2 minutes in active rides.
-    const dynamicEtaMinutes = Math.ceil((distance / 35) * 60);
+    const dynamicEtaMinutes = Math.ceil((distanceToDrop / 35) * 60);
     this.estimatedTime = Math.max(TrackingComponent.MIN_RIDE_END_MINUTES, dynamicEtaMinutes);
+
+    // Pickup ETA is tuned for city roads during captain approach.
+    const pickupEta = Math.ceil((distanceToPickup / 28) * 60);
+    this.pickupEtaMinutes = Math.max(1, pickupEta);
   }
 
   /**
@@ -425,6 +844,70 @@ export class TrackingComponent implements OnInit, OnDestroy {
       .subscribe({ error: () => void 0 });
   }
 
+  confirmCancelRide(booking: Booking, reason: { icon: string; label: string; desc: string }): void {
+    this.showCancelDialog = false;
+    const role = this.currentRole === 'captain' ? 'captain' : 'customer';
+    const result = this.bookingService.cancelRide(booking.id, role);
+    this.notifications.push(`${reason.label}: ${result.message}`, result.success ? 'warning' : 'error');
+
+    if (!result.success) {
+      return;
+    }
+
+    this.authService
+      .recordUserAction('ride_cancelled_with_reason', {
+        bookingId: booking.id,
+        role,
+        cancelReason: reason.label
+      })
+      .subscribe({ error: () => void 0 });
+  }
+
+  sendChatMessage(booking: Booking): void {
+    if (!this.chatInput.trim()) return;
+
+    const role: 'captain' | 'customer' = this.currentRole === 'captain' ? 'captain' : 'customer';
+    const message = {
+      role,
+      text: this.chatInput,
+      time: new Date()
+    };
+
+    this.chatMessages.push(message);
+    this.chatInput = '';
+
+    // Simulate captain/customer response after 1-2 seconds
+    setTimeout(() => {
+      const responses = [
+        'Thanks for the update',
+        'Understood, on the way',
+        'Will be there soon',
+        'Just arrived',
+        'No problem, thanks'
+      ];
+      const randomResponse = responses[Math.floor(Math.random() * responses.length)];
+      const responseRole: 'captain' | 'customer' = role === 'captain' ? 'customer' : 'captain';
+      this.chatMessages.push({
+        role: responseRole,
+        text: randomResponse,
+        time: new Date()
+      });
+    }, 1000 + Math.random() * 1000);
+
+    // Scroll to bottom
+    setTimeout(() => {
+      const messagesDiv = document.querySelector('.chat-messages');
+      if (messagesDiv) {
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      }
+    }, 0);
+  }
+
+  sendQuickMessage(text: string, booking: Booking): void {
+    this.chatInput = text;
+    this.sendChatMessage(booking);
+  }
+
   submitFeedback(booking: Booking): void {
     const payload = {
       rideRating: this.rideRating,
@@ -510,6 +993,47 @@ export class TrackingComponent implements OnInit, OnDestroy {
     };
 
     return labels[status] || status;
+  }
+
+  showPickupApproachInfo(booking: Booking): boolean {
+    return booking.status === 'assigned' || booking.status === 'pickup_in_progress';
+  }
+
+  customerDisplayName(booking: Booking): string {
+    if (booking.bookingFor === 'others' && booking.recipientName?.trim()) {
+      return booking.recipientName.trim();
+    }
+
+    return booking.userName;
+  }
+
+  isStageActive(stage: number): boolean {
+    if (!this.booking) return false;
+    return this.getCurrentStage() === stage;
+  }
+
+  isStageCompleted(stage: number): boolean {
+    if (!this.booking) return false;
+    return this.getCurrentStage() > stage;
+  }
+
+  private getCurrentStage(): number {
+    if (!this.booking || (this.booking.status !== 'assigned' && this.booking.status !== 'pickup_in_progress' && this.booking.status !== 'in_transit')) {
+      return -1;
+    }
+
+    // Stage 2: Arrived at pickup (within 200 meters)
+    if (this.distanceToPickup <= this.PICKUP_ARRIVAL_THRESHOLD) {
+      return 2;
+    }
+
+    // Stage 1: Captain reaching pickup (distance > 0)
+    if (this.distanceToPickup > 0) {
+      return 1;
+    }
+
+    // Stage 0: Captain accepted
+    return 0;
   }
 
   private calculatePayableAmount(booking: Booking): number {
@@ -615,6 +1139,10 @@ export class TrackingComponent implements OnInit, OnDestroy {
   }
 
   private handleCaptainPostPaymentRedirect(booking: Booking): void {
+    if (this.statusRedirectHandled) {
+      return;
+    }
+
     if (!this.isCaptain()) {
       this.captainPaymentRedirectHandled = false;
       return;
@@ -641,5 +1169,27 @@ export class TrackingComponent implements OnInit, OnDestroy {
         }
       });
     }, 800);
+  }
+
+  private handleMainPageRedirectForTerminalStatus(booking: Booking): void {
+    if (this.statusRedirectHandled) {
+      return;
+    }
+
+    if (booking.status !== 'completed' && booking.status !== 'cancelled') {
+      return;
+    }
+
+    this.statusRedirectHandled = true;
+    this.notifications.push(
+      booking.status === 'completed'
+        ? 'Ride completed. Redirecting to home page...'
+        : 'Ride cancelled. Redirecting to home page...',
+      booking.status === 'completed' ? 'success' : 'warning'
+    );
+
+    setTimeout(() => {
+      this.router.navigate(['/']);
+    }, 1200);
   }
 }

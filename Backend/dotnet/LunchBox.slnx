@@ -1,6 +1,4 @@
 <Solution>
-  <Folder Name="/src/">
-    <Project Path="src/AuthService/AuthService.csproj" />
-    <Project Path="src/ParcelService/ParcelService.csproj" />
-  </Folder>
+  <Project Path="AuthService/AuthService.csproj" />
+  <Project Path="ParcelService/ParcelService.csproj" />
 </Solution>

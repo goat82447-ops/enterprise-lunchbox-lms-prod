@@ -4,14 +4,9 @@ namespace ParcelService.Data;
 
 public static class ParcelSeeder
 {
-    public static void Seed(ParcelDbContext dbContext)
+    public static Task SeedAsync(ParcelDbContext dbContext)
     {
         ArgumentNullException.ThrowIfNull(dbContext);
-
-        if (dbContext.Bookings.Any())
-        {
-            return;
-        }
 
         var booking = new ParcelBooking
         {
@@ -72,7 +67,6 @@ public static class ParcelSeeder
             }
         });
 
-        dbContext.Bookings.Add(booking);
-        dbContext.SaveChanges();
+        return dbContext.SeedAsync(booking);
     }
 }
