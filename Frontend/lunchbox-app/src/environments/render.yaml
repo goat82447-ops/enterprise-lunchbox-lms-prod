@@ -1,0 +1,131 @@
+services:
+  - type: redis
+    name: ekart-redis
+    ipAllowList: []
+    plan: free
+    maxmemoryPolicy: noeviction
+
+  - type: pserv
+    name: ekart-menu-service
+    env: node
+    plan: free
+    rootDir: Backend/microservices/services/menu-service
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+
+  - type: pserv
+    name: ekart-order-service
+    env: node
+    plan: free
+    rootDir: Backend/microservices/services/order-service
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: REDIS_HOST
+        fromService:
+          type: redis
+          name: ekart-redis
+          property: host
+      - key: REDIS_PORT
+        fromService:
+          type: redis
+          name: ekart-redis
+          property: port
+      - key: ORDER_DB_FILE
+        value: ./orders.json
+
+  - type: pserv
+    name: ekart-auth-service
+    env: node
+    plan: free
+    rootDir: Backend/microservices/services/auth-service
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: MONGODB_URI
+        sync: false
+      - key: OTP_DEBUG_MODE
+        value: "0"
+      - key: SENDGRID_API_KEY
+        sync: false
+      - key: SENDGRID_FROM_EMAIL
+        sync: false
+      - key: GMAIL_USER
+        sync: false
+      - key: GMAIL_APP_PASSWORD
+        sync: false
+      - key: GMAIL_FROM_EMAIL
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_FROM_NUMBER
+        sync: false
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: OPENWEATHER_API_KEY
+        sync: false
+
+  - type: worker
+    name: ekart-worker-service
+    env: node
+    plan: free
+    rootDir: Backend/microservices/services/worker-service
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: REDIS_HOST
+        fromService:
+          type: redis
+          name: ekart-redis
+          property: host
+      - key: REDIS_PORT
+        fromService:
+          type: redis
+          name: ekart-redis
+          property: port
+      - key: ORDER_SERVICE_INTERNAL_URL
+        fromService:
+          type: pserv
+          name: ekart-order-service
+          property: url
+
+  - type: web
+    name: ekart-api-gateway
+    env: node
+    plan: free
+    rootDir: Backend/microservices/services/api-gateway
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: MENU_SERVICE_URL
+        fromService:
+          type: pserv
+          name: ekart-menu-service
+          property: url
+      - key: ORDER_SERVICE_URL
+        fromService:
+          type: pserv
+          name: ekart-order-service
+          property: url
+      - key: AUTH_SERVICE_URL
+        fromService:
+          type: pserv
+          name: ekart-auth-service
+          property: url
