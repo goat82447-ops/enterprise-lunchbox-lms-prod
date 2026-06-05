@@ -53,9 +53,9 @@
           "framework": "net10.0",
           "targetAlias": "net10.0",
           "dependencies": {
-            "Microsoft.EntityFrameworkCore.Sqlite": {
+            "MongoDB.Driver": {
               "target": "Package",
-              "version": "[10.0.0, )"
+              "version": "[3.5.1, )"
             }
           },
           "imports": [

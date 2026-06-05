@@ -78,7 +78,7 @@ import { RegisterResponse, UserRole, VehicleType } from '../../core/models/deliv
         </div>
 
         <div class="alert alert-info mt-3" *ngIf="step === 2">
-          OTP sent to {{ otpChannels.email }} and {{ otpChannels.mobile }}.
+          OTP sent to {{ otpChannels.email }}<span *ngIf="otpChannels.mobile"> and {{ otpChannels.mobile }}</span>.
           <div *ngIf="devOtpHint" class="mt-2"><strong>Dev OTP Hint:</strong> {{ devOtpHint }}</div>
         </div>
 
@@ -87,7 +87,7 @@ import { RegisterResponse, UserRole, VehicleType } from '../../core/models/deliv
             <label class="form-label">Email OTP</label>
             <input class="form-control" [(ngModel)]="emailOtp" />
           </div>
-          <div class="col-md-6">
+          <div class="col-md-6" *ngIf="otpChannels.mobile">
             <label class="form-label">Mobile OTP</label>
             <input class="form-control" [(ngModel)]="mobileOtp" />
           </div>
@@ -160,7 +160,7 @@ export class RegisterComponent {
   tempToken = '';
   emailOtp = '';
   mobileOtp = '';
-  otpChannels = { email: '', mobile: '' };
+  otpChannels: { email: string; mobile?: string } = { email: '' };
   devOtpHint = '';
 
   constructor(
@@ -221,7 +221,7 @@ export class RegisterComponent {
           this.tempToken = response.tempToken;
           this.otpChannels = response.channels;
           this.devOtpHint = response.devOtps
-            ? `Email OTP: ${response.devOtps.emailOtp}, Mobile OTP: ${response.devOtps.mobileOtp}`
+            ? `Email OTP: ${response.devOtps.emailOtp}${response.devOtps.mobileOtp ? `, Mobile OTP: ${response.devOtps.mobileOtp}` : ''}`
             : '';
           return;
         }

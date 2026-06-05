@@ -19,11 +19,11 @@ export interface LoginStartResponse {
   user?: AppUser;
   channels: {
     email: string;
-    mobile: string;
+    mobile?: string;
   };
   devOtps?: {
     emailOtp: string;
-    mobileOtp: string;
+    mobileOtp?: string;
   };
 }
 
@@ -44,11 +44,11 @@ export interface RegisterResponse {
   tempToken?: string;
   channels?: {
     email: string;
-    mobile: string;
+    mobile?: string;
   };
   devOtps?: {
     emailOtp: string;
-    mobileOtp: string;
+    mobileOtp?: string;
   };
 }
 
@@ -138,6 +138,9 @@ export interface NearbyCaptain {
   etaMinutes: number;
   distanceKm: number;
   availability: 'available' | 'busy' | 'arriving';
+  locationLabel?: string;
+  locationLat?: number;
+  locationLng?: number;
 }
 
 export interface CaptainDirectoryItem {
@@ -149,6 +152,26 @@ export interface CaptainDirectoryItem {
   profileImageUrl?: string;
   rating: number;
   availability: 'available' | 'busy' | 'arriving';
+  createdAt: string;
+}
+
+export interface UserStats {
+  totalUsers: number;
+  totalCustomers: number;
+  totalCaptains: number;
+  totalAdmins: number;
+  source: 'mongodb' | string;
+}
+
+export interface AdminUserListItem {
+  id: string;
+  username: string;
+  displayName: string;
+  email: string;
+  mobile: string;
+  role: Exclude<UserRole, 'user'>;
+  captainVehicle?: VehicleType;
+  customerOtpCompleted: boolean;
   createdAt: string;
 }
 

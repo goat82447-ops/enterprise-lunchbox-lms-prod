@@ -25,7 +25,7 @@ const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID || '';
 const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN || '';
 const twilioFromNumber = process.env.TWILIO_FROM_NUMBER || '';
 const otpDebugMode = process.env.OTP_DEBUG_MODE === '1';
-const requireCustomerRegistrationOtp = process.env.REQUIRE_CUSTOMER_REGISTRATION_OTP === '1';
+const requireCustomerRegistrationOtp = process.env.REQUIRE_CUSTOMER_REGISTRATION_OTP !== '0';
 const googleMapsApiKey = process.env.GOOGLE_MAPS_API_KEY || '';
 const openWeatherApiKey = process.env.OPENWEATHER_API_KEY || '';
 const enableInMemoryFallback = process.env.ENABLE_INMEMORY_FALLBACK !== '0';
@@ -41,6 +41,8 @@ if (sendgridApiKey) {
 if (twilioAccountSid && twilioAuthToken) {
   twilioClient = twilio(twilioAccountSid, twilioAuthToken);
 }
+
+const smsOtpEnabled = !!(twilioClient && twilioFromNumber);
 
 if (gmailUser && gmailAppPassword) {
   gmailTransporter = nodemailer.createTransport({
@@ -209,7 +211,8 @@ async function sendEmailOtp(email, otp) {
 }
 
 async function sendSmsOtp(mobile, otp) {
-  if (!twilioClient || !twilioFromNumber) {
+  if (!smsOtpEnabled) {
+    if (!otpDebugMode) return;
     console.log(`[DEV OTP SMS] ${mobile}: ${otp}`);
     return;
   }
@@ -334,88 +337,21 @@ function canAccessBooking(session, bookingRow) {
 }
 
 async function requireSession(req, res, next) {
-  const token = req.headers['x-session-token'] || req.query.sessionToken;
-  const session = await getSession(token);
-  if (!session || session.type !== 'session') {
-    return res.status(401).json({ error: 'Valid session token required.' });
+  try {
+    const token = req.headers['x-session-token'] || req.query.sessionToken;
+    const session = await getSession(token);
+    if (!session || session.type !== 'session') {
+      return res.status(401).json({ error: 'Valid session token required.' });
+    }
+    req.session = session;
+    return next();
+  } catch (error) {
+    console.error('Session validation error', error);
+    return res.status(503).json({ error: 'Authentication service temporarily unavailable. Please retry.' });
   }
-  req.session = session;
-  return next();
 }
 
-async function seedDatabase() {
-  const defaultUsers = [
-    {
-      username: 'user',
-      display_name: 'Delivery User',
-      email: 'user@delivery.app',
-      mobile: '+919999000001',
-      password: 'user123',
-      role: 'customer',
-      customer_otp_completed: 1,
-      captain_vehicle: null
-    },
-    {
-      username: 'admin',
-      display_name: 'Operations Admin',
-      email: 'admin@delivery.app',
-      mobile: '+919999000002',
-      password: 'admin123',
-      role: 'admin',
-      customer_otp_completed: 1,
-      captain_vehicle: null
-    },
-    {
-      username: 'captain1',
-      display_name: 'Captain Ravi',
-      email: 'captain.ravi@delivery.app',
-      mobile: '+919999000003',
-      password: 'captain123',
-      role: 'captain',
-      customer_otp_completed: 1,
-      captain_vehicle: 'bike'
-    },
-    {
-      username: 'captain2',
-      display_name: 'Captain Priya',
-      email: 'captain.priya@delivery.app',
-      mobile: '+919999000004',
-      password: 'captain123',
-      role: 'captain',
-      customer_otp_completed: 1,
-      captain_vehicle: 'auto'
-    },
-    {
-      username: 'captain3',
-      display_name: 'Captain Arjun',
-      email: 'captain.arjun@delivery.app',
-      mobile: '+919999000005',
-      password: 'captain123',
-      role: 'captain',
-      customer_otp_completed: 1,
-      captain_vehicle: 'car'
-    }
-  ];
-
-  for (const user of defaultUsers) {
-    const exists = await User.findOne({ username: user.username });
-    if (exists) continue;
-    const hash = bcrypt.hashSync(user.password, 10);
-    await User.create({
-      _id: uuidv4(),
-      username: user.username,
-      display_name: user.display_name,
-      email: user.email,
-      mobile: user.mobile,
-      password: hash,
-      role: user.role,
-      customer_otp_completed: user.customer_otp_completed,
-      captain_vehicle: user.captain_vehicle,
-      created_at: nowIso()
-    });
-    console.log(`Seeded default ${user.role}: ${user.username}`);
-  }
-
+async function migrateUserRecords() {
   const existingUsers = await User.find({});
   for (const row of existingUsers) {
     const stored = String(row.password || '');
@@ -431,7 +367,8 @@ async function seedDatabase() {
 
 app.use(cors());
 app.use(morgan('dev'));
-app.use(express.json());
+app.use(express.json({ limit: '25mb' }));
+app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
 app.get('/health', (_req, res) => {
   const mongoConnected = mongoose.connection.readyState === 1;
@@ -445,6 +382,64 @@ app.get('/api/integrations/health', async (_req, res) => {
   } catch (error) {
     console.error('Integration health endpoint error', error);
     return res.status(500).json({ service: 'auth-service', status: 'degraded', checkedAt: nowIso(), integrations: [], error: 'Unable to compute integration health right now.' });
+  }
+});
+
+app.get('/api/auth/users/stats', requireSession, async (req, res) => {
+  try {
+    const isAdmin = String(req.session.role || '').toLowerCase() === 'admin';
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Admin role required.' });
+    }
+
+    const [totalUsers, totalCustomers, totalCaptains, totalAdmins] = await Promise.all([
+      User.countDocuments({}),
+      User.countDocuments({ role: 'customer' }),
+      User.countDocuments({ role: 'captain' }),
+      User.countDocuments({ role: 'admin' })
+    ]);
+
+    return res.json({
+      totalUsers,
+      totalCustomers,
+      totalCaptains,
+      totalAdmins,
+      source: 'mongodb'
+    });
+  } catch (error) {
+    console.error('User stats error', error);
+    return res.status(500).json({ error: 'Unable to load user stats.' });
+  }
+});
+
+app.get('/api/auth/users', requireSession, async (req, res) => {
+  try {
+    const isAdmin = String(req.session.role || '').toLowerCase() === 'admin';
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Admin role required.' });
+    }
+
+    const users = await User.find({})
+      .select('_id username display_name email mobile role captain_vehicle customer_otp_completed created_at')
+      .sort({ created_at: -1 })
+      .lean();
+
+    const payload = users.map((user) => ({
+      id: user._id,
+      username: user.username,
+      displayName: user.display_name,
+      email: user.email,
+      mobile: user.mobile,
+      role: user.role,
+      captainVehicle: user.captain_vehicle || undefined,
+      customerOtpCompleted: Number(user.customer_otp_completed || 0) === 1,
+      createdAt: user.created_at
+    }));
+
+    return res.json(payload);
+  } catch (error) {
+    console.error('User list error', error);
+    return res.status(500).json({ error: 'Unable to load users.' });
   }
 });
 
@@ -537,17 +532,32 @@ app.post('/api/auth/register', async (req, res) => {
     const createdUser = await User.findOne({ username: username.trim().toLowerCase() }).lean();
     const tempToken = await issueTempToken(createdUser._id);
     const emailOtp = genOtp();
-    const mobileOtp = genOtp();
+    const mobileOtp = smsOtpEnabled ? genOtp() : null;
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
     await OtpCode.create({ _id: uuidv4(), user_id: createdUser._id, session_token: tempToken, channel: 'email', code: emailOtp, consumed: 0, expires_at: expiresAt, created_at: nowIso() });
-    await OtpCode.create({ _id: uuidv4(), user_id: createdUser._id, session_token: tempToken, channel: 'mobile', code: mobileOtp, consumed: 0, expires_at: expiresAt, created_at: nowIso() });
-    Promise.all([sendEmailOtp(createdUser.email, emailOtp), sendSmsOtp(createdUser.mobile, mobileOtp)]).catch((error) => { console.error('Registration OTP delivery error', error); });
+
+    if (mobileOtp) {
+      await OtpCode.create({ _id: uuidv4(), user_id: createdUser._id, session_token: tempToken, channel: 'mobile', code: mobileOtp, consumed: 0, expires_at: expiresAt, created_at: nowIso() });
+    }
+
+    try {
+      await sendEmailOtp(createdUser.email, emailOtp);
+      if (mobileOtp) {
+        await sendSmsOtp(createdUser.mobile, mobileOtp);
+      }
+    } catch (error) {
+      await OtpCode.deleteMany({ session_token: tempToken });
+      await AuthSession.deleteOne({ token: tempToken });
+      console.error('Registration OTP delivery error', error);
+      return res.status(502).json({ error: 'Unable to deliver OTP right now. Please check email/SMS provider settings and try again.' });
+    }
+
     const payload = {
       message: 'User registered successfully. Verify OTP once to activate account.',
       requiresOtp: true, tempToken,
-      channels: { email: createdUser.email, mobile: createdUser.mobile }
+      channels: { email: createdUser.email, mobile: mobileOtp ? createdUser.mobile : '' }
     };
-    if (otpDebugMode) { payload.devOtps = { emailOtp, mobileOtp }; }
+    if (otpDebugMode) { payload.devOtps = { emailOtp, mobileOtp: mobileOtp || '' }; }
     return res.status(201).json(payload);
   } catch (error) {
     console.error('Register error', error);
@@ -591,7 +601,9 @@ app.post('/api/auth/verify-otp', async (req, res) => {
     }
     const emailCode = await OtpCode.findOne({ session_token: tempToken, channel: 'email', consumed: 0, expires_at: { $gt: nowIso() } }).lean();
     const mobileCode = await OtpCode.findOne({ session_token: tempToken, channel: 'mobile', consumed: 0, expires_at: { $gt: nowIso() } }).lean();
-    if (!emailCode || !mobileCode || emailCode.code !== String(emailOtp || '').trim() || mobileCode.code !== String(mobileOtp || '').trim()) {
+    const emailMatches = !!emailCode && emailCode.code === String(emailOtp || '').trim();
+    const mobileMatches = !mobileCode || mobileCode.code === String(mobileOtp || '').trim();
+    if (!emailMatches || !mobileMatches) {
       return res.status(400).json({ error: 'Invalid OTP values.' });
     }
     await OtpCode.updateMany({ session_token: tempToken }, { $set: { consumed: 1 } });
@@ -937,6 +949,15 @@ app.post('/api/bookings/:bookingId/close-tracking', requireSession, async (req, 
   return res.json(mapBookingRow(updated));
 });
 
+app.use((error, _req, res, next) => {
+  if (error?.type === 'entity.too.large') {
+    return res.status(413).json({
+      error: 'Image is too large. Please choose a smaller image and try again.'
+    });
+  }
+  return next(error);
+});
+
 async function startServer() {
   try {
     console.log('Connecting to MongoDB...');
@@ -962,7 +983,7 @@ async function startServer() {
       console.log('In-memory MongoDB connected successfully.');
     }
 
-    await seedDatabase();
+    await migrateUserRecords();
 
     app.listen(port, () => {
       console.log(`auth-service listening on :${port}`);

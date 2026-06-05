@@ -48,7 +48,7 @@ services:
       dockerfile: services/auth-service/Dockerfile
     container_name: lunchbox-auth-service
     environment:
-      AUTH_DB_FILE: /data/auth.sqlite
+      MONGODB_URI: ${MONGODB_URI}
       SENDGRID_API_KEY: ${SENDGRID_API_KEY}
       SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL}
       TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}

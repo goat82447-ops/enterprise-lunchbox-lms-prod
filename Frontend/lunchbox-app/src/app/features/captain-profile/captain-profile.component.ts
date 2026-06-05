@@ -289,11 +289,61 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      this.dpPreview = String(reader.result || '');
-    };
-    reader.readAsDataURL(file);
+    if (!file.type.startsWith('image/')) {
+      this.notifications.push('Please choose an image file.', 'warning');
+      input.value = '';
+      return;
+    }
+
+    if (file.size > 6 * 1024 * 1024) {
+      this.notifications.push('Image is too large. Please select an image under 6 MB.', 'warning');
+      input.value = '';
+      return;
+    }
+
+    this.compressImage(file)
+      .then((result) => {
+        this.dpPreview = result;
+      })
+      .catch(() => {
+        this.notifications.push('Could not read selected image. Please try another file.', 'error');
+      });
+  }
+
+  private compressImage(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const image = new Image();
+        image.onload = () => {
+          const maxWidth = 320;
+          const maxHeight = 320;
+          let { width, height } = image;
+
+          const scale = Math.min(maxWidth / width, maxHeight / height, 1);
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('Canvas context unavailable'));
+            return;
+          }
+
+          ctx.drawImage(image, 0, 0, width, height);
+          const compressed = canvas.toDataURL('image/jpeg', 0.72);
+          resolve(compressed);
+        };
+        image.onerror = () => reject(new Error('Invalid image data'));
+        image.src = String(reader.result || '');
+      };
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsDataURL(file);
+    });
   }
 
   saveDp(): void {

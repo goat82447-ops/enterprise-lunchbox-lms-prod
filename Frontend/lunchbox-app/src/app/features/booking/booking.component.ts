@@ -221,6 +221,53 @@ const RECENT_LOCATIONS_KEY = 'delivery_recent_locations';
               <div class="col"><input class="form-control" type="number" step="0.00001" placeholder="Pickup longitude" [(ngModel)]="pickupLng" /></div>
             </div>
 
+            <h5 class="mb-2">Drop Location</h5>
+            <div class="d-flex gap-2 mb-2 flex-wrap">
+              <button class="btn btn-outline-primary btn-sm" type="button" (click)="allowCurrentLocation('drop')">Allow Current Location</button>
+              <select class="form-select form-select-sm preset-select" [ngModel]="selectedDropPreset" (ngModelChange)="applyDropPreset($event)">
+                <option value="">Select drop location</option>
+                <option *ngFor="let p of dropLocationSuggestions" [value]="p.name">{{ p.name }}</option>
+              </select>
+            </div>
+            <input class="form-control mb-2" placeholder="Drop address" [(ngModel)]="dropAddress" />
+            <div class="row g-2 mb-3">
+              <div class="col"><input class="form-control" type="number" step="0.00001" placeholder="Drop latitude" [(ngModel)]="dropLat" /></div>
+              <div class="col"><input class="form-control" type="number" step="0.00001" placeholder="Drop longitude" [(ngModel)]="dropLng" /></div>
+            </div>
+
+            <div class="trip-summary mb-3" *ngIf="hasRouteCoordinates">
+              <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                <div class="trip-summary-title">Trip Summary</div>
+                <span class="badge rounded-pill" [ngClass]="isShortTrip ? 'text-bg-success' : 'text-bg-primary'">
+                  {{ isShortTrip ? 'Pickup and drop are near' : 'Standard distance trip' }}
+                </span>
+              </div>
+              <div class="trip-summary-grid">
+                <div>
+                  <div class="trip-summary-label">Distance</div>
+                  <div class="trip-summary-value">{{ routeDistanceKm | number: '1.2-2' }} km</div>
+                </div>
+                <div>
+                  <div class="trip-summary-label">ETA</div>
+                  <div class="trip-summary-value">{{ routeEtaMinutes }} min</div>
+                </div>
+                <div>
+                  <div class="trip-summary-label">Fare Preview</div>
+                  <div class="trip-summary-value">₹{{ totalEstimatedFare }}</div>
+                </div>
+              </div>
+              <div class="trip-summary-route mt-2">
+                <div><strong>From:</strong> {{ pickupAddress || 'Pickup Point' }}</div>
+                <div><strong>To:</strong> {{ dropAddress || 'Drop Point' }}</div>
+              </div>
+              <div class="trip-summary-note" *ngIf="isShortTrip">
+                Minimum fare applied for short-distance ride.
+              </div>
+              <div class="trip-summary-hint" *ngIf="isVeryShortTrip">
+                Recommended: bike or walkable distance.
+              </div>
+            </div>
+
             <h5 class="mb-2">Choose Vehicle Type</h5>
             <p class="text-muted small mb-2">Captain list updates instantly based on your selected vehicle.</p>
             <div class="vehicle-grid mb-4">
@@ -262,6 +309,10 @@ const RECENT_LOCATIONS_KEY = 'delivery_recent_locations';
                   </div>
                   <small class="text-muted">{{ captain.vehicleLabel }} • {{ captain.rating }}★ • {{ captain.distanceKm }} km</small>
                   <div class="small">ETA {{ captain.etaMinutes }} min • {{ captain.phone }}</div>
+                  <div class="small captain-pin" *ngIf="captain.locationLabel">
+                    <span class="pin-symbol">📍</span>
+                    <span>{{ captain.locationLabel }}</span>
+                  </div>
                 </div>
               </label>
             </div>
@@ -285,20 +336,6 @@ const RECENT_LOCATIONS_KEY = 'delivery_recent_locations';
             </div>
             <div class="small text-muted mb-4" *ngIf="notificationTarget === 'all'">
               Notifications with sound will be sent to all captains.
-            </div>
-
-            <h5 class="mb-2">Drop Location</h5>
-            <div class="d-flex gap-2 mb-2 flex-wrap">
-              <button class="btn btn-outline-primary btn-sm" type="button" (click)="allowCurrentLocation('drop')">Allow Current Location</button>
-              <select class="form-select form-select-sm preset-select" [ngModel]="selectedDropPreset" (ngModelChange)="applyDropPreset($event)">
-                <option value="">Select drop location</option>
-                <option *ngFor="let p of dropLocationSuggestions" [value]="p.name">{{ p.name }}</option>
-              </select>
-            </div>
-            <input class="form-control mb-2" placeholder="Drop address" [(ngModel)]="dropAddress" />
-            <div class="row g-2 mb-3">
-              <div class="col"><input class="form-control" type="number" step="0.00001" placeholder="Drop latitude" [(ngModel)]="dropLat" /></div>
-              <div class="col"><input class="form-control" type="number" step="0.00001" placeholder="Drop longitude" [(ngModel)]="dropLng" /></div>
             </div>
 
             <h5 class="mb-2">Ride Notes (optional)</h5>
@@ -480,11 +517,72 @@ const RECENT_LOCATIONS_KEY = 'delivery_recent_locations';
         box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.15);
       }
 
+      .captain-pin {
+        margin-top: 4px;
+        color: #495057;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .pin-symbol {
+        font-size: 13px;
+        line-height: 1;
+      }
+
       .fare-box {
         border: 1px dashed #adb5bd;
         border-radius: 10px;
         padding: 10px;
         background: #f8f9fa;
+      }
+
+      .trip-summary {
+        border: 1px solid #dbeafe;
+        border-radius: 12px;
+        padding: 12px;
+        background: #f8fbff;
+      }
+
+      .trip-summary-title {
+        font-weight: 700;
+        color: #0f172a;
+      }
+
+      .trip-summary-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .trip-summary-label {
+        font-size: 12px;
+        color: #64748b;
+      }
+
+      .trip-summary-value {
+        font-size: 16px;
+        font-weight: 700;
+        color: #0f172a;
+      }
+
+      .trip-summary-route {
+        font-size: 12px;
+        color: #334155;
+      }
+
+      .trip-summary-note {
+        margin-top: 8px;
+        font-size: 12px;
+        color: #166534;
+        font-weight: 600;
+      }
+
+      .trip-summary-hint {
+        margin-top: 6px;
+        font-size: 12px;
+        color: #92400e;
+        font-weight: 600;
       }
 
       .preset-select {
@@ -583,6 +681,10 @@ const RECENT_LOCATIONS_KEY = 'delivery_recent_locations';
         }
 
         .vehicle-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .trip-summary-grid {
           grid-template-columns: 1fr;
         }
       }
@@ -805,6 +907,42 @@ export class BookingComponent implements OnDestroy {
 
   get totalEstimatedFare(): number {
     return Math.max(0, Math.round(this.estimatedFare + this.availabilitySurcharge));
+  }
+
+  get hasRouteCoordinates(): boolean {
+    return Number.isFinite(Number(this.pickupLat))
+      && Number.isFinite(Number(this.pickupLng))
+      && Number.isFinite(Number(this.dropLat))
+      && Number.isFinite(Number(this.dropLng));
+  }
+
+  get routeDistanceKm(): number {
+    if (!this.hasRouteCoordinates) {
+      return 0;
+    }
+    return this.calculateRouteDistance(
+      Number(this.pickupLat),
+      Number(this.pickupLng),
+      Number(this.dropLat),
+      Number(this.dropLng)
+    );
+  }
+
+  get isShortTrip(): boolean {
+    return this.routeDistanceKm > 0 && this.routeDistanceKm <= 1;
+  }
+
+  get isVeryShortTrip(): boolean {
+    return this.routeDistanceKm > 0 && this.routeDistanceKm <= 0.6;
+  }
+
+  get routeEtaMinutes(): number {
+    const distance = this.routeDistanceKm;
+    if (!distance) {
+      return 0;
+    }
+    const averageCitySpeedKmPerHour = 22;
+    return Math.max(3, Math.round((distance / averageCitySpeedKmPerHour) * 60));
   }
 
   onVehicleTypeChange(vehicleType: VehicleType): void {
@@ -1185,7 +1323,7 @@ export class BookingComponent implements OnDestroy {
     };
 
     const baseFare = 55;
-    const distanceFare = distanceKm * 22;
+    const distanceFare = distanceKm * 15;
     const trafficMultiplier = this.getTrafficMultiplier(this.trafficCondition);
     const weatherMultiplier = this.getWeatherMultiplier(this.weatherCondition);
     const subtotal = (baseFare + distanceFare) * multipliers[vehicleType];
@@ -1316,11 +1454,27 @@ export class BookingComponent implements OnDestroy {
     return Math.round(value * 100) / 100;
   }
 
+  private calculateRouteDistance(fromLat: number, fromLng: number, toLat: number, toLng: number): number {
+    const toRadians = (value: number) => (value * Math.PI) / 180;
+    const earthRadiusKm = 6371;
+    const dLat = toRadians(toLat - fromLat);
+    const dLng = toRadians(toLng - fromLng);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(toRadians(fromLat)) * Math.cos(toRadians(toLat)) *
+      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return this.round(earthRadiusKm * c);
+  }
+
   private toNearbyCaptain(captain: CaptainDirectoryItem, index: number): NearbyCaptain {
     const hash = this.hashNumber(`${captain.id}:${captain.username}`);
     const distanceKm = this.round(0.8 + ((hash % 60) / 10));
     const etaMinutes = Math.max(3, Math.round(distanceKm * 2.6));
     const vehicleType = captain.vehicleType || 'bike';
+    const locationLat = this.round(this.pickupLat + (((hash % 120) - 60) / 5000));
+    const locationLng = this.round(this.pickupLng + ((((Math.floor(hash / 120)) % 120) - 60) / 5000));
+    const locationLabel = this.dynamicCurrentLocationLabel(locationLat, locationLng);
 
     return {
       id: captain.id,
@@ -1331,7 +1485,10 @@ export class BookingComponent implements OnDestroy {
       rating: this.round(captain.rating || 4.5),
       etaMinutes,
       distanceKm,
-      availability: captain.availability || 'available'
+      availability: captain.availability || 'available',
+      locationLabel,
+      locationLat,
+      locationLng
     };
   }
 
@@ -1488,14 +1645,62 @@ export class BookingComponent implements OnDestroy {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      this.selectedProfileImage = String(reader.result || '');
-      if (this.selectedProfileImage) {
-        this.profileImageUrl = this.selectedProfileImage;
-      }
-    };
-    reader.readAsDataURL(file);
+    if (!file.type.startsWith('image/')) {
+      this.notifications.push('Please choose an image file.', 'warning');
+      input.value = '';
+      return;
+    }
+
+    if (file.size > 6 * 1024 * 1024) {
+      this.notifications.push('Image is too large. Please select an image under 6 MB.', 'warning');
+      input.value = '';
+      return;
+    }
+
+    this.compressImage(file)
+      .then((result) => {
+        this.selectedProfileImage = result;
+        this.profileImageUrl = result;
+      })
+      .catch(() => {
+        this.notifications.push('Could not read selected image. Please try another file.', 'error');
+      });
+  }
+
+  private compressImage(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const image = new Image();
+        image.onload = () => {
+          const maxWidth = 320;
+          const maxHeight = 320;
+          let { width, height } = image;
+
+          const scale = Math.min(maxWidth / width, maxHeight / height, 1);
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('Canvas context unavailable'));
+            return;
+          }
+
+          ctx.drawImage(image, 0, 0, width, height);
+          const compressed = canvas.toDataURL('image/jpeg', 0.72);
+          resolve(compressed);
+        };
+        image.onerror = () => reject(new Error('Invalid image data'));
+        image.src = String(reader.result || '');
+      };
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsDataURL(file);
+    });
   }
 
   saveProfileDp(): void {
@@ -1838,7 +2043,13 @@ export class BookingComponent implements OnDestroy {
         rating: captain.rating,
         etaMinutes,
         distanceKm,
-        availability
+        availability,
+        locationLat: this.round(this.pickupLat + ((index - 1) * 0.0035)),
+        locationLng: this.round(this.pickupLng + (((seed % 3) - 1) * 0.003)),
+        locationLabel: this.dynamicCurrentLocationLabel(
+          this.round(this.pickupLat + ((index - 1) * 0.0035)),
+          this.round(this.pickupLng + (((seed % 3) - 1) * 0.003))
+        )
       };
     });
   }

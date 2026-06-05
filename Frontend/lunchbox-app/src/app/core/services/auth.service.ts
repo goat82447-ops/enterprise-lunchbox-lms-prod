@@ -3,6 +3,7 @@ import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
+  AdminUserListItem,
   AppUser,
   CaptainDirectoryItem,
   CaptainFeedbackRequest,
@@ -10,6 +11,7 @@ import {
   LoginStartResponse,
   RegisterRequest,
   RegisterResponse,
+  UserStats,
   UserRole,
   UserActionLog,
   VerifyOtpResponse,
@@ -150,6 +152,18 @@ export class AuthService {
   getCaptains(vehicleType?: string): Observable<CaptainDirectoryItem[]> {
     const suffix = vehicleType ? `?vehicleType=${encodeURIComponent(vehicleType)}` : '';
     return this.http.get<CaptainDirectoryItem[]>(`${this.authApi}/captains${suffix}`, {
+      headers: this.getSessionHeaders()
+    });
+  }
+
+  getUserStats(): Observable<UserStats> {
+    return this.http.get<UserStats>(`${this.authApi}/users/stats`, {
+      headers: this.getSessionHeaders()
+    });
+  }
+
+  getUsers(): Observable<AdminUserListItem[]> {
+    return this.http.get<AdminUserListItem[]>(`${this.authApi}/users`, {
       headers: this.getSessionHeaders()
     });
   }
