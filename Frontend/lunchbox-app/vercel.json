@@ -2,6 +2,14 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     {
+      "source": "/api/(.*)",
+      "destination": "https://ekart-backend-buwi.onrender.com/api/$1"
+    },
+    {
+      "source": "/health",
+      "destination": "https://ekart-backend-buwi.onrender.com/health"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
