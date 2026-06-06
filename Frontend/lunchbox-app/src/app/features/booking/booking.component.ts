@@ -6,7 +6,9 @@ import { Subscription } from 'rxjs';
 import { AppUser, Booking, BookingRequest, CaptainDirectoryItem, LiveFareRequest, LiveFareResponse, NearbyCaptain, PaymentMethod, ServiceType, VehicleType } from '../../core/models/delivery.models';
 import { AuthService } from '../../core/services/auth.service';
 import { BookingService } from '../../core/services/booking.service';
+import { LanguageService } from '../../core/services/language.service';
 import { NotificationService } from '../../core/services/notification.service';
+import { NearbyHotelApiItem, PlacesService } from '../../core/services/places.service';
 import { PricingService } from '../../core/services/pricing.service';
 
 type LocationPreset = {
@@ -22,6 +24,7 @@ type NearbyHotel = {
   id: string;
   name: string;
   category: 'veg' | 'nonveg';
+  locationLabel: string;
   distanceKm: number;
   etaMinutes: number;
   rating: number;
@@ -37,6 +40,7 @@ type PopularPlace = {
 
 const LAST_LOCATION_KEY = 'delivery_last_location';
 const RECENT_LOCATIONS_KEY = 'delivery_recent_locations';
+const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
 
 @Component({
   selector: 'app-booking',
@@ -44,20 +48,145 @@ const RECENT_LOCATIONS_KEY = 'delivery_recent_locations';
   imports: [CommonModule, FormsModule],
   template: `
     <div class="container py-4">
+      <div class="card p-3 mb-3 lunchbox-mode-card">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+          <div>
+            <h5 class="mb-1">Lunch Box Delivery Mode</h5>
+            <div class="small text-muted">Use this for school lunch delivery with child and school details.</div>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <button class="btn btn-outline-primary btn-sm" type="button" (click)="openLunchboxBookingsPage()">Open Lunch Box Page</button>
+            <div class="form-check form-switch m-0 pt-1">
+              <input
+                class="form-check-input"
+                type="checkbox"
+                id="lunchBoxMode"
+                [(ngModel)]="lunchBoxDeliveryMode"
+                (ngModelChange)="onLunchBoxDeliveryModeChange()"
+              />
+              <label class="form-check-label" for="lunchBoxMode">Enable</label>
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-2 mt-1" *ngIf="lunchBoxDeliveryMode">
+          <div class="col-md-6">
+            <input class="form-control" placeholder="Student name" [(ngModel)]="lunchStudentName" />
+          </div>
+          <div class="col-md-6">
+            <input class="form-control" placeholder="Class / Section" [(ngModel)]="lunchStudentClass" />
+          </div>
+          <div class="col-md-6">
+            <input class="form-control" placeholder="School name" [(ngModel)]="lunchSchoolName" />
+          </div>
+          <div class="col-md-6">
+            <input
+              class="form-control"
+              placeholder="School address"
+              [(ngModel)]="lunchSchoolAddress"
+              (ngModelChange)="onLunchSchoolAddressChange($event)"
+            />
+          </div>
+          <div class="col-md-6">
+            <input class="form-control" placeholder="Guardian phone" [(ngModel)]="lunchGuardianPhone" />
+          </div>
+          <div class="col-md-6">
+            <input class="form-control" placeholder="Lunch box details (veg/non-veg/allergy note)" [(ngModel)]="lunchBoxDetails" />
+          </div>
+          <div class="col-12">
+            <input class="form-control" placeholder="School gate / class handover instructions" [(ngModel)]="lunchDeliveryInstructions" />
+          </div>
+        </div>
+      </div>
+
+      <div class="card p-3 mb-3 lunchbox-mode-card">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+          <div>
+            <h5 class="mb-1">Pickup Service Mode</h5>
+            <div class="small text-muted">Pickup item from shop and deliver to selected drop place.</div>
+          </div>
+          <div class="form-check form-switch m-0 pt-1">
+            <input
+              class="form-check-input"
+              type="checkbox"
+              id="pickupServiceMode"
+              [(ngModel)]="pickupServiceMode"
+              (ngModelChange)="onPickupServiceModeChange()"
+            />
+            <label class="form-check-label" for="pickupServiceMode">Enable</label>
+          </div>
+        </div>
+
+        <div class="row g-2 mt-1" *ngIf="pickupServiceMode">
+          <div class="col-md-6">
+            <input class="form-control" placeholder="Shop name" [(ngModel)]="pickupShopName" />
+          </div>
+          <div class="col-md-6">
+            <input class="form-control" placeholder="Shop contact" [(ngModel)]="pickupShopPhone" />
+          </div>
+          <div class="col-12">
+            <input class="form-control" placeholder="Item details (size/qty/type)" [(ngModel)]="pickupItemDetails" />
+          </div>
+          <div class="col-12">
+            <input class="form-control" placeholder="Pickup instructions (counter/gate/token)" [(ngModel)]="pickupShopInstructions" />
+          </div>
+        </div>
+      </div>
+
       <h2 class="mb-3">Book Delivery</h2>
       <p class="text-muted">Uber-style matching: pick from live nearby captains and confirm instantly.</p>
+
+      <div class="status-banner mb-3">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+          <div>
+            <div class="status-banner-title">Women Safety Protection</div>
+            <div class="small mb-1">Enable this mode to prioritize top-ranked captains first.</div>
+            <div class="small text-muted" *ngIf="womenSafetyProtectionMode">This mode will stay enabled for your next login.</div>
+          </div>
+          <div class="form-check form-switch m-0 pt-1">
+            <input
+              class="form-check-input"
+              type="checkbox"
+              id="womenSafetyMode"
+              [(ngModel)]="womenSafetyProtectionMode"
+              (ngModelChange)="onWomenSafetyProtectionModeChange()"
+            />
+            <label class="form-check-label" for="womenSafetyMode">Enable</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="status-banner mb-3">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+          <div>
+            <div class="status-banner-title">Teenage Ride Mode</div>
+            <div class="small mb-1">Useful for school/college teen rides with stricter contact preference.</div>
+            <div class="small text-muted" *ngIf="teenageRideMode">Booking is set to Others with preferred captain alerts.</div>
+          </div>
+          <div class="form-check form-switch m-0 pt-1">
+            <input
+              class="form-check-input"
+              type="checkbox"
+              id="teenageRideMode"
+              [(ngModel)]="teenageRideMode"
+              (ngModelChange)="onTeenageRideModeChange()"
+            />
+            <label class="form-check-label" for="teenageRideMode">Enable</label>
+          </div>
+        </div>
+      </div>
 
       <div class="status-banner mb-4" *ngIf="latestPendingAcceptanceBooking as pending">
         <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
           <div>
-            <div class="status-banner-title">Captain acceptance pending</div>
+            <div class="status-banner-title">{{ td('Captain acceptance pending') }}</div>
             <div class="small mb-1">
-              Ride <strong>{{ pending.id }}</strong> is waiting for captain approval.
-              <span *ngIf="pendingAcceptanceCount > 1">You also have {{ pendingAcceptanceCount - 1 }} more pending request(s).</span>
+              {{ td('Ride') }} <strong>{{ pending.id }}</strong> {{ td('is waiting for captain approval.') }}
+              <span *ngIf="pendingAcceptanceCount > 1">{{ td('You also have') }} {{ pendingAcceptanceCount - 1 }} {{ td('more pending request(s).') }}</span>
             </div>
-            <div class="small text-muted">Requested at {{ pending.createdAt | date: 'short' }}</div>
+            <div class="small text-muted">{{ td('Requested at') }} {{ pending.createdAt | date: 'short' }}</div>
           </div>
-          <button class="btn btn-sm btn-warning" type="button" (click)="openTracking(pending)">Open Pending Ride</button>
+          <button class="btn btn-sm btn-warning" type="button" (click)="openTracking(pending)">{{ td('Open Pending Ride') }}</button>
         </div>
       </div>
 
@@ -127,15 +256,19 @@ const RECENT_LOCATIONS_KEY = 'delivery_recent_locations';
             <div class="food-suggestion-box mb-4" *ngIf="serviceType === 'food'">
               <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
                 <h6 class="mb-0">Suggested Nearby Hotels</h6>
-                <div class="btn-group btn-group-sm" role="group" aria-label="Food preference filter">
-                  <button type="button" class="btn" [ngClass]="foodPreference === 'all' ? 'btn-danger' : 'btn-outline-secondary'" (click)="setFoodPreference('all')">All</button>
-                  <button type="button" class="btn" [ngClass]="foodPreference === 'veg' ? 'btn-danger' : 'btn-outline-secondary'" (click)="setFoodPreference('veg')">Veg</button>
-                  <button type="button" class="btn" [ngClass]="foodPreference === 'nonveg' ? 'btn-danger' : 'btn-outline-secondary'" (click)="setFoodPreference('nonveg')">Non-Veg</button>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                  <button type="button" class="btn btn-outline-secondary btn-sm" (click)="refreshNearbyHotelsLive(true)">Refresh Now</button>
+                  <div class="btn-group btn-group-sm" role="group" aria-label="Food preference filter">
+                    <button type="button" class="btn" [ngClass]="foodPreference === 'all' ? 'btn-danger' : 'btn-outline-secondary'" (click)="setFoodPreference('all')">All</button>
+                    <button type="button" class="btn" [ngClass]="foodPreference === 'veg' ? 'btn-danger' : 'btn-outline-secondary'" (click)="setFoodPreference('veg')">Veg</button>
+                    <button type="button" class="btn" [ngClass]="foodPreference === 'nonveg' ? 'btn-danger' : 'btn-outline-secondary'" (click)="setFoodPreference('nonveg')">Non-Veg</button>
+                  </div>
                 </div>
               </div>
 
-              <div class="small text-muted mb-2" *ngIf="!showAllHotels">Showing top rated hotels near your pickup location.</div>
-              <div class="small text-muted mb-2" *ngIf="showAllHotels">Showing all nearby hotels near your pickup location.</div>
+              <div class="small text-muted mb-2" *ngIf="!showAllHotels">Showing top rated hotels nearest to your pickup location.</div>
+              <div class="small text-muted mb-2" *ngIf="showAllHotels">Showing all nearby hotels nearest to your pickup location.</div>
+              <div class="small text-muted mb-2">Live location: {{ pickupAddress || 'Pickup Point' }} • Updated: {{ nearbyHotelsLastUpdatedAt ? (nearbyHotelsLastUpdatedAt | date:'shortTime') : 'just now' }}</div>
 
               <div class="hotel-grid" *ngIf="displayedNearbyHotels.length > 0">
                 <div class="hotel-card" *ngFor="let hotel of displayedNearbyHotels">
@@ -146,6 +279,7 @@ const RECENT_LOCATIONS_KEY = 'delivery_recent_locations';
                     </span>
                   </div>
                   <div class="small text-muted">{{ hotel.distanceKm }} km • ETA {{ hotel.etaMinutes }} min</div>
+                  <div class="small text-muted">{{ hotel.locationLabel }}</div>
                   <div class="small">⭐ {{ hotel.rating }} • {{ hotel.openNow ? 'Open now' : 'Opens soon' }}</div>
                 </div>
               </div>
@@ -210,24 +344,36 @@ const RECENT_LOCATIONS_KEY = 'delivery_recent_locations';
             <h5 class="mb-2">Pickup</h5>
             <div class="d-flex gap-2 mb-2 flex-wrap">
               <button class="btn btn-outline-primary btn-sm" type="button" (click)="allowCurrentLocation('pickup')">Allow Current Location</button>
-              <select class="form-select form-select-sm preset-select" [ngModel]="selectedPickupPreset" (ngModelChange)="applyPickupPreset($event)">
-                <option value="">Select pickup location</option>
-                <option *ngFor="let p of pickupLocationSuggestions" [value]="p.name">{{ p.name }}</option>
-              </select>
+              <input
+                class="form-control form-control-sm preset-select"
+                placeholder="Search pickup place (example: JBS)"
+                list="pickup-location-list"
+                [ngModel]="pickupSearchTerm"
+                (ngModelChange)="onPickupSearchTermChange($event)"
+              />
+              <datalist id="pickup-location-list">
+                <option *ngFor="let p of filteredPickupLocationSuggestions" [value]="p.name"></option>
+              </datalist>
             </div>
             <input class="form-control mb-2" placeholder="Pickup address" [(ngModel)]="pickupAddress" />
             <div class="row g-2 mb-4">
-              <div class="col"><input class="form-control" type="number" step="0.00001" placeholder="Pickup latitude" [(ngModel)]="pickupLat" /></div>
-              <div class="col"><input class="form-control" type="number" step="0.00001" placeholder="Pickup longitude" [(ngModel)]="pickupLng" /></div>
+              <div class="col"><input class="form-control" type="number" step="0.00001" placeholder="Pickup latitude" [(ngModel)]="pickupLat" (ngModelChange)="onPickupLocationInputChanged()" /></div>
+              <div class="col"><input class="form-control" type="number" step="0.00001" placeholder="Pickup longitude" [(ngModel)]="pickupLng" (ngModelChange)="onPickupLocationInputChanged()" /></div>
             </div>
 
             <h5 class="mb-2">Drop Location</h5>
             <div class="d-flex gap-2 mb-2 flex-wrap">
               <button class="btn btn-outline-primary btn-sm" type="button" (click)="allowCurrentLocation('drop')">Allow Current Location</button>
-              <select class="form-select form-select-sm preset-select" [ngModel]="selectedDropPreset" (ngModelChange)="applyDropPreset($event)">
-                <option value="">Select drop location</option>
-                <option *ngFor="let p of dropLocationSuggestions" [value]="p.name">{{ p.name }}</option>
-              </select>
+              <input
+                class="form-control form-control-sm preset-select"
+                placeholder="Search drop place (example: Ameerpet)"
+                list="drop-location-list"
+                [ngModel]="dropSearchTerm"
+                (ngModelChange)="onDropSearchTermChange($event)"
+              />
+              <datalist id="drop-location-list">
+                <option *ngFor="let p of filteredDropLocationSuggestions" [value]="p.name"></option>
+              </datalist>
             </div>
             <input class="form-control mb-2" placeholder="Drop address" [(ngModel)]="dropAddress" />
             <div class="row g-2 mb-3">
@@ -292,7 +438,7 @@ const RECENT_LOCATIONS_KEY = 'delivery_recent_locations';
               <label
                 class="captain-card"
                 [class.selected]="selectedCaptain?.id === captain.id"
-                *ngFor="let captain of filteredNearbyCaptains"
+                *ngFor="let captain of filteredNearbyCaptains; let i = index"
               >
                 <input
                   type="radio"
@@ -304,8 +450,11 @@ const RECENT_LOCATIONS_KEY = 'delivery_recent_locations';
                 />
                 <div class="w-100">
                   <div class="d-flex justify-content-between">
-                    <strong>{{ vehicleIcon(captain.vehicleType) }} {{ captain.name }}</strong>
-                    <span class="badge" [ngClass]="statusBadge(captain.availability)">{{ captain.availability }}</span>
+                    <strong>
+                      {{ vehicleIcon(captain.vehicleType) }} {{ captain.name }}
+                      <span class="badge text-bg-warning ms-1" *ngIf="womenSafetyProtectionMode && i < 2">Top Rank</span>
+                    </strong>
+                    <span class="badge" [ngClass]="statusBadge(captain.availability)">{{ td(captain.availability) }}</span>
                   </div>
                   <small class="text-muted">{{ captain.vehicleLabel }} • {{ captain.rating }}★ • {{ captain.distanceKm }} km</small>
                   <div class="small">ETA {{ captain.etaMinutes }} min • {{ captain.phone }}</div>
@@ -318,6 +467,64 @@ const RECENT_LOCATIONS_KEY = 'delivery_recent_locations';
             </div>
             <div class="alert alert-warning mb-4" *ngIf="filteredNearbyCaptains.length === 0">
               No nearby captains available for selected vehicle type. Try another vehicle or refresh.
+            </div>
+
+            <div class="vehicle-map-card mb-4">
+              <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                <h5 class="mb-0">Vehicle Location Map</h5>
+                <div class="d-flex align-items-center gap-2">
+                  <span class="small text-muted">Live Track</span>
+                  <div class="form-check form-switch m-0">
+                    <input
+                      class="form-check-input"
+                      type="checkbox"
+                      id="liveTrackMode"
+                      [(ngModel)]="liveTrackMode"
+                      (ngModelChange)="onLiveTrackModeChange()"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div class="small text-muted mb-2">
+                Pickup and drop are fixed. Captain pins update automatically when live tracking is enabled.
+              </div>
+
+              <div class="vehicle-map-canvas" *ngIf="hasMapPoints; else mapNotReady">
+                <div
+                  class="map-pin pickup"
+                  [style.left.%]="mapLeftPercent(pickupLng)"
+                  [style.top.%]="mapTopPercent(pickupLat)"
+                  title="Pickup"
+                >
+                  <span>📍</span>
+                </div>
+
+                <div
+                  class="map-pin drop"
+                  [style.left.%]="mapLeftPercent(dropLng)"
+                  [style.top.%]="mapTopPercent(dropLat)"
+                  title="Drop"
+                >
+                  <span>🏁</span>
+                </div>
+
+                <button
+                  type="button"
+                  class="map-pin captain"
+                  [class.selected]="selectedCaptain?.id === captain.id"
+                  *ngFor="let captain of mapCaptains"
+                  [style.left.%]="mapLeftPercent(captain.locationLng || dropLng)"
+                  [style.top.%]="mapTopPercent(captain.locationLat || dropLat)"
+                  (click)="selectCaptain(captain)"
+                  [title]="captain.name + ' • ETA ' + captain.etaMinutes + ' min'"
+                >
+                  <span>{{ vehicleIcon(captain.vehicleType) }}</span>
+                </button>
+              </div>
+
+              <ng-template #mapNotReady>
+                <div class="alert alert-light border mb-0">Map is waiting for location coordinates.</div>
+              </ng-template>
             </div>
 
             <h5 class="mb-2">Captain Notification Audience</h5>
@@ -675,9 +882,65 @@ const RECENT_LOCATIONS_KEY = 'delivery_recent_locations';
         letter-spacing: 0.3px;
       }
 
+      .vehicle-map-card {
+        border: 1px solid #dbeafe;
+        border-radius: 12px;
+        padding: 12px;
+        background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+      }
+
+      .vehicle-map-canvas {
+        position: relative;
+        height: 240px;
+        border-radius: 12px;
+        border: 1px solid #cbd5e1;
+        background:
+          radial-gradient(circle at 10% 20%, rgba(147, 197, 253, 0.22) 0, transparent 35%),
+          linear-gradient(135deg, #f8fafc, #e2e8f0);
+        overflow: hidden;
+      }
+
+      .map-pin {
+        position: absolute;
+        transform: translate(-50%, -50%);
+        width: 28px;
+        height: 28px;
+        border: none;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 5px 12px rgba(2, 6, 23, 0.22);
+      }
+
+      .map-pin.pickup {
+        background: #0ea5e9;
+        color: #ffffff;
+        z-index: 2;
+      }
+
+      .map-pin.drop {
+        background: #22c55e;
+        color: #ffffff;
+        z-index: 2;
+      }
+
+      .map-pin.captain {
+        background: #f97316;
+        color: #ffffff;
+        z-index: 3;
+        cursor: pointer;
+      }
+
+      .map-pin.captain.selected {
+        background: #111827;
+        box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.25), 0 8px 16px rgba(2, 6, 23, 0.35);
+      }
+
       @media (max-width: 576px) {
         .captain-grid {
           grid-template-columns: 1fr;
+          max-height: 320px;
         }
 
         .vehicle-grid {
@@ -686,6 +949,63 @@ const RECENT_LOCATIONS_KEY = 'delivery_recent_locations';
 
         .trip-summary-grid {
           grid-template-columns: 1fr;
+        }
+
+        .preset-select {
+          min-width: 0;
+          max-width: 100%;
+          width: 100%;
+        }
+
+        .hotel-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .how-to-book-video {
+          max-height: 240px;
+        }
+
+        .vehicle-map-canvas {
+          height: 210px;
+        }
+
+        .food-suggestion-box .btn-group {
+          width: 100%;
+        }
+
+        .food-suggestion-box .btn-group .btn {
+          flex: 1 1 0;
+        }
+      }
+
+      @media (max-width: 390px) {
+        .trip-summary,
+        .status-banner,
+        .food-suggestion-box,
+        .vehicle-map-card {
+          padding: 10px;
+        }
+
+        .captain-card,
+        .hotel-card,
+        .history-item,
+        .popular-place {
+          padding: 9px;
+        }
+
+        .map-pin {
+          width: 24px;
+          height: 24px;
+        }
+      }
+
+      @media (min-width: 768px) and (max-width: 991.98px) {
+        .captain-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .hotel-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
         }
       }
     `
@@ -709,6 +1029,8 @@ export class BookingComponent implements OnDestroy {
   recipientPhone = '';
   bookingTimeMode: 'now' | 'later' = 'now';
   notificationTarget: 'all' | 'preferred' = 'preferred';
+  womenSafetyProtectionMode = false;
+  teenageRideMode = false;
   scheduledAtLocal = '';
   vehicleType: VehicleType = 'bike';
   bookingVehicleOptions: Array<{ type: VehicleType; label: string; icon: string }> = [
@@ -731,9 +1053,23 @@ export class BookingComponent implements OnDestroy {
   };
   fareStatusMessage = 'Using local estimate.';
   nearbyHotels: NearbyHotel[] = [];
+  nearbyHotelsLastUpdatedAt: Date | null = null;
   foodPreference: 'all' | 'veg' | 'nonveg' = 'all';
   showAllHotels = false;
   rideNotes = '';
+  lunchBoxDeliveryMode = false;
+  pickupServiceMode = false;
+  pickupShopName = '';
+  pickupShopPhone = '';
+  pickupItemDetails = '';
+  pickupShopInstructions = '';
+  lunchStudentName = '';
+  lunchStudentClass = '';
+  lunchSchoolName = '';
+  lunchSchoolAddress = '';
+  lunchGuardianPhone = '';
+  lunchBoxDetails = '';
+  lunchDeliveryInstructions = '';
   locationPresets: LocationPreset[] = [
     { name: 'Hitech City Metro', lat: 17.4483, lng: 78.3915 },
     { name: 'Gachibowli Circle', lat: 17.4401, lng: 78.3489 },
@@ -745,13 +1081,19 @@ export class BookingComponent implements OnDestroy {
   dropLocationSuggestions: LocationPreset[] = [];
   selectedPickupPreset = '';
   selectedDropPreset = '';
+  pickupSearchTerm = '';
+  dropSearchTerm = '';
   bookingHistory: Booking[] = [];
   historyFilter: 'all' | 'completed' | 'cancelled' | 'scheduled' = 'all';
   historySearch = '';
   private refreshHandle: ReturnType<typeof setInterval> | null = null;
+  private nearbyHotelsRefreshHandle: ReturnType<typeof setInterval> | null = null;
+  private liveTrackHandle: ReturnType<typeof setInterval> | null = null;
   private historySubscription?: Subscription;
   private routeQueryParamsSubscription?: Subscription;
   private liveFareRequestCounter = 0;
+  private nearbyHotelsRequestCounter = 0;
+  private nearbyHotelsApiWarningShown = false;
   private speechRecognition: any | null = null;
   voiceSupported = false;
   isVoiceListening = false;
@@ -762,6 +1104,7 @@ export class BookingComponent implements OnDestroy {
   pendingVehicleSelection = false;
   private pendingVoiceTrip?: { from: string; to: string; note?: string };
   availabilitySurcharge = 0;
+  liveTrackMode = true;
 
   pickupAddress = 'Pickup Point';
   pickupLat = 17.4372;
@@ -774,20 +1117,24 @@ export class BookingComponent implements OnDestroy {
   constructor(
     private auth: AuthService,
     private bookingService: BookingService,
+    private languageService: LanguageService,
     private notifications: NotificationService,
     private pricingService: PricingService,
+    private placesService: PlacesService,
     private router: Router,
     private route: ActivatedRoute
   ) {
     this.currentUser = this.auth.getCurrentUser();
+    this.loadWomenSafetyProtectionMode();
     this.profileImageUrl = this.currentUser?.profileImageUrl || this.buildUserAvatar(this.currentUser);
     this.initializeVoiceBooking();
     this.loadLiveLocationDefaults();
     this.refreshNearbyCaptains();
     this.refreshHandle = setInterval(() => this.refreshNearbyCaptains(), 12000);
-    this.nearbyHotels = this.generateNearbyHotels();
+    this.refreshNearbyHotelsLive();
     this.popularPlaces = this.buildPopularPlaces();
     this.refreshLocationSuggestions();
+    this.ensureNearbyHotelsHeartbeat();
 
     const user = this.auth.getCurrentUser();
     if (user) {
@@ -803,6 +1150,14 @@ export class BookingComponent implements OnDestroy {
       const history = params.get('history');
       const bookingId = params.get('bookingId');
       const appliedCompletedFilter = history === 'completed';
+      const service = params.get('service');
+      const womenSafety = params.get('womenSafety');
+      const teenageRide = params.get('teenRide');
+      const vehicle = params.get('vehicle');
+      const lunchBox = params.get('lunchBox');
+      const pickupService = params.get('pickupService');
+      const bookingFor = params.get('bookingFor');
+      const rideMode = params.get('rideMode');
 
       if (appliedCompletedFilter) {
         this.historyFilter = 'completed';
@@ -810,6 +1165,49 @@ export class BookingComponent implements OnDestroy {
 
       if (bookingId) {
         this.historySearch = bookingId;
+      }
+
+      if (service && this.serviceTypes.includes(service as ServiceType)) {
+        this.onServiceTypeChange(service as ServiceType);
+      }
+
+      if (vehicle && this.bookingVehicleOptions.some((option) => option.type === vehicle)) {
+        this.onVehicleTypeChange(vehicle as VehicleType);
+      }
+
+      if (womenSafety === '1' && !this.womenSafetyProtectionMode) {
+        this.womenSafetyProtectionMode = true;
+        this.onWomenSafetyProtectionModeChange();
+      }
+
+      if (teenageRide === '1' && !this.teenageRideMode) {
+        this.teenageRideMode = true;
+        this.onTeenageRideModeChange();
+      }
+
+      if (lunchBox === '1' && !this.lunchBoxDeliveryMode) {
+        this.lunchBoxDeliveryMode = true;
+        this.onLunchBoxDeliveryModeChange();
+      }
+
+      if (pickupService === '1' && !this.pickupServiceMode) {
+        this.pickupServiceMode = true;
+        this.onPickupServiceModeChange();
+      }
+
+      if (bookingFor === 'others') {
+        this.bookingFor = 'others';
+      }
+
+      if (rideMode === 'later') {
+        this.bookingTimeMode = 'later';
+        if (!this.scheduledAtLocal) {
+          const nextHour = new Date(Date.now() + 60 * 60 * 1000);
+          nextHour.setMinutes(0, 0, 0);
+          this.scheduledAtLocal = new Date(nextHour.getTime() - nextHour.getTimezoneOffset() * 60000)
+            .toISOString()
+            .slice(0, 16);
+        }
       }
 
       if (appliedCompletedFilter || bookingId) {
@@ -822,6 +1220,16 @@ export class BookingComponent implements OnDestroy {
     if (this.refreshHandle) {
       clearInterval(this.refreshHandle);
       this.refreshHandle = null;
+    }
+
+    if (this.nearbyHotelsRefreshHandle) {
+      clearInterval(this.nearbyHotelsRefreshHandle);
+      this.nearbyHotelsRefreshHandle = null;
+    }
+
+    if (this.liveTrackHandle) {
+      clearInterval(this.liveTrackHandle);
+      this.liveTrackHandle = null;
     }
 
     this.historySubscription?.unsubscribe();
@@ -872,11 +1280,13 @@ export class BookingComponent implements OnDestroy {
           this.notifications.push('Live captains unavailable. Showing nearby fallback captains.', 'warning');
         }
 
-        const matchesVehicle = this.nearbyCaptains.filter((captain) => captain.vehicleType === this.vehicleType);
+        const matchesVehicle = this.rankNearbyCaptains(
+          this.nearbyCaptains.filter((captain) => captain.vehicleType === this.vehicleType)
+        );
         const currentSelected = this.selectedCaptain
           ? matchesVehicle.find((captain) => captain.id === this.selectedCaptain?.id && this.isCaptainAvailable(captain))
           : undefined;
-        const firstAvailable = currentSelected || matchesVehicle.find((captain) => this.isCaptainAvailable(captain));
+        const firstAvailable = currentSelected || this.pickBestAvailableCaptain(matchesVehicle);
 
         if (firstAvailable) {
           this.selectCaptain(firstAvailable);
@@ -885,11 +1295,14 @@ export class BookingComponent implements OnDestroy {
         }
 
         this.popularPlaces = this.buildPopularPlaces();
+        this.ensureLiveTrackHeartbeat();
       },
       error: () => {
         this.nearbyCaptains = this.generateFallbackNearbyCaptains();
-        const matchesVehicle = this.nearbyCaptains.filter((captain) => captain.vehicleType === this.vehicleType);
-        this.selectedCaptain = matchesVehicle.find((captain) => this.isCaptainAvailable(captain)) || null;
+        const matchesVehicle = this.rankNearbyCaptains(
+          this.nearbyCaptains.filter((captain) => captain.vehicleType === this.vehicleType)
+        );
+        this.selectedCaptain = this.pickBestAvailableCaptain(matchesVehicle) || null;
 
         if (!this.captainFallbackNoticeShown) {
           this.captainFallbackNoticeShown = true;
@@ -897,12 +1310,46 @@ export class BookingComponent implements OnDestroy {
         }
 
         this.popularPlaces = this.buildPopularPlaces();
+        this.ensureLiveTrackHeartbeat();
       }
     });
   }
 
+  onLiveTrackModeChange(): void {
+    const modeLabel = this.liveTrackMode ? 'enabled' : 'disabled';
+    this.notifications.push(`Live track mode ${modeLabel}.`, 'info');
+    this.ensureLiveTrackHeartbeat();
+  }
+
   get filteredNearbyCaptains(): NearbyCaptain[] {
-    return this.nearbyCaptains.filter((captain) => captain.vehicleType === this.vehicleType);
+    const matchingVehicle = this.nearbyCaptains.filter((captain) => captain.vehicleType === this.vehicleType);
+    return this.rankNearbyCaptains(matchingVehicle);
+  }
+
+  get mapCaptains(): NearbyCaptain[] {
+    return this.filteredNearbyCaptains
+      .filter((captain) => Number.isFinite(Number(captain.locationLat)) && Number.isFinite(Number(captain.locationLng)))
+      .slice(0, 15);
+  }
+
+  get hasMapPoints(): boolean {
+    return this.hasRouteCoordinates;
+  }
+
+  mapLeftPercent(lng: number): number {
+    const bounds = this.mapBounds();
+    if (!Number.isFinite(lng) || bounds.lngRange <= 0) {
+      return 50;
+    }
+    return this.clamp(((lng - bounds.minLng) / bounds.lngRange) * 100, 4, 96);
+  }
+
+  mapTopPercent(lat: number): number {
+    const bounds = this.mapBounds();
+    if (!Number.isFinite(lat) || bounds.latRange <= 0) {
+      return 50;
+    }
+    return this.clamp(((bounds.maxLat - lat) / bounds.latRange) * 100, 6, 94);
   }
 
   get totalEstimatedFare(): number {
@@ -953,7 +1400,7 @@ export class BookingComponent implements OnDestroy {
       this.updateEstimatedFare(2.5, this.vehicleType);
       return;
     }
-    const next = list.find((captain) => this.isCaptainAvailable(captain));
+    const next = this.pickBestAvailableCaptain(list);
     if (!next) {
       this.selectedCaptain = null;
       this.updateEstimatedFare(2.5, this.vehicleType);
@@ -980,14 +1427,46 @@ export class BookingComponent implements OnDestroy {
   onServiceTypeChange(serviceType: ServiceType): void {
     this.serviceType = serviceType;
     this.showAllHotels = false;
-    if (serviceType === 'food') {
-      this.nearbyHotels = this.generateNearbyHotels();
+    this.refreshNearbyHotelsLive(true);
+    this.ensureNearbyHotelsHeartbeat();
+  }
+
+  onPickupLocationInputChanged(): void {
+    if (this.serviceType !== 'food') {
+      return;
     }
+
+    this.refreshNearbyHotelsLive(true);
   }
 
   setFoodPreference(preference: 'all' | 'veg' | 'nonveg'): void {
     this.foodPreference = preference;
     this.showAllHotels = false;
+  }
+
+  onWomenSafetyProtectionModeChange(): void {
+    this.persistWomenSafetyProtectionMode();
+    const modeLabel = this.womenSafetyProtectionMode ? 'enabled' : 'disabled';
+    this.notifications.push(`Women Safety Protection mode ${modeLabel}.`, 'info');
+
+    const bestCaptain = this.pickBestAvailableCaptain(this.filteredNearbyCaptains);
+    if (bestCaptain) {
+      this.selectCaptain(bestCaptain);
+    }
+  }
+
+  onTeenageRideModeChange(): void {
+    if (this.teenageRideMode) {
+      this.bookingFor = 'others';
+      this.notificationTarget = 'preferred';
+      if (!this.rideNotes.toLowerCase().includes('teenage ride mode')) {
+        this.rideNotes = `${this.rideNotes ? `${this.rideNotes} | ` : ''}Teenage Ride Mode`;
+      }
+      this.notifications.push('Teenage Ride Mode enabled. Booking is set for Others with preferred captain alerts.', 'info');
+      return;
+    }
+
+    this.notifications.push('Teenage Ride Mode disabled.', 'info');
   }
 
   get filteredNearbyHotels(): NearbyHotel[] {
@@ -1055,7 +1534,52 @@ export class BookingComponent implements OnDestroy {
       cancelled: 'Cancelled'
     };
 
-    return labels[status] || status;
+    return this.td(labels[status] || status);
+  }
+
+  td(value: string): string {
+    return this.languageService.translateDynamic(value);
+  }
+
+  get filteredPickupLocationSuggestions(): LocationPreset[] {
+    return this.filterLocationSuggestions('pickup', this.pickupSearchTerm);
+  }
+
+  get filteredDropLocationSuggestions(): LocationPreset[] {
+    return this.filterLocationSuggestions('drop', this.dropSearchTerm);
+  }
+
+  onPickupSearchTermChange(value: string): void {
+    this.pickupSearchTerm = value || '';
+    this.applyPickupPreset(this.pickupSearchTerm);
+  }
+
+  onDropSearchTermChange(value: string): void {
+    this.dropSearchTerm = value || '';
+    this.applyDropPreset(this.dropSearchTerm);
+  }
+
+  onLunchBoxDeliveryModeChange(): void {
+    if (!this.lunchBoxDeliveryMode) {
+      return;
+    }
+
+    this.applyLunchDropAddressFromSchool(this.lunchSchoolAddress);
+  }
+
+  onLunchSchoolAddressChange(value: string): void {
+    this.lunchSchoolAddress = value || '';
+    this.applyLunchDropAddressFromSchool(this.lunchSchoolAddress);
+  }
+
+  onPickupServiceModeChange(): void {
+    if (this.pickupServiceMode) {
+      this.serviceType = 'parcel';
+      this.notifications.push('Pickup Service mode enabled. Fill shop details and complete booking.', 'info');
+      return;
+    }
+
+    this.notifications.push('Pickup Service mode disabled.', 'info');
   }
 
   historyStatusBadge(status: Booking['status']): string {
@@ -1096,10 +1620,7 @@ export class BookingComponent implements OnDestroy {
           this.pickupAddress = label;
           this.saveRecentLocation('pickup', { name: label, lat, lng });
           this.refreshNearbyCaptains();
-          if (this.serviceType === 'food') {
-            this.nearbyHotels = this.generateNearbyHotels();
-            this.showAllHotels = false;
-          }
+          this.refreshNearbyHotelsLive(true);
           this.popularPlaces = this.buildPopularPlaces();
         } else {
           this.dropLat = lat;
@@ -1124,29 +1645,28 @@ export class BookingComponent implements OnDestroy {
 
   applyPickupPreset(name: string): void {
     this.selectedPickupPreset = name;
-    const preset = this.locationPresets.find((item) => item.name === name);
+    const preset = this.findLocationByName('pickup', name);
     if (!preset) {
       return;
     }
+    this.pickupSearchTerm = preset.name;
     this.pickupAddress = preset.name;
     this.pickupLat = preset.lat;
     this.pickupLng = preset.lng;
     this.saveRecentLocation('pickup', preset);
     this.refreshNearbyCaptains();
-    if (this.serviceType === 'food') {
-      this.nearbyHotels = this.generateNearbyHotels();
-      this.showAllHotels = false;
-    }
+    this.refreshNearbyHotelsLive(true);
     this.popularPlaces = this.buildPopularPlaces();
     this.refreshLocationSuggestions();
   }
 
   applyDropPreset(name: string): void {
     this.selectedDropPreset = name;
-    const preset = this.locationPresets.find((item) => item.name === name);
+    const preset = this.findLocationByName('drop', name);
     if (!preset) {
       return;
     }
+    this.dropSearchTerm = preset.name;
     this.dropAddress = preset.name;
     this.dropLat = preset.lat;
     this.dropLng = preset.lng;
@@ -1220,7 +1740,7 @@ export class BookingComponent implements OnDestroy {
       preferredCaptainId: this.notificationTarget === 'preferred' ? this.selectedCaptain.id : undefined,
       preferredCaptainName: this.notificationTarget === 'preferred' ? this.selectedCaptain.name : undefined,
       estimatedFare: this.totalEstimatedFare,
-      rideNotes: this.rideNotes.trim() || undefined
+      rideNotes: this.buildCombinedRideNotes()
     };
 
     this.saveRecentLocation('pickup', { name: request.pickup.address, lat: request.pickup.lat, lng: request.pickup.lng });
@@ -1263,6 +1783,10 @@ export class BookingComponent implements OnDestroy {
 
   openTracking(booking: Booking): void {
     this.router.navigate(['/tracking', booking.id]);
+  }
+
+  openLunchboxBookingsPage(): void {
+    this.router.navigate(['/lunchbox-bookings']);
   }
 
   setHistoryFilter(filter: 'all' | 'completed' | 'cancelled' | 'scheduled'): void {
@@ -1369,32 +1893,135 @@ export class BookingComponent implements OnDestroy {
     return 1.3;
   }
 
-  private generateNearbyHotels(): NearbyHotel[] {
-    const base = [
-      { name: 'Green Leaf Tiffins', category: 'veg' as const },
-      { name: 'Sri Annapurna Meals', category: 'veg' as const },
-      { name: 'Veggie Delight Kitchen', category: 'veg' as const },
-      { name: 'Royal Biryani House', category: 'nonveg' as const },
-      { name: 'Spice Route Grill', category: 'nonveg' as const },
-      { name: 'Nawab Kebab Point', category: 'nonveg' as const }
+  refreshNearbyHotelsLive(force = false): void {
+    if (this.serviceType !== 'food' && !force) {
+      return;
+    }
+
+    const pickupLat = Number(this.pickupLat);
+    const pickupLng = Number(this.pickupLng);
+    if (!Number.isFinite(pickupLat) || !Number.isFinite(pickupLng)) {
+      this.nearbyHotels = this.generateNearbyHotelsFallback();
+      this.nearbyHotelsLastUpdatedAt = new Date();
+      this.showAllHotels = false;
+      return;
+    }
+
+    const requestId = ++this.nearbyHotelsRequestCounter;
+
+    this.placesService
+      .getNearbyHotels({
+        lat: pickupLat,
+        lng: pickupLng,
+        radiusMeters: 3500,
+        limit: 12,
+        preference: 'all'
+      })
+      .subscribe({
+        next: (response) => {
+          if (requestId !== this.nearbyHotelsRequestCounter) {
+            return;
+          }
+
+          const mapped = this.mapNearbyHotelsFromApi(response.hotels || []);
+          this.nearbyHotels = mapped.length > 0 ? mapped : this.generateNearbyHotelsFallback();
+          this.nearbyHotelsLastUpdatedAt = response.updatedAt ? new Date(response.updatedAt) : new Date();
+          this.showAllHotels = false;
+          this.nearbyHotelsApiWarningShown = false;
+        },
+        error: () => {
+          if (requestId !== this.nearbyHotelsRequestCounter) {
+            return;
+          }
+
+          this.nearbyHotels = this.generateNearbyHotelsFallback();
+          this.nearbyHotelsLastUpdatedAt = new Date();
+          this.showAllHotels = false;
+
+          if (!this.nearbyHotelsApiWarningShown) {
+            this.nearbyHotelsApiWarningShown = true;
+            this.notifications.push('Nearby hotels API unavailable. Showing fallback list.', 'warning');
+          }
+        }
+      });
+  }
+
+  private ensureNearbyHotelsHeartbeat(): void {
+    if (this.serviceType !== 'food') {
+      if (this.nearbyHotelsRefreshHandle) {
+        clearInterval(this.nearbyHotelsRefreshHandle);
+        this.nearbyHotelsRefreshHandle = null;
+      }
+      return;
+    }
+
+    if (this.nearbyHotelsRefreshHandle) {
+      return;
+    }
+
+    this.nearbyHotelsRefreshHandle = setInterval(() => {
+      this.refreshNearbyHotelsLive();
+    }, 12000);
+  }
+
+  private mapNearbyHotelsFromApi(items: NearbyHotelApiItem[]): NearbyHotel[] {
+    return items
+      .filter((item) => !!item?.id && !!item?.name)
+      .map((item) => {
+        const category: 'veg' | 'nonveg' = item.category === 'nonveg' ? 'nonveg' : 'veg';
+        return {
+          id: String(item.id),
+          name: String(item.name),
+          category,
+          locationLabel: String(item.locationLabel || 'Nearby'),
+          distanceKm: this.round(Math.max(0.2, Number(item.distanceKm || 0))),
+          etaMinutes: Math.max(5, Math.round(Number(item.etaMinutes || 0))),
+          rating: Math.round(Math.max(1, Number(item.rating || 0)) * 10) / 10,
+          openNow: Boolean(item.openNow)
+        };
+      })
+      .sort((a, b) => a.distanceKm - b.distanceKm || b.rating - a.rating);
+  }
+
+  private generateNearbyHotelsFallback(): NearbyHotel[] {
+    const pickupLat = Number(this.pickupLat);
+    const pickupLng = Number(this.pickupLng);
+    const hasPickup = Number.isFinite(pickupLat) && Number.isFinite(pickupLng);
+    const timeBucket = Math.floor(Date.now() / 12000);
+    const etaDrift = (timeBucket % 3) - 1;
+
+    const catalog = [
+      { id: 'HT-1', name: 'Green Leaf Tiffins', category: 'veg' as const, lat: 17.4457, lng: 78.3908, locationLabel: 'Madhapur' },
+      { id: 'HT-2', name: 'Sri Annapurna Meals', category: 'veg' as const, lat: 17.4511, lng: 78.3792, locationLabel: 'Hitech City' },
+      { id: 'HT-3', name: 'Veggie Delight Kitchen', category: 'veg' as const, lat: 17.4388, lng: 78.3684, locationLabel: 'Gachibowli' },
+      { id: 'HT-4', name: 'Royal Biryani House', category: 'nonveg' as const, lat: 17.4296, lng: 78.4019, locationLabel: 'Jubilee Hills' },
+      { id: 'HT-5', name: 'Spice Route Grill', category: 'nonveg' as const, lat: 17.4544, lng: 78.3982, locationLabel: 'Kondapur' },
+      { id: 'HT-6', name: 'Nawab Kebab Point', category: 'nonveg' as const, lat: 17.4421, lng: 78.4136, locationLabel: 'Ameerpet' },
+      { id: 'HT-7', name: 'City Dosa Hub', category: 'veg' as const, lat: 17.4349, lng: 78.3851, locationLabel: 'SR Nagar' },
+      { id: 'HT-8', name: 'Tandoori Street', category: 'nonveg' as const, lat: 17.4482, lng: 78.3727, locationLabel: 'Raidurg' }
     ];
 
-    const seed = Math.abs(Math.round((this.pickupLat + this.pickupLng) * 1000));
+    const ranked = catalog.map((hotel, index) => {
+      const rawDistance = hasPickup
+        ? this.calculateRouteDistance(pickupLat, pickupLng, hotel.lat, hotel.lng)
+        : this.round(0.8 + index * 0.2);
+      const distanceKm = Math.max(0.3, this.round(rawDistance));
+      const etaMinutes = Math.max(7, Math.round(distanceKm * 5.8 + etaDrift + (index % 2)));
+      const rating = this.round(4.1 + ((index + (timeBucket % 5)) % 7) / 10);
 
-    return base.map((hotel, index) => {
-      const distanceKm = this.round(0.4 + ((seed + index * 7) % 30) / 10);
-      const etaMinutes = Math.max(8, Math.round(distanceKm * 6 + (index % 3) * 3));
-      const rating = this.round(3.8 + ((seed + index) % 12) / 10);
       return {
-        id: `HT-${index + 1}`,
+        id: hotel.id,
         name: hotel.name,
         category: hotel.category,
+        locationLabel: hotel.locationLabel,
         distanceKm,
         etaMinutes,
         rating,
-        openNow: (seed + index) % 5 !== 0
+        openNow: (timeBucket + index) % 6 !== 0
       };
     });
+
+    return ranked.sort((a, b) => a.distanceKm - b.distanceKm || b.rating - a.rating);
   }
 
   private fetchLiveFare(distanceKm: number, vehicleType: VehicleType): void {
@@ -1500,6 +2127,86 @@ export class BookingComponent implements OnDestroy {
     return hash;
   }
 
+  private ensureLiveTrackHeartbeat(): void {
+    if (!this.liveTrackMode) {
+      if (this.liveTrackHandle) {
+        clearInterval(this.liveTrackHandle);
+        this.liveTrackHandle = null;
+      }
+      return;
+    }
+
+    if (this.liveTrackHandle) {
+      return;
+    }
+
+    this.liveTrackHandle = setInterval(() => {
+      this.nearbyCaptains = this.nearbyCaptains.map((captain, index) => {
+        if (!this.isCaptainAvailable(captain)) {
+          return captain;
+        }
+
+        const baseLat = Number(captain.locationLat ?? this.pickupLat);
+        const baseLng = Number(captain.locationLng ?? this.pickupLng);
+        const tick = Date.now() / 1200;
+        const driftLat = Math.sin(tick + index) * 0.00006;
+        const driftLng = Math.cos(tick + index) * 0.00006;
+        const locationLat = this.round(baseLat + driftLat);
+        const locationLng = this.round(baseLng + driftLng);
+
+        return {
+          ...captain,
+          locationLat,
+          locationLng,
+          locationLabel: this.dynamicCurrentLocationLabel(locationLat, locationLng)
+        };
+      });
+    }, 3000);
+  }
+
+  private mapBounds(): {
+    minLat: number;
+    maxLat: number;
+    minLng: number;
+    maxLng: number;
+    latRange: number;
+    lngRange: number;
+  } {
+    const lats = [Number(this.pickupLat), Number(this.dropLat), ...this.mapCaptains.map((captain) => Number(captain.locationLat || this.pickupLat))]
+      .filter((value) => Number.isFinite(value));
+    const lngs = [Number(this.pickupLng), Number(this.dropLng), ...this.mapCaptains.map((captain) => Number(captain.locationLng || this.pickupLng))]
+      .filter((value) => Number.isFinite(value));
+
+    if (lats.length === 0 || lngs.length === 0) {
+      return {
+        minLat: Number(this.pickupLat) - 0.01,
+        maxLat: Number(this.pickupLat) + 0.01,
+        minLng: Number(this.pickupLng) - 0.01,
+        maxLng: Number(this.pickupLng) + 0.01,
+        latRange: 0.02,
+        lngRange: 0.02
+      };
+    }
+
+    const minLat = Math.min(...lats) - 0.002;
+    const maxLat = Math.max(...lats) + 0.002;
+    const minLng = Math.min(...lngs) - 0.002;
+    const maxLng = Math.max(...lngs) + 0.002;
+
+    return {
+      minLat,
+      maxLat,
+      minLng,
+      maxLng,
+      latRange: Math.max(0.001, maxLat - minLat),
+      lngRange: Math.max(0.001, maxLng - minLng)
+    };
+  }
+
+  private clamp(value: number, min: number, max: number): number {
+    return Math.min(max, Math.max(min, value));
+  }
+
   private normalizePhone(phone: string): string {
     return String(phone || '').replace(/\D/g, '');
   }
@@ -1514,13 +2221,59 @@ export class BookingComponent implements OnDestroy {
   private refreshLocationSuggestions(): void {
     this.pickupLocationSuggestions = this.buildLocationSuggestions('pickup');
     this.dropLocationSuggestions = this.buildLocationSuggestions('drop');
+
+    if (!this.pickupSearchTerm) {
+      this.pickupSearchTerm = this.pickupAddress === 'Pickup Point' ? '' : this.pickupAddress;
+    }
+    if (!this.dropSearchTerm) {
+      this.dropSearchTerm = this.dropAddress === 'Drop Point' ? '' : this.dropAddress;
+    }
+  }
+
+  private filterLocationSuggestions(target: 'pickup' | 'drop', query: string): LocationPreset[] {
+    const source = target === 'pickup' ? this.pickupLocationSuggestions : this.dropLocationSuggestions;
+    const text = (query || '').trim().toLowerCase();
+    const pickupReference = { lat: Number(this.pickupLat), lng: Number(this.pickupLng) };
+
+    if (!text) {
+      return this.rankByNearestToPickup(source, pickupReference.lat, pickupReference.lng);
+    }
+
+    const startsWithMatches = source.filter((item) => item.name.toLowerCase().startsWith(text));
+    const containsMatches = source.filter(
+      (item) => !item.name.toLowerCase().startsWith(text) && item.name.toLowerCase().includes(text)
+    );
+
+    const rankedStartsWith = this.rankByNearestToPickup(startsWithMatches, pickupReference.lat, pickupReference.lng);
+    const rankedContains = this.rankByNearestToPickup(containsMatches, pickupReference.lat, pickupReference.lng);
+
+    return [...rankedStartsWith, ...rankedContains];
+  }
+
+  private findLocationByName(target: 'pickup' | 'drop', name: string): LocationPreset | null {
+    const cleaned = (name || '').trim();
+    if (!cleaned) {
+      return null;
+    }
+
+    const normalized = cleaned.toLowerCase();
+    const source = target === 'pickup' ? this.pickupLocationSuggestions : this.dropLocationSuggestions;
+    const fromSuggestions = source.find((item) => item.name.trim().toLowerCase() === normalized);
+    if (fromSuggestions) {
+      return fromSuggestions;
+    }
+
+    const fromPresets = this.locationPresets.find((item) => item.name.trim().toLowerCase() === normalized);
+    if (fromPresets) {
+      return fromPresets;
+    }
+
+    return null;
   }
 
   private buildLocationSuggestions(target: 'pickup' | 'drop'): LocationPreset[] {
     const suggestions = new Map<string, LocationPreset & { score: number }>();
-    const reference = target === 'pickup'
-      ? { lat: Number(this.pickupLat), lng: Number(this.pickupLng) }
-      : { lat: Number(this.dropLat), lng: Number(this.dropLng) };
+    const reference = { lat: Number(this.pickupLat), lng: Number(this.pickupLng) };
 
     const addSuggestion = (suggestion: LocationPreset, score: number): void => {
       if (!suggestion.name.trim()) {
@@ -1584,6 +2337,24 @@ export class BookingComponent implements OnDestroy {
     const deltaLng = fromLng - toLng;
     const distance = Math.sqrt(deltaLat * deltaLat + deltaLng * deltaLng);
     return Math.max(0, 25 - distance * 100);
+  }
+
+  private rankByNearestToPickup(items: LocationPreset[], pickupLat: number, pickupLng: number): LocationPreset[] {
+    if (!Number.isFinite(pickupLat) || !Number.isFinite(pickupLng)) {
+      return items;
+    }
+
+    return [...items].sort((a, b) => {
+      const aDistance = this.distanceSquared(pickupLat, pickupLng, a.lat, a.lng);
+      const bDistance = this.distanceSquared(pickupLat, pickupLng, b.lat, b.lng);
+      return aDistance - bDistance || a.name.localeCompare(b.name);
+    });
+  }
+
+  private distanceSquared(fromLat: number, fromLng: number, toLat: number, toLng: number): number {
+    const latDelta = fromLat - toLat;
+    const lngDelta = fromLng - toLng;
+    return latDelta * latDelta + lngDelta * lngDelta;
   }
 
   private saveRecentLocation(target: 'pickup' | 'drop', location: LocationPreset): void {
@@ -1886,11 +2657,7 @@ export class BookingComponent implements OnDestroy {
     this.refreshLocationSuggestions();
     this.refreshNearbyCaptains();
     this.popularPlaces = this.buildPopularPlaces();
-
-    if (this.serviceType === 'food') {
-      this.nearbyHotels = this.generateNearbyHotels();
-      this.showAllHotels = false;
-    }
+    this.refreshNearbyHotelsLive(true);
 
     if (this.selectedCaptain) {
       this.updateEstimatedFare(this.selectedCaptain.distanceKm, this.selectedCaptain.vehicleType);
@@ -1899,14 +2666,65 @@ export class BookingComponent implements OnDestroy {
     this.notifications.push(`Trip updated by voice: ${from} -> ${to}`, 'success');
   }
 
+  private applyLunchDropAddressFromSchool(schoolAddress: string): void {
+    if (!this.lunchBoxDeliveryMode) {
+      return;
+    }
+
+    const cleaned = String(schoolAddress || '').trim();
+    if (!cleaned) {
+      return;
+    }
+
+    this.dropAddress = cleaned;
+    this.dropSearchTerm = cleaned;
+    const estimated = this.estimateCoordsFromAddress(cleaned, this.dropLat, this.dropLng);
+    this.dropLat = estimated.lat;
+    this.dropLng = estimated.lng;
+
+    if (this.selectedCaptain) {
+      this.updateEstimatedFare(this.selectedCaptain.distanceKm, this.selectedCaptain.vehicleType);
+    }
+
+    this.refreshLocationSuggestions();
+  }
+
   private applyVehicleFromVoice(vehicleType: VehicleType): void {
     this.vehicleType = vehicleType;
     this.onVehicleTypeChange(vehicleType);
   }
 
   private findAvailableCaptainForVehicle(vehicleType: VehicleType): NearbyCaptain | undefined {
-    const list = this.nearbyCaptains.filter((captain) => captain.vehicleType === vehicleType);
-    return list.find((captain) => this.isCaptainAvailable(captain));
+    const list = this.rankNearbyCaptains(this.nearbyCaptains.filter((captain) => captain.vehicleType === vehicleType));
+    return this.pickBestAvailableCaptain(list);
+  }
+
+  private pickBestAvailableCaptain(captains: NearbyCaptain[]): NearbyCaptain | undefined {
+    return captains.find((captain) => this.isCaptainAvailable(captain));
+  }
+
+  private rankNearbyCaptains(captains: NearbyCaptain[]): NearbyCaptain[] {
+    return [...captains].sort((a, b) => {
+      const scoreDifference = this.captainPriorityScore(b) - this.captainPriorityScore(a);
+      if (scoreDifference !== 0) {
+        return scoreDifference;
+      }
+      return a.distanceKm - b.distanceKm || a.etaMinutes - b.etaMinutes || a.name.localeCompare(b.name);
+    });
+  }
+
+  private captainPriorityScore(captain: NearbyCaptain): number {
+    const availabilityBonus = captain.availability === 'available'
+      ? 120
+      : captain.availability === 'arriving'
+        ? 60
+        : 0;
+
+    if (this.womenSafetyProtectionMode) {
+      return availabilityBonus + captain.rating * 40 + Math.max(0, 18 - captain.etaMinutes) + Math.max(0, 8 - captain.distanceKm);
+    }
+
+    return availabilityBonus + captain.rating * 20 + Math.max(0, 20 - captain.etaMinutes) + Math.max(0, 10 - captain.distanceKm);
   }
 
   private isCaptainAvailable(captain: NearbyCaptain): boolean {
@@ -2073,5 +2891,78 @@ export class BookingComponent implements OnDestroy {
   private buildUserAvatar(user: AppUser | null): string {
     const label = encodeURIComponent(user?.displayName || 'Customer');
     return `https://ui-avatars.com/api/?name=${label}&background=f0f4ff&color=0f172a&size=128`;
+  }
+
+  private buildCombinedRideNotes(): string | undefined {
+    const baseNotes = this.rideNotes.trim();
+    if (!this.lunchBoxDeliveryMode && !this.pickupServiceMode) {
+      return baseNotes || undefined;
+    }
+
+    const sections: string[] = [];
+
+    if (this.pickupServiceMode) {
+      const pickupDetails: string[] = ['Pickup Service Mode'];
+      if (this.pickupShopName.trim()) {
+        pickupDetails.push(`Shop: ${this.pickupShopName.trim()}`);
+      }
+      if (this.pickupShopPhone.trim()) {
+        pickupDetails.push(`Shop Phone: ${this.pickupShopPhone.trim()}`);
+      }
+      if (this.pickupItemDetails.trim()) {
+        pickupDetails.push(`Item: ${this.pickupItemDetails.trim()}`);
+      }
+      if (this.pickupShopInstructions.trim()) {
+        pickupDetails.push(`Pickup Instructions: ${this.pickupShopInstructions.trim()}`);
+      }
+      sections.push(pickupDetails.join(' | '));
+    }
+
+    if (this.lunchBoxDeliveryMode) {
+      const lunchDetails: string[] = ['Lunch Box Delivery Mode'];
+      if (this.lunchStudentName.trim()) {
+        lunchDetails.push(`Student: ${this.lunchStudentName.trim()}`);
+      }
+      if (this.lunchStudentClass.trim()) {
+        lunchDetails.push(`Class: ${this.lunchStudentClass.trim()}`);
+      }
+      if (this.lunchSchoolName.trim()) {
+        lunchDetails.push(`School: ${this.lunchSchoolName.trim()}`);
+      }
+      if (this.lunchSchoolAddress.trim()) {
+        lunchDetails.push(`School Address: ${this.lunchSchoolAddress.trim()}`);
+      }
+      if (this.lunchGuardianPhone.trim()) {
+        lunchDetails.push(`Guardian Phone: ${this.lunchGuardianPhone.trim()}`);
+      }
+      if (this.lunchBoxDetails.trim()) {
+        lunchDetails.push(`Lunch Details: ${this.lunchBoxDetails.trim()}`);
+      }
+      if (this.lunchDeliveryInstructions.trim()) {
+        lunchDetails.push(`Instructions: ${this.lunchDeliveryInstructions.trim()}`);
+      }
+      sections.push(lunchDetails.join(' | '));
+    }
+
+    const modeNotes = sections.join(' | ');
+    if (!baseNotes) {
+      return modeNotes || undefined;
+    }
+
+    return modeNotes ? `${baseNotes} | ${modeNotes}` : baseNotes;
+  }
+
+  private womenSafetyModeStorageKey(): string {
+    const userId = this.currentUser?.id || 'guest';
+    return `${WOMEN_SAFETY_MODE_KEY_PREFIX}_${userId}`;
+  }
+
+  private loadWomenSafetyProtectionMode(): void {
+    const raw = localStorage.getItem(this.womenSafetyModeStorageKey());
+    this.womenSafetyProtectionMode = raw === '1';
+  }
+
+  private persistWomenSafetyProtectionMode(): void {
+    localStorage.setItem(this.womenSafetyModeStorageKey(), this.womenSafetyProtectionMode ? '1' : '0');
   }
 }

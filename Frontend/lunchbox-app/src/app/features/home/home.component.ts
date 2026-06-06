@@ -22,17 +22,16 @@ import { IntegrationHealthService } from '../../core/services/integration-health
           <img
             [src]="homeLogoSrc"
             (error)="onHomeLogoError($event)"
-            alt="LunchBox Delivery logo"
+            alt="Ekart logo"
             class="hero-logo"
           />
           <div>
-            <div class="brand-pill">SMART DELIVERY PLATFORM</div>
-            <h1 class="display-5 fw-bold mb-2 mt-2">LunchBox Delivery</h1>
-            <p class="lead mb-4">Fast food, parcel, grocery, and medicine delivery with secure ride flow and live tracking.</p>
+            <div class="brand-pill">EKART SUPER APP</div>
+            <h1 class="display-5 fw-bold mb-2 mt-2">One App. All City Deliveries.</h1>
+            <p class="lead mb-4">Book food, parcel, pickup service, women safety rides, and more with live captain tracking.</p>
             <div class="d-grid d-md-flex gap-2 flex-wrap">
               <a routerLink="/booking" class="btn btn-danger btn-lg">{{ t('bookDelivery') }}</a>
-              <a routerLink="/tracking" class="btn btn-outline-light btn-lg">{{ t('trackBooking') }}</a>
-              <a routerLink="/admin" class="btn btn-warning btn-lg">{{ t('adminPanel') }}</a>
+              <a routerLink="/services" class="btn btn-light btn-lg">Explore Services</a>
             </div>
           </div>
         </div>
@@ -53,17 +52,21 @@ import { IntegrationHealthService } from '../../core/services/integration-health
         </div>
       </section>
 
-      <section class="architecture-panel mt-3">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-          <h3 class="mb-0">System Architecture</h3>
-          <small class="text-muted">High-level delivery flow and microservice overview</small>
+      <section class="service-showcase mt-3">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+          <h3 class="mb-0">Popular Services</h3>
+          <small class="text-muted">Tap and start in seconds</small>
         </div>
-        <img
-          [src]="architectureImageSrc"
-          (error)="onArchitectureImageError($event)"
-          alt="Lunch delivery high level architecture"
-          class="architecture-image"
-        />
+        <div class="service-showcase-grid">
+          <a class="service-showcase-card" *ngFor="let service of serviceHighlights" [routerLink]="service.route">
+            <div class="service-showcase-icon">{{ service.icon }}</div>
+            <div>
+              <h5 class="mb-1">{{ service.title }}</h5>
+              <p class="mb-0 text-muted small">{{ service.description }}</p>
+            </div>
+            <span class="service-showcase-arrow">></span>
+          </a>
+        </div>
       </section>
 
       <section class="integration-panel mt-3">
@@ -166,6 +169,10 @@ import { IntegrationHealthService } from '../../core/services/integration-health
         align-items: center;
       }
 
+      .hero-brand > div {
+        min-width: 0;
+      }
+
       .hero-logo {
         width: 100%;
         max-width: 140px;
@@ -218,20 +225,58 @@ import { IntegrationHealthService } from '../../core/services/integration-health
         padding: 16px;
       }
 
-      .architecture-panel {
+      .service-showcase {
         border: 1px solid rgba(0, 0, 0, 0.08);
         border-radius: 16px;
-        background: #ffffff;
-        padding: 14px;
+        background: linear-gradient(180deg, #ffffff 0%, #f8fffb 100%);
+        padding: 16px;
       }
 
-      .architecture-image {
-        width: 100%;
-        border-radius: 12px;
+      .service-showcase-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .service-showcase-card {
+        text-decoration: none;
+        color: inherit;
         border: 1px solid rgba(0, 0, 0, 0.08);
-        display: block;
-        min-height: 180px;
-        object-fit: cover;
+        border-radius: 12px;
+        background: #fff;
+        padding: 12px;
+        display: grid;
+        grid-template-columns: 40px 1fr auto;
+        gap: 10px;
+        align-items: center;
+        transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+      }
+
+      .service-showcase-card h5,
+      .service-showcase-card p {
+        word-break: break-word;
+      }
+
+      .service-showcase-card:hover {
+        transform: translateY(-2px);
+        border-color: rgba(239, 35, 60, 0.35);
+        box-shadow: 0 8px 20px rgba(2, 6, 23, 0.08);
+      }
+
+      .service-showcase-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        background: #fff1f2;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+      }
+
+      .service-showcase-arrow {
+        font-weight: 700;
+        color: #ef233c;
       }
 
       .integration-panel {
@@ -397,6 +442,20 @@ import { IntegrationHealthService } from '../../core/services/integration-health
       }
 
       @media (max-width: 576px) {
+        .hero-card {
+          padding: 18px 14px;
+        }
+
+        .hero-card .display-5 {
+          font-size: 1.72rem;
+          line-height: 1.2;
+        }
+
+        .hero-card .lead {
+          font-size: 0.95rem;
+          margin-bottom: 0.9rem !important;
+        }
+
         .hero-card .btn {
           width: 100%;
         }
@@ -421,6 +480,10 @@ import { IntegrationHealthService } from '../../core/services/integration-health
           grid-template-columns: 1fr;
         }
 
+        .service-showcase-grid {
+          grid-template-columns: 1fr;
+        }
+
         .integration-grid {
           grid-template-columns: 1fr;
         }
@@ -433,14 +496,60 @@ import { IntegrationHealthService } from '../../core/services/integration-health
           margin-top: 6px;
         }
       }
+
+      @media (max-width: 390px) {
+        .hero-card {
+          border-radius: 16px;
+        }
+
+        .metric-card {
+          padding: 10px;
+        }
+
+        .metric-value {
+          font-size: 20px;
+        }
+      }
+
+      @media (min-width: 768px) and (max-width: 991.98px) {
+        .feature-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
     `
   ]
 })
 export class HomeComponent {
-  homeLogoSrc = '/assets/lunchbox-logo.svg';
-  architectureImageSrc = 'assets/home-architecture.png';
+  homeLogoSrc = '/assets/ekart-logo.svg';
   private readonly destroy$ = new Subject<void>();
   integrationCheckedAt = new Date().toISOString();
+
+  readonly serviceHighlights = [
+    {
+      icon: '🍔',
+      title: 'Food Delivery',
+      description: 'Nearby restaurants with live prep and captain ETA.',
+      route: '/booking'
+    },
+    {
+      icon: '🛍️',
+      title: 'Pickup Service',
+      description: 'Pickup item from any shop to your destination.',
+      route: '/services'
+    },
+    {
+      icon: '🛡️',
+      title: 'Women Safety Mode',
+      description: 'Top-ranked trusted captains prioritized first.',
+      route: '/services'
+    },
+    {
+      icon: '🎒',
+      title: 'School and Teen Rides',
+      description: 'Lunch box and teen-safe assisted ride options.',
+      route: '/services'
+    }
+  ];
 
   readonly featureCards = [
     {
@@ -576,16 +685,6 @@ export class HomeComponent {
     return this.languageService.t(key);
   }
 
-  onArchitectureImageError(event: Event): void {
-    const image = event.target as HTMLImageElement | null;
-    if (!image) {
-      return;
-    }
-
-    image.onerror = null;
-    image.src = 'assets/lunchbox-logo.svg';
-  }
-
   onHomeLogoError(event: Event): void {
     const image = event.target as HTMLImageElement | null;
     if (!image) {
@@ -593,13 +692,13 @@ export class HomeComponent {
     }
 
     const current = image.getAttribute('src') || '';
-    if (current === '/assets/lunchbox-logo.svg') {
-      image.src = '/lunchbox-logo.svg';
+    if (current === '/assets/ekart-logo.svg') {
+      image.src = '/assets/lunchbox-logo.svg';
       return;
     }
 
-    if (current === '/lunchbox-logo.svg') {
-      image.src = '/assets/home-architecture.png';
+    if (current === '/assets/lunchbox-logo.svg') {
+      image.src = '/assets/rider-dummy.svg';
       return;
     }
 

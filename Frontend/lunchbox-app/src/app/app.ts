@@ -19,7 +19,7 @@ import { ChatbotComponent } from './shared/components/chatbot/chatbot.component'
     <nav class="navbar navbar-expand-lg navbar-dark sticky-top app-nav">
       <div class="container-fluid">
         <a class="navbar-brand d-flex align-items-center gap-2" routerLink="/">
-          <span class="brand-logo" aria-hidden="true">LB</span>
+          <span class="brand-logo" aria-hidden="true">EK</span>
           <span class="brand-text">{{ t('appName') }}</span>
         </a>
         <button
@@ -44,10 +44,16 @@ import { ChatbotComponent } from './shared/components/chatbot/chatbot.component'
 
             <!-- Customer links -->
             <li class="nav-item" *ngIf="(isLoggedIn$ | async) && !(isAdmin$ | async) && !(isCaptain$ | async)">
-              <a class="nav-link" routerLink="/booking" routerLinkActive="active">{{ t('bookDelivery') }}</a>
+              <a class="nav-link" routerLink="/home" routerLinkActive="active">Home</a>
             </li>
             <li class="nav-item" *ngIf="(isLoggedIn$ | async) && !(isAdmin$ | async) && !(isCaptain$ | async)">
-              <a class="nav-link" routerLink="/tracking" routerLinkActive="active">{{ t('trackBooking') }}</a>
+              <a class="nav-link" routerLink="/services" routerLinkActive="active">Services</a>
+            </li>
+            <li class="nav-item" *ngIf="(isLoggedIn$ | async) && !(isAdmin$ | async) && !(isCaptain$ | async)">
+              <a class="nav-link" routerLink="/activity" routerLinkActive="active">Activity</a>
+            </li>
+            <li class="nav-item" *ngIf="(isLoggedIn$ | async) && !(isAdmin$ | async) && !(isCaptain$ | async)">
+              <a class="nav-link" routerLink="/account" routerLinkActive="active">Account</a>
             </li>
 
             <!-- Captain links -->
@@ -59,7 +65,7 @@ import { ChatbotComponent } from './shared/components/chatbot/chatbot.component'
             <li class="nav-item" *ngIf="(isLoggedIn$ | async) && (isAdmin$ | async)">
               <a class="nav-link" routerLink="/booking" routerLinkActive="active">{{ t('bookDelivery') }}</a>
             </li>
-            <li class="nav-item" *ngIf="(isLoggedIn$ | async) && (isAdmin$ | async)">
+            <li class="nav-item" *ngIf="(isLoggedIn$ | async) && (isAdmin$ | async) && showTrackBookingLink">
               <a class="nav-link" routerLink="/tracking" routerLinkActive="active">{{ t('trackBooking') }}</a>
             </li>
             <li class="nav-item" *ngIf="(isLoggedIn$ | async) && (isAdmin$ | async)">
@@ -217,7 +223,44 @@ import { ChatbotComponent } from './shared/components/chatbot/chatbot.component'
     </div>
 
     <!-- Main content -->
-    <router-outlet></router-outlet>
+    <main class="app-main">
+      <router-outlet></router-outlet>
+    </main>
+
+    <nav class="bottom-tab-nav" aria-label="Primary">
+      <a class="tab-item" routerLink="/home" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" aria-label="Home">
+        <span class="tab-pill">
+          <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3.5 10.5 12 4l8.5 6.5v8A1.5 1.5 0 0 1 19 20h-3.5v-5h-7v5H5a1.5 1.5 0 0 1-1.5-1.5v-8Z" />
+          </svg>
+          <span class="tab-label">Home</span>
+        </span>
+      </a>
+      <a class="tab-item" [routerLink]="servicesTabRoute()" routerLinkActive="active" aria-label="Services">
+        <span class="tab-pill">
+          <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z" />
+          </svg>
+          <span class="tab-label">Services</span>
+        </span>
+      </a>
+      <a class="tab-item" [routerLink]="activityTabRoute()" routerLinkActive="active" aria-label="Activity">
+        <span class="tab-pill">
+          <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M7 4h10a2 2 0 0 1 2 2v14l-3-2-3 2-3-2-3 2V6a2 2 0 0 1 2-2Z" />
+          </svg>
+          <span class="tab-label">Activity</span>
+        </span>
+      </a>
+      <a class="tab-item" [routerLink]="accountTabRoute()" routerLinkActive="active" aria-label="Account">
+        <span class="tab-pill">
+          <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 12a4.25 4.25 0 1 0 0-8.5 4.25 4.25 0 0 0 0 8.5ZM4 20a8 8 0 0 1 16 0" />
+          </svg>
+          <span class="tab-label">Account</span>
+        </span>
+      </a>
+    </nav>
 
     <!-- Chatbot -->
     <app-chatbot></app-chatbot>
@@ -226,6 +269,76 @@ import { ChatbotComponent } from './shared/components/chatbot/chatbot.component'
       .app-nav {
         background: var(--nav-bg);
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      }
+
+      .app-main {
+        min-height: calc(100vh - 64px);
+      }
+
+      .bottom-tab-nav {
+        position: fixed;
+        left: 14px;
+        right: 14px;
+        bottom: 12px;
+        z-index: 1250;
+        display: none;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        align-items: stretch;
+        gap: 4px;
+        border-radius: 28px;
+        border: 1px solid var(--border-color);
+        background: color-mix(in srgb, var(--surface) 95%, #000 5%);
+        box-shadow: 0 16px 36px rgba(0, 0, 0, 0.34);
+        backdrop-filter: blur(10px);
+        padding: 6px;
+      }
+
+      .tab-item {
+        border-radius: 24px;
+        color: var(--text-secondary);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        text-decoration: none;
+        transition: all 0.26s ease;
+      }
+
+      .tab-pill {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1px;
+        border-radius: 22px;
+        padding: 8px 4px;
+        transition: background 0.26s ease, transform 0.26s ease;
+      }
+
+      .tab-icon {
+        width: 20px;
+        height: 20px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.9;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .tab-label {
+        font-size: 0.76rem;
+        font-weight: 650;
+        letter-spacing: 0.02em;
+      }
+
+      .tab-item.active {
+        color: #ffffff !important;
+      }
+
+      .tab-item.active .tab-pill {
+        background: linear-gradient(180deg, #2b2f37 0%, #1f232a 100%);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 8px 20px rgba(0, 0, 0, 0.26);
       }
 
       .app-nav .navbar-brand {
@@ -624,6 +737,8 @@ import { ChatbotComponent } from './shared/components/chatbot/chatbot.component'
           margin-top: 0.5rem;
           padding-top: 0.5rem;
           border-top: 1px solid var(--nav-border);
+          max-height: calc(100vh - 90px);
+          overflow-y: auto;
         }
 
         .app-nav .navbar-nav {
@@ -649,6 +764,12 @@ import { ChatbotComponent } from './shared/components/chatbot/chatbot.component'
         .app-nav .btn-group .btn {
           flex: 1;
         }
+
+        .profile-chip {
+          width: 100%;
+          justify-content: flex-start;
+          margin-left: 0 !important;
+        }
       }
 
       @media (max-width: 576px) {
@@ -656,20 +777,30 @@ import { ChatbotComponent } from './shared/components/chatbot/chatbot.component'
           left: 12px;
           right: 12px;
           width: auto;
-          top: 70px;
+          top: 62px;
         }
 
         .toast-viewport {
           left: 10px;
           right: 10px;
           width: auto;
-          top: 72px;
+          top: 64px;
         }
 
         .network-down-banner {
           left: 10px;
           right: 10px;
-          bottom: 10px;
+          bottom: 84px;
+        }
+      }
+
+      @media (max-width: 991.98px) {
+        .bottom-tab-nav {
+          display: grid;
+        }
+
+        .app-main {
+          padding-bottom: 88px;
         }
       }
     </style>
@@ -688,10 +819,11 @@ export class AppComponent {
   showProfileMenu = false;
   isNetworkDown = typeof navigator !== 'undefined' && !navigator.onLine;
 
-  isLoggedIn$: Observable<boolean> = this.authService.user$.pipe(map(user => !!user));
-  isAdmin$: Observable<boolean> = this.authService.user$.pipe(map(user => user?.role === 'admin'));
+  isLoggedIn$: Observable<boolean> = this.authService.user$.pipe(map(() => this.authService.isLoggedIn()));
+  isAdmin$: Observable<boolean> = this.authService.user$.pipe(map(() => this.authService.isAdmin()));
   isCaptain$: Observable<boolean> = this.authService.user$.pipe(map(user => user?.role === 'captain'));
   currentUser$: Observable<AppUser | null> = this.authService.user$;
+  showTrackBookingLink = false;
   currentLanguage$: Observable<LanguageCode> = this.languageService.language$;
   currentTheme$: Observable<ThemeCode> = this.themeService.theme$;
   notifications$: Observable<AppNotification[]> = this.notificationService.notifications$;
@@ -741,6 +873,50 @@ export class AppComponent {
 
   toggleProfileMenu(): void {
     this.showProfileMenu = !this.showProfileMenu;
+  }
+
+  servicesTabRoute(): string {
+    if (!this.authService.isLoggedIn()) {
+      return '/login';
+    }
+
+    if (this.authService.isCaptain()) {
+      return '/captain-profile';
+    }
+
+    return '/services';
+  }
+
+  activityTabRoute(): string {
+    if (!this.authService.isLoggedIn()) {
+      return '/login';
+    }
+
+    if (this.authService.isAdmin()) {
+      return '/audit';
+    }
+
+    if (this.authService.isCaptain()) {
+      return '/captain-profile';
+    }
+
+    return '/activity';
+  }
+
+  accountTabRoute(): string {
+    if (!this.authService.isLoggedIn()) {
+      return '/login';
+    }
+
+    if (this.authService.isAdmin()) {
+      return '/admin';
+    }
+
+    if (this.authService.isCaptain()) {
+      return '/captain-profile';
+    }
+
+    return '/account';
   }
 
   getAvatarUrl(user: AppUser): string {

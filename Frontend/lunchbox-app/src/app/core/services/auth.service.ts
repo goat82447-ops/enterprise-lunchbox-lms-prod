@@ -20,7 +20,10 @@ import {
 
 const STORAGE_KEY = 'delivery_app_user';
 const SESSION_KEY = 'delivery_session_token';
+const ADMIN_ACCESS_KEY = 'delivery_admin_portal_access';
 const AUTH_API_BASE = environment.authApiBase;
+const ADMIN_USERNAME = 'admin';
+const ADMIN_PASSWORD = 'Welcome2$';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -50,8 +53,10 @@ export class AuthService {
     });
   }
 
-  completeLogin(response: VerifyOtpResponse): void {
+  completeLogin(response: VerifyOtpResponse, loginContext?: { username?: string; password?: string }): void {
     sessionStorage.setItem(SESSION_KEY, response.sessionToken);
+    localStorage.setItem(SESSION_KEY, response.sessionToken);
+    this.setAdminPortalAccess(response.user, loginContext);
     this.setUser(response.user);
   }
 
@@ -99,8 +104,10 @@ export class AuthService {
 
     sessionStorage.removeItem(STORAGE_KEY);
     sessionStorage.removeItem(SESSION_KEY);
+    sessionStorage.removeItem(ADMIN_ACCESS_KEY);
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(ADMIN_ACCESS_KEY);
     // Clear all biometric data on logout
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
@@ -116,11 +123,11 @@ export class AuthService {
   }
 
   isLoggedIn(): boolean {
-    return !!this.userSubject.value;
+    return !!this.userSubject.value && !!this.getSessionToken();
   }
 
   isAdmin(): boolean {
-    return this.userSubject.value?.role === 'admin';
+    return this.userSubject.value?.role === 'admin' && this.getAdminPortalAccess();
   }
 
   isCaptain(): boolean {
@@ -206,7 +213,36 @@ export class AuthService {
     return new HttpHeaders({ 'x-session-token': token });
   }
 
+  private setAdminPortalAccess(user: AppUser, loginContext?: { username?: string; password?: string }): void {
+    const username = String(loginContext?.username || '').trim().toLowerCase();
+    const password = String(loginContext?.password || '');
+    const hasAdminAccess = user.role === 'admin' && username === ADMIN_USERNAME && password === ADMIN_PASSWORD;
+
+    if (hasAdminAccess) {
+      sessionStorage.setItem(ADMIN_ACCESS_KEY, '1');
+      localStorage.setItem(ADMIN_ACCESS_KEY, '1');
+      return;
+    }
+
+    sessionStorage.removeItem(ADMIN_ACCESS_KEY);
+    localStorage.removeItem(ADMIN_ACCESS_KEY);
+  }
+
+  private getAdminPortalAccess(): boolean {
+    const value = sessionStorage.getItem(ADMIN_ACCESS_KEY) || localStorage.getItem(ADMIN_ACCESS_KEY);
+    if (value && !sessionStorage.getItem(ADMIN_ACCESS_KEY)) {
+      sessionStorage.setItem(ADMIN_ACCESS_KEY, value);
+    }
+    return value === '1';
+  }
+
   private loadUser(): AppUser | null {
+    // Keep session storage in sync when restoring from localStorage after app restart.
+    const token = sessionStorage.getItem(SESSION_KEY) || localStorage.getItem(SESSION_KEY);
+    if (token && !sessionStorage.getItem(SESSION_KEY)) {
+      sessionStorage.setItem(SESSION_KEY, token);
+    }
+
     const raw = sessionStorage.getItem(STORAGE_KEY) || localStorage.getItem(STORAGE_KEY);
     if (!raw) {
       return null;
