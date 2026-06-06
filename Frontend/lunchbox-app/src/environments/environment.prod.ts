@@ -1,9 +1,9 @@
 export const environment = {
   production: true,
-  authApiBase: 'https://api.ekart.com',
-  parcelApiBase: 'https://api.ekart.com',
-  gatewayApiBase: 'https://api.ekart.com',
-  webSocketUrl: 'wss://api.ekart.com/ws',
+  authApiBase: 'https://ekart-backend.onrender.com',
+  parcelApiBase: 'https://ekart-backend.onrender.com',
+  gatewayApiBase: 'https://ekart-backend.onrender.com',
+  webSocketUrl: 'wss://ekart-backend.onrender.com/ws',
   googleMapsApiKey: '',
   voiceBookingEnabled: true,
   liveTrackingEnabled: true,
