@@ -98,6 +98,80 @@ const translations: Record<LanguageCode, Record<string, string>> = {
   }
 };
 
+const dynamicPhraseTranslations: Record<Exclude<LanguageCode, 'en'>, Record<string, string>> = {
+  hi: {
+    'captain acceptance pending': 'कप्तान स्वीकृति लंबित',
+    'is waiting for captain approval': 'कप्तान की स्वीकृति का इंतजार है',
+    'you also have': 'आपके पास और',
+    'more pending request(s).': 'अतिरिक्त लंबित अनुरोध हैं।',
+    'requested at': 'अनुरोध समय',
+    'open pending ride': 'लंबित राइड खोलें'
+  },
+  te: {
+    'captain acceptance pending': 'కెప్టెన్ ఆమోదం పెండింగ్‌లో ఉంది',
+    'is waiting for captain approval': 'కెప్టెన్ ఆమోదం కోసం వేచి ఉంది',
+    'you also have': 'మీకు ఇంకా',
+    'more pending request(s).': 'పెండింగ్ అభ్యర్థనలు ఉన్నాయి.',
+    'requested at': 'అభ్యర్థించిన సమయం',
+    'open pending ride': 'పెండింగ్ రైడ్ తెరవండి'
+  }
+};
+
+const dynamicTokenTranslations: Record<Exclude<LanguageCode, 'en'>, Record<string, string>> = {
+  hi: {
+    ride: 'राइड',
+    captain: 'कप्तान',
+    acceptance: 'स्वीकृति',
+    pending: 'लंबित',
+    waiting: 'इंतजार',
+    approval: 'अनुमोदन',
+    requested: 'अनुरोधित',
+    open: 'खोलें',
+    created: 'बनाया गया',
+    assigned: 'असाइन किया गया',
+    pickup: 'पिकअप',
+    in: 'में',
+    progress: 'प्रगति',
+    transit: 'यात्रा',
+    arriving: 'पहुंच रहा है',
+    delivered: 'डिलीवर किया गया',
+    completed: 'पूर्ण',
+    cancelled: 'रद्द',
+    status: 'स्थिति',
+    available: 'उपलब्ध',
+    unavailable: 'अनुपलब्ध',
+    live: 'लाइव',
+    down: 'डाउन',
+    checking: 'जांच जारी'
+  },
+  te: {
+    ride: 'రైడ్',
+    captain: 'కెప్టెన్',
+    acceptance: 'ఆమోదం',
+    pending: 'పెండింగ్',
+    waiting: 'వేచి',
+    approval: 'ఆమోదం',
+    requested: 'అభ్యర్థించబడింది',
+    open: 'తెరవండి',
+    created: 'సృష్టించబడింది',
+    assigned: 'కేటాయించబడింది',
+    pickup: 'పికప్',
+    in: 'లో',
+    progress: 'ప్రగతి',
+    transit: 'ప్రయాణం',
+    arriving: 'చేరుతోంది',
+    delivered: 'డెలివర్ చేయబడింది',
+    completed: 'పూర్తయింది',
+    cancelled: 'రద్దు చేయబడింది',
+    status: 'స్థితి',
+    available: 'అందుబాటులో',
+    unavailable: 'అందుబాటులో లేదు',
+    live: 'ప్రత్యక్ష',
+    down: 'డౌన్',
+    checking: 'తనిఖీ చేస్తోంది'
+  }
+};
+
 @Injectable({ providedIn: 'root' })
 export class LanguageService {
   private readonly languageSubject = new BehaviorSubject<LanguageCode>(this.loadLanguage());
@@ -115,6 +189,117 @@ export class LanguageService {
   t(key: string): string {
     const current = this.languageSubject.value;
     return translations[current][key] || translations.en[key] || key;
+  }
+
+  translateDynamic(value: string): string {
+    const current = this.languageSubject.value;
+    const raw = (value || '').trim();
+    if (!raw) {
+      return raw;
+    }
+
+    const byKey = this.getTranslationForKey(current, raw) || this.getTranslationForKey('en', raw);
+    if (byKey) {
+      return byKey;
+    }
+
+    const normalizedKey = this.normalizeToKey(raw);
+    const byNormalizedKey = this.getTranslationForKey(current, normalizedKey) || this.getTranslationForKey('en', normalizedKey);
+    if (byNormalizedKey) {
+      return byNormalizedKey;
+    }
+
+    const humanized = this.humanize(raw);
+    if (current === 'en') {
+      return humanized;
+    }
+
+    const phraseMap = dynamicPhraseTranslations[current];
+    const normalizedPhrase = this.normalizeToPhrase(raw);
+    const normalizedHumanized = this.normalizeToPhrase(humanized);
+    if (phraseMap[normalizedPhrase]) {
+      return phraseMap[normalizedPhrase];
+    }
+    if (phraseMap[normalizedHumanized]) {
+      return phraseMap[normalizedHumanized];
+    }
+
+    const translated = this.translateByTokens(humanized, current);
+    return translated;
+  }
+
+  td(value: string): string {
+    return this.translateDynamic(value);
+  }
+
+  private getTranslationForKey(language: LanguageCode, key: string): string | undefined {
+    return translations[language][key];
+  }
+
+  private normalizeToKey(value: string): string {
+    return value
+      .trim()
+      .toLowerCase()
+      .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+  }
+
+  private normalizeToPhrase(value: string): string {
+    return value
+      .trim()
+      .toLowerCase()
+      .replace(/[_-]+/g, ' ')
+      .replace(/\s+/g, ' ');
+  }
+
+  private humanize(value: string): string {
+    const normalized = value
+      .trim()
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+      .replace(/[_-]+/g, ' ')
+      .replace(/\s+/g, ' ');
+
+    return normalized
+      .split(' ')
+      .map((part) => {
+        if (!part) {
+          return part;
+        }
+        if (part.toUpperCase() === part && part.length <= 4) {
+          return part;
+        }
+        return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+      })
+      .join(' ');
+  }
+
+  private translateByTokens(value: string, language: Exclude<LanguageCode, 'en'>): string {
+    const tokenMap = dynamicTokenTranslations[language];
+    let changed = false;
+
+    const output = value
+      .split(' ')
+      .map((part) => {
+        const match = part.match(/^([^A-Za-z0-9]*)([A-Za-z0-9]+)([^A-Za-z0-9]*)$/);
+        if (!match) {
+          return part;
+        }
+
+        const prefix = match[1] || '';
+        const token = match[2] || '';
+        const suffix = match[3] || '';
+        const translated = tokenMap[token.toLowerCase()];
+        if (!translated) {
+          return part;
+        }
+
+        changed = true;
+        return `${prefix}${translated}${suffix}`;
+      })
+      .join(' ');
+
+    return changed ? output : value;
   }
 
   private loadLanguage(): LanguageCode {
