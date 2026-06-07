@@ -17,6 +17,9 @@ export interface Order {
   userId: string;
   items: CartItem[];
   totalPrice: number;
+  subtotal?: number;
+  deliveryFee?: number;
+  vehicleType?: 'bike' | 'auto' | 'car';
   status: 'pending' | 'confirmed' | 'preparing' | 'on-way' | 'delivered' | 'cancelled';
   deliveryAddress: string;
   estimatedTime: number;
