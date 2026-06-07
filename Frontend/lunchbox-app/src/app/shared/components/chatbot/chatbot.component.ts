@@ -20,14 +20,14 @@ interface ChatIntent {
   template: `
     <button class="chat-toggle" (click)="toggleChat()">
       <span class="toggle-dot"></span>
-      {{ isOpen ? 'Close Assistant' : 'Ask Ekart AI' }}
+      {{ isOpen ? 'Close Assistant' : 'Ask RouteX AI' }}
     </button>
 
     <section *ngIf="isOpen" class="chat-panel card">
       <header class="chat-header">
         <div class="assistant-avatar">AI</div>
         <div>
-          <h6 class="mb-0">Ekart Assistant</h6>
+          <h6 class="mb-0">RouteX Assistant</h6>
           <small class="assistant-subtitle">Project-aware support for booking, services, and account help</small>
         </div>
       </header>
@@ -384,7 +384,7 @@ export class ChatbotComponent implements OnDestroy {
     },
     {
       keywords: ['teen', 'teenage', 'school ride', 'student ride'],
-      answer: 'Enable Teenage Ride mode for stricter ride preference. Lunch Box mode is also available for school deliveries with student and guardian details.'
+      answer: 'Enable Teenage Ride mode for stricter ride preference. RouteX School mode is also available for school deliveries with student and guardian details.'
     },
     {
       keywords: ['insurance', 'rider insurance', 'coverage'],
@@ -421,7 +421,7 @@ export class ChatbotComponent implements OnDestroy {
   ];
 
   messages: ChatMessage[] = [
-    { from: 'bot', text: 'Hi, I am Ekart Support. Ask me about booking, food hotels, pickup service, OTP, referral, insurance, safety modes, and payments.' }
+    { from: 'bot', text: 'Hi, I am RouteX Support. Ask me about booking, food hotels, pickup service, OTP, referral, insurance, safety modes, and payments.' }
   ];
 
   private thinkingTimeout: ReturnType<typeof setTimeout> | null = null;
