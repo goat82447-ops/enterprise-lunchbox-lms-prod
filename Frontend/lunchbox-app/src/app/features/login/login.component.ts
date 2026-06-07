@@ -19,9 +19,9 @@ import { LoginStartResponse, UserRole } from '../../core/models/delivery.models'
         <div class="col-12 col-lg-7">
           <div class="card p-4 p-md-5 auth-shell h-100">
             <div class="brand-strip mb-3">
-              <img [src]="loginLogoSrc" (error)="onLoginLogoError($event)" alt="LunchBox Delivery logo" class="brand-logo" />
+              <img [src]="loginLogoSrc" (error)="onLoginLogoError($event)" alt="RouteX logo" class="brand-logo" />
               <div>
-                <h2 class="mb-1">LunchBox Delivery</h2>
+                <h2 class="mb-1">RouteX</h2>
                 <p class="brand-caption mb-0">Fast. Dark. Precise. Sign in with your role and continue.</p>
               </div>
             </div>
@@ -62,7 +62,7 @@ import { LoginStartResponse, UserRole } from '../../core/models/delivery.models'
           <div class="card p-4 offers-shell h-100">
             <h4 class="mb-2">Urban Offers</h4>
             <p class="small mb-3 secondary-copy">Grab live discounts while logging in.</p>
-            <img [src]="loginBannerSrc" (error)="onLoginBannerError($event)" alt="LunchBox login banner" class="login-banner mb-3" />
+            <img [src]="loginBannerSrc" (error)="onLoginBannerError($event)" alt="RouteX login banner" class="login-banner mb-3" />
 
             <div class="offer-highlight mb-3">
               <div class="small fw-semibold text-danger-emphasis">Hot Offer</div>
