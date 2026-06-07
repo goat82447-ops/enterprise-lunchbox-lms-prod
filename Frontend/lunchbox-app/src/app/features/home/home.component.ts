@@ -22,16 +22,16 @@ import { IntegrationHealthService } from '../../core/services/integration-health
           <img
             [src]="homeLogoSrc"
             (error)="onHomeLogoError($event)"
-            alt="Ekart logo"
+            alt="RouteX logo"
             class="hero-logo"
           />
           <div>
-            <div class="brand-pill">EKART SUPER APP</div>
+            <div class="brand-pill">ROUTEX SUPER APP</div>
             <h1 class="display-5 fw-bold mb-2 mt-2">One App. All City Deliveries.</h1>
             <p class="lead mb-4">Book food, parcel, pickup service, women safety rides, and more with live captain tracking.</p>
             <div class="d-grid d-md-flex gap-2 flex-wrap">
               <a routerLink="/booking" class="btn btn-danger btn-lg">{{ t('bookDelivery') }}</a>
-              <a routerLink="/services" class="btn btn-light btn-lg">Explore Services</a>
+              <a routerLink="/services" class="btn btn-outline-light btn-lg fw-semibold">Explore Services</a>
             </div>
           </div>
         </div>
@@ -58,7 +58,12 @@ import { IntegrationHealthService } from '../../core/services/integration-health
           <small class="text-muted">Tap and start in seconds</small>
         </div>
         <div class="service-showcase-grid">
-          <a class="service-showcase-card" *ngFor="let service of serviceHighlights" [routerLink]="service.route">
+          <a
+            class="service-showcase-card"
+            *ngFor="let service of serviceHighlights"
+            [routerLink]="service.route"
+            [queryParams]="service.queryParams || null"
+          >
             <div class="service-showcase-icon">{{ service.icon }}</div>
             <div>
               <h5 class="mb-1">{{ service.title }}</h5>
@@ -221,14 +226,14 @@ import { IntegrationHealthService } from '../../core/services/integration-health
       .feature-panel {
         border: 1px solid rgba(0, 0, 0, 0.08);
         border-radius: 16px;
-        background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
+        background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
         padding: 16px;
       }
 
       .service-showcase {
         border: 1px solid rgba(0, 0, 0, 0.08);
         border-radius: 16px;
-        background: linear-gradient(180deg, #ffffff 0%, #f8fffb 100%);
+        background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
         padding: 16px;
       }
 
@@ -243,7 +248,7 @@ import { IntegrationHealthService } from '../../core/services/integration-health
         color: inherit;
         border: 1px solid rgba(0, 0, 0, 0.08);
         border-radius: 12px;
-        background: #fff;
+        background: var(--surface);
         padding: 12px;
         display: grid;
         grid-template-columns: 40px 1fr auto;
@@ -282,7 +287,7 @@ import { IntegrationHealthService } from '../../core/services/integration-health
       .integration-panel {
         border: 1px solid rgba(0, 0, 0, 0.08);
         border-radius: 16px;
-        background: linear-gradient(180deg, #ffffff 0%, #f5f8ff 100%);
+        background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
         padding: 16px;
       }
 
@@ -300,7 +305,7 @@ import { IntegrationHealthService } from '../../core/services/integration-health
         grid-template-columns: 38px 1fr;
         gap: 10px;
         align-items: start;
-        background: #fff;
+        background: var(--surface);
       }
 
       .integration-icon {
@@ -344,7 +349,7 @@ import { IntegrationHealthService } from '../../core/services/integration-health
         border: 1px solid rgba(0, 0, 0, 0.08);
         border-radius: 12px;
         padding: 14px;
-        background: #fff;
+        background: var(--surface);
       }
 
       .feature-icon {
@@ -367,7 +372,7 @@ import { IntegrationHealthService } from '../../core/services/integration-health
         grid-template-columns: 140px 1fr;
         gap: 12px;
         align-items: center;
-        background: linear-gradient(120deg, #fff1f2 0%, #fff8f0 55%, #fefce8 100%);
+        background: linear-gradient(120deg, var(--surface-2) 0%, var(--surface) 100%);
       }
 
       .flash-photo {
@@ -400,7 +405,7 @@ import { IntegrationHealthService } from '../../core/services/integration-health
         border: 1px solid rgba(0, 0, 0, 0.08);
         border-radius: 12px;
         padding: 12px;
-        background: #ffffff;
+        background: var(--surface);
       }
 
       .badge-chip {
@@ -520,7 +525,7 @@ import { IntegrationHealthService } from '../../core/services/integration-health
   ]
 })
 export class HomeComponent {
-  homeLogoSrc = '/assets/ekart-logo.svg';
+  homeLogoSrc = '/assets/lunchbox-logo.svg';
   private readonly destroy$ = new Subject<void>();
   integrationCheckedAt = new Date().toISOString();
 
@@ -529,25 +534,29 @@ export class HomeComponent {
       icon: '🍔',
       title: 'Food Delivery',
       description: 'Nearby restaurants with live prep and captain ETA.',
-      route: '/booking'
+      route: '/booking',
+      queryParams: { service: 'food' }
     },
     {
       icon: '🛍️',
       title: 'Pickup Service',
       description: 'Pickup item from any shop to your destination.',
-      route: '/services'
+      route: '/booking',
+      queryParams: { service: 'parcel', pickupService: 1 }
     },
     {
       icon: '🛡️',
       title: 'Women Safety Mode',
       description: 'Top-ranked trusted captains prioritized first.',
-      route: '/services'
+      route: '/booking',
+      queryParams: { womenSafety: 1, service: 'parcel' }
     },
     {
       icon: '🎒',
       title: 'School and Teen Rides',
-      description: 'Lunch box and teen-safe assisted ride options.',
-      route: '/services'
+      description: 'RouteX school delivery and teen-safe assisted ride options.',
+      route: '/school-booking',
+      queryParams: { lunchBox: 1, service: 'food' }
     }
   ];
 
