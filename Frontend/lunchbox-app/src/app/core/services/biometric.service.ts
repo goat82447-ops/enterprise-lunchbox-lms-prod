@@ -76,7 +76,7 @@ export class BiometricService {
     const challenge = this.generateChallenge();
     const publicKeyOptions: PublicKeyCredentialCreationOptions = {
       challenge: challenge as unknown as BufferSource,
-      rp: { name: 'Lunch Box Delivery' },
+      rp: { name: 'RouteX' },
       user: {
         id: new TextEncoder().encode(userId),
         name: username,
