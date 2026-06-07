@@ -13,7 +13,16 @@ export class OrderService {
   private currentOrderSubject = new BehaviorSubject<Order | null>(null);
   public currentOrder$: Observable<Order | null> = this.currentOrderSubject.asObservable();
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient) {
+    const saved = localStorage.getItem('lunchbox_current_order');
+    if (saved) {
+      try {
+        this.currentOrderSubject.next(JSON.parse(saved) as Order);
+      } catch {
+        localStorage.removeItem('lunchbox_current_order');
+      }
+    }
+  }
 
   createOrder(order: Order): Observable<Order> {
     return this.http.post<Order>(this.apiUrl, order).pipe(
