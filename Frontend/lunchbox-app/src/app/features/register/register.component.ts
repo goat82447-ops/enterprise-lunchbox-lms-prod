@@ -14,7 +14,7 @@ import { RegisterResponse, UserRole, VehicleType } from '../../core/models/deliv
     <div class="container py-5" style="max-width: 720px;">
       <div class="card p-4 p-md-5 auth-shell">
         <div class="brand-strip mb-3">
-          <img [src]="registerLogoSrc" (error)="onRegisterLogoError($event)" alt="LunchBox Delivery logo" class="brand-logo" />
+          <img [src]="registerLogoSrc" (error)="onRegisterLogoError($event)" alt="RouteX logo" class="brand-logo" />
           <div>
             <h2 class="mb-1">Create Account</h2>
             <p class="text-muted mb-0">Choose mode and register. Captains must select vehicle.</p>

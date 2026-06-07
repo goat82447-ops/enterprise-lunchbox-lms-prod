@@ -1,4 +1,5 @@
 export type UserRole = 'customer' | 'admin' | 'captain' | 'user';
+export type KycStatus = 'not_started' | 'pending' | 'verified' | 'rejected';
 
 export interface AppUser {
   id: string;
@@ -9,6 +10,10 @@ export interface AppUser {
   mobile?: string;
   captainVehicle?: VehicleType;
   profileImageUrl?: string;
+  kycStatus?: KycStatus;
+  kycDocumentType?: string;
+  kycReferenceId?: string;
+  kycUpdatedAt?: string;
 }
 
 export interface LoginStartResponse {
@@ -138,6 +143,8 @@ export interface NearbyCaptain {
   etaMinutes: number;
   distanceKm: number;
   availability: 'available' | 'busy' | 'arriving';
+  kycStatus?: KycStatus;
+  kycReferenceId?: string;
   locationLabel?: string;
   locationLat?: number;
   locationLng?: number;
@@ -153,6 +160,8 @@ export interface CaptainDirectoryItem {
   rating: number;
   availability: 'available' | 'busy' | 'arriving';
   createdAt: string;
+  kycStatus?: KycStatus;
+  kycReferenceId?: string;
 }
 
 export interface UserStats {
@@ -218,6 +227,12 @@ export interface Booking {
   notification: string;
   estimatedFare?: number;
   rideNotes?: string;
+  pickupServiceMode?: boolean;
+  pickupShopName?: string;
+  pickupShopPhone?: string;
+  pickupItemDetails?: string;
+  pickupShopInstructions?: string;
+  pickupItemGridSelection?: string[];
   sosTriggered?: boolean;
   sosByRole?: 'customer' | 'captain';
   feedbackSubmitted?: boolean;
@@ -254,6 +269,12 @@ export interface BookingRequest {
   preferredCaptainName?: string;
   estimatedFare?: number;
   rideNotes?: string;
+  pickupServiceMode?: boolean;
+  pickupShopName?: string;
+  pickupShopPhone?: string;
+  pickupItemDetails?: string;
+  pickupShopInstructions?: string;
+  pickupItemGridSelection?: string[];
 }
 
 export interface AppNotification {

@@ -8,6 +8,7 @@ import {
   CaptainDirectoryItem,
   CaptainFeedbackRequest,
   CaptainFeedbackStats,
+  KycStatus,
   LoginStartResponse,
   RegisterRequest,
   RegisterResponse,
@@ -184,6 +185,28 @@ export class AuthService {
     const updated: AppUser = {
       ...user,
       profileImageUrl
+    };
+
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    this.userSubject.next(updated);
+  }
+
+  applyCaptainKycStatus(
+    kycStatus: KycStatus,
+    options?: { kycDocumentType?: string; kycReferenceId?: string; kycUpdatedAt?: string }
+  ): void {
+    const user = this.userSubject.value;
+    if (!user) {
+      return;
+    }
+
+    const updated: AppUser = {
+      ...user,
+      kycStatus,
+      kycDocumentType: options?.kycDocumentType ?? user.kycDocumentType,
+      kycReferenceId: options?.kycReferenceId ?? user.kycReferenceId,
+      kycUpdatedAt: options?.kycUpdatedAt ?? new Date().toISOString()
     };
 
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(updated));

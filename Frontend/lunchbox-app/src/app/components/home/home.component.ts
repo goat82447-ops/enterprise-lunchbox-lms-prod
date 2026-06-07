@@ -10,7 +10,7 @@ import { CartService } from '../../services/cart.service';
   template: `
     <div class="container py-4">
       <div class="mb-4">
-        <h1 class="display-5">LunchBox Delivery</h1>
+        <h1 class="display-5">RouteX Delivery</h1>
         <p class="lead text-muted">Fresh food delivered quickly.</p>
       </div>
 

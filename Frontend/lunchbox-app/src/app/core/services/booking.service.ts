@@ -11,6 +11,7 @@ const BOOKINGS_API = `${environment.parcelApiBase}/api/bookings`;
 
 @Injectable({ providedIn: 'root' })
 export class BookingService {
+  private static readonly FOOD_CONFIRMATION_DELAY_MINUTES = 2;
   private readonly bookingsSubject = new BehaviorSubject<Booking[]>(this.loadBookings());
   readonly bookings$: Observable<Booking[]> = this.bookingsSubject.asObservable();
 
@@ -85,11 +86,19 @@ export class BookingService {
       preferredCaptainName: request.preferredCaptainName,
       notification: isScheduled
         ? `Booking scheduled for ${new Date(scheduledAt as string).toLocaleString()}. OTP ${otp} will be used to start ride.`
-        : request.notificationTarget === 'all'
-          ? `Booking confirmed. OTP ${otp} generated. Broadcast notification sent to all captains.`
-          : `Booking confirmed. OTP ${otp} generated. Preferred captain will be notified.`,
+        : request.serviceType === 'food'
+          ? 'Your order is placed. Waiting for captain/restaurant acceptance.'
+          : request.notificationTarget === 'all'
+            ? `Booking confirmed. OTP ${otp} generated. Broadcast notification sent to all captains.`
+            : `Booking confirmed. OTP ${otp} generated. Preferred captain will be notified.`,
       estimatedFare: request.estimatedFare,
       rideNotes: request.rideNotes,
+      pickupServiceMode: request.pickupServiceMode,
+      pickupShopName: request.pickupShopName,
+      pickupShopPhone: request.pickupShopPhone,
+      pickupItemDetails: request.pickupItemDetails,
+      pickupShopInstructions: request.pickupShopInstructions,
+      pickupItemGridSelection: request.pickupItemGridSelection,
       createdAt: now,
       updatedAt: now
     };
@@ -112,6 +121,11 @@ export class BookingService {
       this.notifications.push(
         `Booking ${booking.id} scheduled for ${new Date(scheduledAt as string).toLocaleString()}.`,
         'info'
+      );
+    } else if (request.serviceType === 'food') {
+      this.notifications.push(
+        `Order ${booking.id} placed. Once captain/restaurant accepts, your order will be confirmed in about 2 minutes.`,
+        'success'
       );
     } else {
       this.notifications.push(
@@ -235,7 +249,13 @@ export class BookingService {
       preferredCaptainId: booking.preferredCaptainId,
       preferredCaptainName: booking.preferredCaptainName,
       estimatedFare: booking.estimatedFare,
-      rideNotes: booking.rideNotes
+      rideNotes: booking.rideNotes,
+      pickupServiceMode: booking.pickupServiceMode,
+      pickupShopName: booking.pickupShopName,
+      pickupShopPhone: booking.pickupShopPhone,
+      pickupItemDetails: booking.pickupItemDetails,
+      pickupShopInstructions: booking.pickupShopInstructions,
+      pickupItemGridSelection: booking.pickupItemGridSelection
     };
   }
 
@@ -476,6 +496,23 @@ export class BookingService {
       return {
         ...booking,
         notification: `Scheduled booking. Ride will start after ${new Date(booking.scheduledAt).toLocaleString()}.`
+      };
+    }
+
+    if (booking.serviceType === 'food' && booking.status === 'created') {
+      if (this.minutesSince(booking.createdAt) >= BookingService.FOOD_CONFIRMATION_DELAY_MINUTES) {
+        this.notifications.push(`Order ${booking.id} confirmed by captain/restaurant.`, 'success');
+        return {
+          ...booking,
+          status: 'assigned',
+          updatedAt: new Date().toISOString(),
+          notification: 'Your order is confirmed by captain/restaurant.'
+        };
+      }
+
+      return {
+        ...booking,
+        notification: 'Your order is placed. Waiting for captain/restaurant acceptance.'
       };
     }
 

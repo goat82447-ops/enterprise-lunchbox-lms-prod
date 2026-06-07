@@ -2,13 +2,13 @@ import { Component, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Subscription } from 'rxjs';
-import { AppUser, Booking, BookingRequest, CaptainDirectoryItem, LiveFareRequest, LiveFareResponse, NearbyCaptain, PaymentMethod, ServiceType, VehicleType } from '../../core/models/delivery.models';
+import { Subscription, map } from 'rxjs';
+import { AppUser, Booking, BookingRequest, CaptainDirectoryItem, KycStatus, LiveFareRequest, LiveFareResponse, NearbyCaptain, PaymentMethod, ServiceType, VehicleType } from '../../core/models/delivery.models';
 import { AuthService } from '../../core/services/auth.service';
 import { BookingService } from '../../core/services/booking.service';
 import { LanguageService } from '../../core/services/language.service';
 import { NotificationService } from '../../core/services/notification.service';
-import { NearbyHotelApiItem, PlacesService } from '../../core/services/places.service';
+import { HotelMenuApiItem, NearbyHotelApiItem, PlacesService } from '../../core/services/places.service';
 import { PricingService } from '../../core/services/pricing.service';
 
 type LocationPreset = {
@@ -25,10 +25,25 @@ type NearbyHotel = {
   name: string;
   category: 'veg' | 'nonveg';
   locationLabel: string;
+  lat?: number;
+  lng?: number;
   distanceKm: number;
   etaMinutes: number;
   rating: number;
   openNow: boolean;
+  cuisine?: string;
+  priceForTwo?: number;
+  imageUrl?: string;
+};
+
+type FoodMenuItem = {
+  id: string;
+  name: string;
+  category: 'veg' | 'nonveg';
+  price: number;
+  isTop: boolean;
+  description?: string;
+  imageUrl?: string;
 };
 
 type PopularPlace = {
@@ -37,6 +52,8 @@ type PopularPlace = {
   etaMinutes: number;
   captainHint: string;
 };
+
+type FocusedBookingMode = 'all' | 'womenSafety' | 'teen' | 'school';
 
 const LAST_LOCATION_KEY = 'delivery_last_location';
 const RECENT_LOCATIONS_KEY = 'delivery_recent_locations';
@@ -48,14 +65,38 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
   imports: [CommonModule, FormsModule],
   template: `
     <div class="container py-4">
-      <div class="card p-3 mb-3 lunchbox-mode-card">
+      <div class="card p-3 mb-3 border-primary" *ngIf="isSchoolBookingPage">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+          <div>
+            <div class="small text-primary fw-semibold">ROUTEX SCHOOL PAGE</div>
+            <h4 class="mb-1">School Booking Portal</h4>
+            <div class="small text-muted">Use this page for daily lunch delivery booking, student details, and school handover instructions.</div>
+          </div>
+          <span class="badge text-bg-primary">School Mode Active</span>
+        </div>
+      </div>
+
+      <div class="card p-3 mb-3 focused-mode-card" *ngIf="focusedMode !== 'all'">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+          <div class="d-flex align-items-center gap-2">
+            <span class="focused-mode-avatar" aria-hidden="true">{{ focusedModeAvatar }}</span>
+            <div>
+              <h5 class="mb-1">{{ focusedModeTitle }}</h5>
+              <div class="small text-muted">{{ focusedModeHint }}</div>
+            </div>
+          </div>
+          <button class="btn btn-outline-secondary btn-sm" type="button" (click)="clearFocusedMode()">Show All Modes</button>
+        </div>
+      </div>
+
+      <div class="card p-3 mb-3 lunchbox-mode-card" *ngIf="focusedMode === 'all' || focusedMode === 'school'">
         <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
           <div>
-            <h5 class="mb-1">Lunch Box Delivery Mode</h5>
+            <h5 class="mb-1">RouteX School Delivery Mode</h5>
             <div class="small text-muted">Use this for school lunch delivery with child and school details.</div>
           </div>
           <div class="d-flex align-items-center gap-2">
-            <button class="btn btn-outline-primary btn-sm" type="button" (click)="openLunchboxBookingsPage()">Open Lunch Box Page</button>
+            <button class="btn btn-outline-primary btn-sm" type="button" (click)="openLunchboxBookingsPage()" *ngIf="!isSchoolBookingPage">Open RouteX School Page</button>
             <div class="form-check form-switch m-0 pt-1">
               <input
                 class="form-check-input"
@@ -91,7 +132,7 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
             <input class="form-control" placeholder="Guardian phone" [(ngModel)]="lunchGuardianPhone" />
           </div>
           <div class="col-md-6">
-            <input class="form-control" placeholder="Lunch box details (veg/non-veg/allergy note)" [(ngModel)]="lunchBoxDetails" />
+            <input class="form-control" placeholder="RouteX meal details (veg/non-veg/allergy note)" [(ngModel)]="lunchBoxDetails" />
           </div>
           <div class="col-12">
             <input class="form-control" placeholder="School gate / class handover instructions" [(ngModel)]="lunchDeliveryInstructions" />
@@ -99,7 +140,7 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         </div>
       </div>
 
-      <div class="card p-3 mb-3 lunchbox-mode-card">
+      <div class="card p-3 mb-3 lunchbox-mode-card" *ngIf="focusedMode === 'all'">
         <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
           <div>
             <h5 class="mb-1">Pickup Service Mode</h5>
@@ -119,12 +160,33 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
 
         <div class="row g-2 mt-1" *ngIf="pickupServiceMode">
           <div class="col-md-6">
-            <input class="form-control" placeholder="Shop name" [(ngModel)]="pickupShopName" />
+            <label class="form-label small mb-1">Shop Name</label>
+            <select class="form-select" [(ngModel)]="pickupSelectedShopName" (ngModelChange)="onPickupShopSelected($event)">
+              <option value="">Select nearby shop</option>
+              <option *ngFor="let shop of pickupShopOptions" [value]="shop">{{ shop }}</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small mb-1">Or Enter Shop Name</label>
+            <input class="form-control" placeholder="Type custom shop name" [(ngModel)]="pickupShopName" />
           </div>
           <div class="col-md-6">
             <input class="form-control" placeholder="Shop contact" [(ngModel)]="pickupShopPhone" />
           </div>
           <div class="col-12">
+            <label class="form-label small mb-1">Item Details (Grid Type)</label>
+            <div class="pickup-item-grid mb-2">
+              <button
+                type="button"
+                class="pickup-item-chip"
+                *ngFor="let option of pickupItemGridOptions"
+                [class.selected]="isPickupItemGridSelected(option.label)"
+                (click)="togglePickupItemGridOption(option.label)"
+              >
+                <span class="pickup-item-chip-title">{{ option.label }}</span>
+                <span class="pickup-item-chip-hint">{{ option.hint }}</span>
+              </button>
+            </div>
             <input class="form-control" placeholder="Item details (size/qty/type)" [(ngModel)]="pickupItemDetails" />
           </div>
           <div class="col-12">
@@ -133,10 +195,10 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         </div>
       </div>
 
-      <h2 class="mb-3">Book Delivery</h2>
+      <h2 class="mb-3">{{ isSchoolBookingPage ? 'RouteX School Booking' : 'Book Delivery' }}</h2>
       <p class="text-muted">Uber-style matching: pick from live nearby captains and confirm instantly.</p>
 
-      <div class="status-banner mb-3">
+      <div class="status-banner mb-3" *ngIf="focusedMode === 'all' || focusedMode === 'womenSafety'">
         <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
           <div>
             <div class="status-banner-title">Women Safety Protection</div>
@@ -156,7 +218,7 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         </div>
       </div>
 
-      <div class="status-banner mb-3">
+      <div class="status-banner mb-3" *ngIf="focusedMode === 'all' || focusedMode === 'teen'">
         <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
           <div>
             <div class="status-banner-title">Teenage Ride Mode</div>
@@ -227,19 +289,28 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
           <h5 class="mb-0">How to Book (Video Guide)</h5>
           <small class="text-muted">Watch before your first booking</small>
         </div>
-        <video class="how-to-book-video" controls preload="metadata" [poster]="howToBookPosterSrc">
-          <source [src]="howToBookVideoSrc" type="video/mp4" />
-          <source src="https://www.w3schools.com/html/mov_bbb.mp4" type="video/mp4" />
-          Your browser does not support the video tag.
-        </video>
-        <small class="text-muted d-block mt-2">Tip: You can replace /assets/how-to-book.mp4 with your own app booking tutorial video.</small>
+        <div class="how-to-book-frame-wrap">
+          <iframe
+            class="how-to-book-frame"
+            src="https://www.youtube.com/embed/E-291t1l9C4?rel=0&modestbranding=1&vq=hd1080"
+            title="RouteX booking video guide"
+            loading="lazy"
+            referrerpolicy="strict-origin-when-cross-origin"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowfullscreen
+          ></iframe>
+        </div>
+        <small class="text-muted d-block mt-2">
+          Video source: your uploaded YouTube guide.
+          <a href="https://www.youtube.com/watch?v=E-291t1l9C4" target="_blank" rel="noopener noreferrer">Open on YouTube (HD)</a>
+        </small>
       </div>
 
       <div class="row g-4">
         <div class="col-lg-8">
           <div class="card p-4">
-            <h5 class="mb-3">Service Type</h5>
-            <div class="d-flex flex-wrap gap-3 mb-4">
+            <h5 class="mb-3" *ngIf="focusedMode === 'all'">Service Type</h5>
+            <div class="d-flex flex-wrap gap-3 mb-4" *ngIf="focusedMode === 'all'">
               <label class="form-check-label" *ngFor="let option of serviceTypes">
                 <input
                   type="radio"
@@ -271,17 +342,27 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
               <div class="small text-muted mb-2">Live location: {{ pickupAddress || 'Pickup Point' }} • Updated: {{ nearbyHotelsLastUpdatedAt ? (nearbyHotelsLastUpdatedAt | date:'shortTime') : 'just now' }}</div>
 
               <div class="hotel-grid" *ngIf="displayedNearbyHotels.length > 0">
-                <div class="hotel-card" *ngFor="let hotel of displayedNearbyHotels">
+                <div class="hotel-card" [class.selected]="selectedHotelId === hotel.id" *ngFor="let hotel of displayedNearbyHotels">
+                  <img class="hotel-cover" [src]="hotel.imageUrl || defaultHotelImageUrl" [alt]="hotel.name" />
                   <div class="d-flex justify-content-between align-items-start">
                     <strong>{{ hotel.name }}</strong>
                     <span class="badge" [ngClass]="hotel.category === 'veg' ? 'text-bg-success' : 'text-bg-danger'">
                       {{ hotel.category === 'veg' ? 'VEG' : 'NON-VEG' }}
                     </span>
                   </div>
+                  <div class="small text-muted" *ngIf="hotel.cuisine">{{ hotel.cuisine }}</div>
                   <div class="small text-muted">{{ hotel.distanceKm }} km • ETA {{ hotel.etaMinutes }} min</div>
+                  <div class="small text-muted" *ngIf="hotel.priceForTwo">₹{{ hotel.priceForTwo }} for two</div>
                   <div class="small text-muted">{{ hotel.locationLabel }}</div>
                   <div class="small">⭐ {{ hotel.rating }} • {{ hotel.openNow ? 'Open now' : 'Opens soon' }}</div>
+                  <button type="button" class="btn btn-sm btn-outline-primary mt-2" (click)="selectHotelForFood(hotel)">
+                    {{ selectedHotelId === hotel.id ? 'Selected' : 'Select Hotel' }}
+                  </button>
                 </div>
+              </div>
+
+              <div class="alert alert-light border mt-2 mb-0" *ngIf="displayedNearbyHotels.length === 0">
+                No nearby hotels found for selected preference.
               </div>
 
               <div class="mt-2" *ngIf="filteredNearbyHotels.length > topRatedNearbyHotels.length">
@@ -294,16 +375,88 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
                   {{ showAllHotels ? 'Show Top Rated' : 'Show All Nearby Hotels' }}
                 </button>
               </div>
+
+              <div class="food-order-shell mt-3" *ngIf="selectedHotelForFood as selectedHotel">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                  <div>
+                    <h6 class="mb-0">{{ selectedHotel.name }} Menu</h6>
+                    <small class="text-muted">Top items from selected hotel</small>
+                  </div>
+                  <span class="badge text-bg-primary">{{ selectedHotelMenu.length }} items</span>
+                </div>
+
+                <div class="alert alert-light border mb-2" *ngIf="foodMenuLoading">Loading menu items...</div>
+
+                <div class="food-menu-grid" *ngIf="selectedHotelMenu.length > 0">
+                  <div class="food-menu-item" *ngFor="let item of selectedHotelMenu">
+                    <img class="food-item-image" [src]="item.imageUrl || defaultFoodItemImageUrl" [alt]="item.name" />
+                    <div class="d-flex justify-content-between align-items-start gap-2">
+                      <div>
+                        <div class="fw-semibold">
+                          {{ item.name }}
+                          <span class="badge text-bg-warning ms-1" *ngIf="item.isTop">Top</span>
+                        </div>
+                        <div class="small text-muted">{{ item.category === 'veg' ? 'VEG' : 'NON-VEG' }}</div>
+                        <div class="small text-muted" *ngIf="item.description">{{ item.description }}</div>
+                      </div>
+                      <div class="fw-semibold">₹{{ item.price }}</div>
+                    </div>
+                    <div class="d-flex align-items-center gap-2 mt-2">
+                      <button type="button" class="btn btn-sm btn-outline-secondary" (click)="decreaseFoodItemQty(item)">-</button>
+                      <span class="small fw-semibold">{{ foodItemQty(item.id) }}</span>
+                      <button type="button" class="btn btn-sm btn-outline-secondary" (click)="increaseFoodItemQty(item)">+</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="food-cart-box mt-3" *ngIf="foodCartItems.length > 0">
+                  <h6 class="mb-2">Your Cart</h6>
+                  <div class="food-cart-row" *ngFor="let cart of foodCartItems">
+                    <span>{{ cart.item.name }} x{{ cart.qty }}</span>
+                    <strong>₹{{ cart.qty * cart.item.price }}</strong>
+                  </div>
+                  <hr class="my-2" />
+                  <div class="food-cart-row"><span>Item Total</span><strong>₹{{ foodCartSubtotal }}</strong></div>
+                  <div class="food-cart-row"><span>Delivery Fee</span><strong>₹{{ foodDeliveryFee }}</strong></div>
+                  <div class="food-cart-row"><span>Platform Fee</span><strong>₹{{ foodPlatformFee }}</strong></div>
+                  <div class="food-cart-row total"><span>Grand Total</span><strong>₹{{ foodCartTotal }}</strong></div>
+                  <button type="button" class="btn btn-danger btn-sm mt-2" (click)="openFoodCheckout()">Proceed to Payment</button>
+                </div>
+
+                <div class="food-checkout-box mt-3" *ngIf="foodCheckoutOpen && foodCartItems.length > 0">
+                  <h6 class="mb-2">Payment (RouteX App)</h6>
+                  <div class="d-flex flex-wrap gap-3 mb-2">
+                    <label class="form-check-label" *ngFor="let option of paymentMethods">
+                      <input type="radio" class="form-check-input me-2" name="foodPaymentMethod" [value]="option" [(ngModel)]="paymentMethod" />
+                      {{ option }}
+                    </label>
+                  </div>
+
+                  <div class="mb-2" *ngIf="paymentMethod === 'upi'">
+                    <div class="small text-muted mb-1">Choose UPI App</div>
+                    <div class="d-flex flex-wrap gap-2">
+                      <label class="form-check-label" *ngFor="let app of upiAppOptions">
+                        <input type="radio" class="form-check-input me-2" name="upiApp" [value]="app.id" [(ngModel)]="selectedUpiApp" />
+                        {{ app.label }}
+                      </label>
+                    </div>
+                  </div>
+
+                  <button type="button" class="btn btn-success btn-sm" (click)="confirmFoodPaymentAndBook()">
+                    Pay ₹{{ foodCartTotal }} in RouteX & Place Order
+                  </button>
+                </div>
+              </div>
             </div>
 
             <h5 class="mb-2">Booking For</h5>
             <div class="d-flex flex-wrap gap-3 mb-3">
               <label class="form-check-label">
-                <input type="radio" class="form-check-input me-2" name="bookingFor" value="self" [(ngModel)]="bookingFor" />
+                <input type="radio" class="form-check-input me-2" name="bookingFor" value="self" [(ngModel)]="bookingFor" (ngModelChange)="onBookingForChange()" />
                 Pick Myself
               </label>
               <label class="form-check-label">
-                <input type="radio" class="form-check-input me-2" name="bookingFor" value="others" [(ngModel)]="bookingFor" />
+                <input type="radio" class="form-check-input me-2" name="bookingFor" value="others" [(ngModel)]="bookingFor" (ngModelChange)="onBookingForChange()" />
                 Others
               </label>
             </div>
@@ -333,8 +486,8 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
               <small class="text-muted">Select a future date and time for scheduled delivery.</small>
             </div>
 
-            <h5 class="mb-3">Payment</h5>
-            <div class="d-flex flex-wrap gap-3 mb-4">
+            <h5 class="mb-3" *ngIf="serviceType !== 'food'">Payment</h5>
+            <div class="d-flex flex-wrap gap-3 mb-4" *ngIf="serviceType !== 'food'">
               <label class="form-check-label" *ngFor="let option of paymentMethods">
                 <input type="radio" class="form-check-input me-2" name="paymentMethod" [value]="option" [(ngModel)]="paymentMethod" />
                 {{ option }}
@@ -355,10 +508,10 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
                 <option *ngFor="let p of filteredPickupLocationSuggestions" [value]="p.name"></option>
               </datalist>
             </div>
-            <input class="form-control mb-2" placeholder="Pickup address" [(ngModel)]="pickupAddress" />
+            <input class="form-control mb-2" placeholder="Pickup address" [(ngModel)]="pickupAddress" (ngModelChange)="onPickupLocationInputChanged()" />
             <div class="row g-2 mb-4">
-              <div class="col"><input class="form-control" type="number" step="0.00001" placeholder="Pickup latitude" [(ngModel)]="pickupLat" (ngModelChange)="onPickupLocationInputChanged()" /></div>
-              <div class="col"><input class="form-control" type="number" step="0.00001" placeholder="Pickup longitude" [(ngModel)]="pickupLng" (ngModelChange)="onPickupLocationInputChanged()" /></div>
+              <div class="col"><input class="form-control" type="number" step="0.00001" placeholder="Pickup latitude" [(ngModel)]="pickupLat" (ngModelChange)="onPickupLocationInputChanged(true)" /></div>
+              <div class="col"><input class="form-control" type="number" step="0.00001" placeholder="Pickup longitude" [(ngModel)]="pickupLng" (ngModelChange)="onPickupLocationInputChanged(true)" /></div>
             </div>
 
             <h5 class="mb-2">Drop Location</h5>
@@ -414,6 +567,7 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
               </div>
             </div>
 
+            <ng-container *ngIf="serviceType !== 'food'; else foodAutoCaptainMode">
             <h5 class="mb-2">Choose Vehicle Type</h5>
             <p class="text-muted small mb-2">Captain list updates instantly based on your selected vehicle.</p>
             <div class="vehicle-grid mb-4">
@@ -424,17 +578,25 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
                 *ngFor="let option of bookingVehicleOptions"
                 (click)="onVehicleTypeChange(option.type)"
               >
+                <span class="vehicle-price-badge" *ngIf="vehiclePriceBadge(option.type)">{{ vehiclePriceBadge(option.type) }}</span>
                 <div class="vehicle-icon">{{ option.icon }}</div>
                 <div class="vehicle-name">{{ option.label }}</div>
+                <div class="vehicle-hint" *ngIf="vehiclePriceHint(option.type)">{{ vehiclePriceHint(option.type) }}</div>
               </button>
             </div>
+            </ng-container>
+            <ng-template #foodAutoCaptainMode>
+              <div class="alert alert-info small mb-3">
+                Food delivery auto mode is active. System will assign accepted Bike/Scooter captains only.
+              </div>
+            </ng-template>
 
-            <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="d-flex justify-content-between align-items-center mb-2" *ngIf="serviceType !== 'food'">
               <h5 class="mb-0">Nearby Captains ({{ filteredNearbyCaptains.length }})</h5>
               <button class="btn btn-outline-secondary btn-sm" type="button" (click)="refreshNearbyCaptains()">Refresh</button>
             </div>
-            <p class="small text-muted mb-2" *ngIf="selectedCaptain">Selected Captain({{ selectedCaptain.name }}) • ETA {{ selectedCaptain.etaMinutes }} min</p>
-            <div class="captain-grid mb-4">
+            <p class="small text-muted mb-2" *ngIf="serviceType !== 'food' && selectedCaptain">Selected Captain({{ selectedCaptain.name }}) • ETA {{ selectedCaptain.etaMinutes }} min</p>
+            <div class="captain-grid mb-4" *ngIf="serviceType !== 'food'">
               <label
                 class="captain-card"
                 [class.selected]="selectedCaptain?.id === captain.id"
@@ -454,9 +616,15 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
                       {{ vehicleIcon(captain.vehicleType) }} {{ captain.name }}
                       <span class="badge text-bg-warning ms-1" *ngIf="womenSafetyProtectionMode && i < 2">Top Rank</span>
                     </strong>
-                    <span class="badge" [ngClass]="statusBadge(captain.availability)">{{ td(captain.availability) }}</span>
+                    <span class="badge" [ngClass]="statusBadge(captain.availability)">{{ captainAvailabilityLabel(captain.availability) }}</span>
                   </div>
                   <small class="text-muted">{{ captain.vehicleLabel }} • {{ captain.rating }}★ • {{ captain.distanceKm }} km</small>
+                  <div class="small d-flex align-items-center gap-2 mt-1">
+                    <span class="verified-driver-chip" [ngClass]="kycBadgeClass(captain.kycStatus)">
+                      {{ captain.kycStatus === 'verified' ? 'Verified Driver' : 'KYC ' + kycStatusLabel(captain.kycStatus) }}
+                    </span>
+                    <span class="text-muted" *ngIf="captain.kycReferenceId">Ref: {{ captain.kycReferenceId }}</span>
+                  </div>
                   <div class="small">ETA {{ captain.etaMinutes }} min • {{ captain.phone }}</div>
                   <div class="small captain-pin" *ngIf="captain.locationLabel">
                     <span class="pin-symbol">📍</span>
@@ -465,11 +633,14 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
                 </div>
               </label>
             </div>
-            <div class="alert alert-warning mb-4" *ngIf="filteredNearbyCaptains.length === 0">
+            <div class="alert alert-warning mb-4" *ngIf="serviceType !== 'food' && filteredNearbyCaptains.length === 0">
               No nearby captains available for selected vehicle type. Try another vehicle or refresh.
             </div>
+            <div class="alert alert-info mb-4" *ngIf="serviceType === 'food'">
+              Delivery captains are assigned automatically after order acceptance. Captain list is hidden for food mode.
+            </div>
 
-            <div class="vehicle-map-card mb-4">
+            <div class="vehicle-map-card mb-4" *ngIf="serviceType !== 'food'">
               <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
                 <h5 class="mb-0">Vehicle Location Map</h5>
                 <div class="d-flex align-items-center gap-2">
@@ -527,8 +698,8 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
               </ng-template>
             </div>
 
-            <h5 class="mb-2">Captain Notification Audience</h5>
-            <div class="d-flex flex-wrap gap-3 mb-2">
+            <h5 class="mb-2" *ngIf="serviceType !== 'food'">Captain Notification Audience</h5>
+            <div class="d-flex flex-wrap gap-3 mb-2" *ngIf="serviceType !== 'food'">
               <label class="form-check-label">
                 <input type="radio" class="form-check-input me-2" name="notificationTarget" value="preferred" [(ngModel)]="notificationTarget" />
                 Preferred Captain Only
@@ -538,10 +709,10 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
                 All Captains
               </label>
             </div>
-            <div class="small text-muted mb-4" *ngIf="notificationTarget === 'preferred' && selectedCaptain">
+            <div class="small text-muted mb-4" *ngIf="serviceType !== 'food' && notificationTarget === 'preferred' && selectedCaptain">
               Notifications with sound will be sent only to Captain({{ selectedCaptain.name }}).
             </div>
-            <div class="small text-muted mb-4" *ngIf="notificationTarget === 'all'">
+            <div class="small text-muted mb-4" *ngIf="serviceType !== 'food' && notificationTarget === 'all'">
               Notifications with sound will be sent to all captains.
             </div>
 
@@ -558,14 +729,17 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
               <div class="small text-muted mt-1">{{ fareStatusMessage }}</div>
             </div>
 
-            <div *ngIf="selectedCaptain" class="d-flex gap-2 mb-4 flex-wrap">
+            <div *ngIf="serviceType !== 'food' && selectedCaptain" class="d-flex gap-2 mb-4 flex-wrap">
               <a class="btn btn-outline-primary btn-sm" [href]="callLink(selectedCaptain.phone)">Call Captain</a>
               <a class="btn btn-outline-success btn-sm" [href]="whatsAppLink(selectedCaptain.phone)" target="_blank" rel="noopener">WhatsApp Captain</a>
             </div>
 
-            <button class="btn btn-danger" (click)="bookNow()">
+            <button class="btn btn-danger" (click)="bookNow()" [disabled]="serviceType === 'food' && !canDirectFoodBook">
               {{ bookingTimeMode === 'later' ? 'Schedule Booking' : 'Book Now' }}
             </button>
+            <div class="small text-muted mt-2" *ngIf="serviceType === 'food' && !canDirectFoodBook">
+              Select hotel, items, then proceed to payment to place food order.
+            </div>
           </div>
         </div>
 
@@ -607,7 +781,7 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
             </div>
           </div>
 
-          <div class="card p-4 bg-light">
+          <div class="card p-4 feature-includes-card">
             <h5>Included Features</h5>
             <ul class="mb-0">
               <li>Login to logout session flow</li>
@@ -626,7 +800,7 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
             </ul>
           </div>
 
-          <div class="card p-4 mt-3">
+          <div class="card p-4 mt-3" id="booking-history-section">
             <h5 class="mb-3">Booking History</h5>
             <div class="d-flex flex-wrap gap-2 mb-2">
               <button type="button" class="btn btn-sm" [ngClass]="historyFilter === 'all' ? 'btn-danger' : 'btn-outline-secondary'" (click)="setHistoryFilter('all')">All</button>
@@ -654,8 +828,8 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
                   <span class="badge" [ngClass]="historyStatusBadge(item.status)">{{ historyStatusLabel(item.status) }}</span>
                 </div>
                 <div class="d-flex gap-2 mt-2">
-                  <button class="btn btn-sm btn-outline-primary" type="button" (click)="rebookFromHistory(item)">Re-book</button>
-                  <button class="btn btn-sm btn-outline-dark" type="button" (click)="openTracking(item)">Track</button>
+                  <button class="btn btn-sm btn-outline-primary" type="button" (click)="rebookFromHistory(item)">Rebook</button>
+                  <button class="btn btn-sm btn-outline-dark" type="button" (click)="openTracking(item)">Track Order</button>
                 </div>
               </div>
             </div>
@@ -691,6 +865,7 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         display: grid;
         place-items: center;
         gap: 4px;
+        position: relative;
       }
 
       .vehicle-card.selected {
@@ -707,6 +882,25 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
       .vehicle-name {
         font-weight: 600;
         font-size: 13px;
+      }
+
+      .vehicle-hint {
+        font-size: 11px;
+        color: #0f766e;
+        font-weight: 700;
+      }
+
+      .vehicle-price-badge {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        font-size: 10px;
+        font-weight: 700;
+        border-radius: 999px;
+        padding: 2px 8px;
+        background: #dcfce7;
+        color: #166534;
+        border: 1px solid #86efac;
       }
 
       .captain-card {
@@ -730,6 +924,35 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         display: inline-flex;
         align-items: center;
         gap: 6px;
+      }
+
+      .verified-driver-chip {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 2px 8px;
+        border: 1px solid transparent;
+      }
+
+      .verified-driver-chip.kyc-verified {
+        background: #dcfce7;
+        color: #166534;
+        border-color: #86efac;
+      }
+
+      .verified-driver-chip.kyc-pending {
+        background: #fef3c7;
+        color: #92400e;
+        border-color: #fcd34d;
+      }
+
+      .verified-driver-chip.kyc-rejected,
+      .verified-driver-chip.kyc-not-started {
+        background: #fee2e2;
+        color: #991b1b;
+        border-color: #fecaca;
       }
 
       .pin-symbol {
@@ -831,6 +1054,21 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         background: #000;
       }
 
+      .how-to-book-frame-wrap {
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid #dee2e6;
+        background: #000;
+      }
+
+      .how-to-book-frame {
+        width: 100%;
+        height: 100%;
+        border: 0;
+      }
+
       .hotel-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -844,6 +1082,71 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         background: #fff;
       }
 
+      .hotel-cover {
+        width: 100%;
+        height: 118px;
+        object-fit: cover;
+        border-radius: 8px;
+        margin-bottom: 8px;
+        border: 1px solid #e5e7eb;
+      }
+
+      .hotel-card.selected {
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.16);
+        background: #f8fbff;
+      }
+
+      .food-order-shell {
+        border: 1px solid #dbeafe;
+        border-radius: 12px;
+        padding: 12px;
+        background: #ffffff;
+      }
+
+      .food-menu-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 10px;
+      }
+
+      .food-menu-item {
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 10px;
+        background: #ffffff;
+      }
+
+      .food-item-image {
+        width: 100%;
+        height: 120px;
+        object-fit: cover;
+        border-radius: 8px;
+        margin-bottom: 8px;
+        border: 1px solid #e5e7eb;
+      }
+
+      .food-cart-box,
+      .food-checkout-box {
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 10px;
+        background: #fafafa;
+      }
+
+      .food-cart-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        font-size: 0.88rem;
+        margin-bottom: 4px;
+      }
+
+      .food-cart-row.total {
+        font-size: 0.95rem;
+      }
+
       .profile-image {
         width: 58px;
         height: 58px;
@@ -854,16 +1157,38 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
       }
 
       .popular-place {
-        border: 1px solid #e9ecef;
+        border: 1px solid var(--border-color);
         border-radius: 10px;
         padding: 10px;
         margin-bottom: 8px;
-        background: #fff;
+        background: var(--surface-2);
+      }
+
+      .feature-includes-card {
+        background: var(--surface-2);
+        border-color: var(--border-color);
       }
 
       .voice-command-card {
         border: 1px solid #dbeafe;
         background: linear-gradient(135deg, #f8fbff 0%, #ffffff 100%);
+      }
+
+      .focused-mode-card {
+        border: 1px solid #bfdbfe;
+        background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%);
+      }
+
+      .focused-mode-avatar {
+        width: 42px;
+        height: 42px;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.2rem;
+        border: 1px solid #93c5fd;
+        background: #dbeafe;
       }
 
       .status-banner {
@@ -880,6 +1205,46 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         color: #8a6d00;
         text-transform: uppercase;
         letter-spacing: 0.3px;
+      }
+
+      .pickup-item-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .pickup-item-chip {
+        border: 1px solid #d1d5db;
+        border-radius: 10px;
+        background: #ffffff;
+        padding: 8px;
+        text-align: left;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+      }
+
+      .pickup-item-chip:hover {
+        border-color: #93c5fd;
+        box-shadow: 0 0 0 2px rgba(147, 197, 253, 0.2);
+      }
+
+      .pickup-item-chip.selected {
+        border-color: #0d6efd;
+        background: #eff6ff;
+        box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.2);
+      }
+
+      .pickup-item-chip-title {
+        font-size: 0.84rem;
+        font-weight: 700;
+        color: #0f172a;
+      }
+
+      .pickup-item-chip-hint {
+        font-size: 0.75rem;
+        color: #64748b;
       }
 
       .vehicle-map-card {
@@ -944,6 +1309,10 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         }
 
         .vehicle-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .pickup-item-grid {
           grid-template-columns: 1fr;
         }
 
@@ -1012,6 +1381,7 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
   ]
 })
 export class BookingComponent implements OnDestroy {
+  isSchoolBookingPage = false;
   currentUser: AppUser | null = null;
   profileImageUrl = 'https://ui-avatars.com/api/?name=User&background=f0f4ff&color=0f172a&size=128';
   selectedProfileImage = '';
@@ -1021,23 +1391,32 @@ export class BookingComponent implements OnDestroy {
   howToBookPosterSrc = '/assets/login-banner.svg';
   serviceTypes: ServiceType[] = ['food', 'parcel', 'grocery', 'medicine', 'documents'];
   paymentMethods: PaymentMethod[] = ['cash', 'card', 'upi', 'wallet'];
+  upiAppOptions: Array<{ id: 'phonepe' | 'gpay' | 'amazonpay'; label: string; packageHint: string }> = [
+    { id: 'phonepe', label: 'PhonePe', packageHint: 'com.phonepe.app' },
+    { id: 'gpay', label: 'Google Pay', packageHint: 'com.google.android.apps.nbu.paisa.user' },
+    { id: 'amazonpay', label: 'Amazon Pay', packageHint: 'in.amazon.mShop.android.shopping' }
+  ];
 
   serviceType: ServiceType = 'parcel';
   paymentMethod: PaymentMethod = 'upi';
+  selectedUpiApp: 'phonepe' | 'gpay' | 'amazonpay' | '' = 'phonepe';
   bookingFor: 'self' | 'others' = 'self';
   recipientName = '';
   recipientPhone = '';
   bookingTimeMode: 'now' | 'later' = 'now';
   notificationTarget: 'all' | 'preferred' = 'preferred';
+  focusedMode: FocusedBookingMode = 'all';
   womenSafetyProtectionMode = false;
   teenageRideMode = false;
   scheduledAtLocal = '';
   vehicleType: VehicleType = 'bike';
   bookingVehicleOptions: Array<{ type: VehicleType; label: string; icon: string }> = [
     { type: 'bike', label: 'Bike', icon: '🏍️' },
+    { type: 'scooter', label: 'Scooty', icon: '🛵' },
     { type: 'auto', label: 'Auto', icon: '🛺' },
     { type: 'car', label: 'Car', icon: '🚗' }
   ];
+  private readonly foodDeliveryVehicleTypes: VehicleType[] = ['bike', 'scooter'];
   nearbyCaptains: NearbyCaptain[] = [];
   selectedCaptain: NearbyCaptain | null = null;
   estimatedFare = 120;
@@ -1056,13 +1435,30 @@ export class BookingComponent implements OnDestroy {
   nearbyHotelsLastUpdatedAt: Date | null = null;
   foodPreference: 'all' | 'veg' | 'nonveg' = 'all';
   showAllHotels = false;
+  selectedHotelId = '';
+  selectedHotelMenu: FoodMenuItem[] = [];
+  foodCartItems: Array<{ item: FoodMenuItem; qty: number }> = [];
+  foodCheckoutOpen = false;
+  foodMenuLoading = false;
+  defaultHotelImageUrl = 'https://images.unsplash.com/photo-1559339352-11d035aa65de?auto=format&fit=crop&w=900&q=80';
+  defaultFoodItemImageUrl = 'https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?auto=format&fit=crop&w=900&q=80';
   rideNotes = '';
   lunchBoxDeliveryMode = false;
   pickupServiceMode = false;
+  pickupSelectedShopName = '';
   pickupShopName = '';
   pickupShopPhone = '';
   pickupItemDetails = '';
   pickupShopInstructions = '';
+  pickupItemGridOptions: Array<{ label: string; hint: string }> = [
+    { label: 'Grocery', hint: 'Daily items and food packs' },
+    { label: 'Medicines', hint: 'Pharmacy pickup' },
+    { label: 'Documents', hint: 'Files and paper envelope' },
+    { label: 'Electronics', hint: 'Small gadgets and accessories' },
+    { label: 'Clothing', hint: 'Garments and textile parcel' },
+    { label: 'Fragile', hint: 'Glass or sensitive items' }
+  ];
+  pickupItemGridSelection: string[] = [];
   lunchStudentName = '';
   lunchStudentClass = '';
   lunchSchoolName = '';
@@ -1090,6 +1486,7 @@ export class BookingComponent implements OnDestroy {
   private nearbyHotelsRefreshHandle: ReturnType<typeof setInterval> | null = null;
   private liveTrackHandle: ReturnType<typeof setInterval> | null = null;
   private historySubscription?: Subscription;
+  private authSubscription?: Subscription;
   private routeQueryParamsSubscription?: Subscription;
   private liveFareRequestCounter = 0;
   private nearbyHotelsRequestCounter = 0;
@@ -1124,6 +1521,7 @@ export class BookingComponent implements OnDestroy {
     private router: Router,
     private route: ActivatedRoute
   ) {
+    this.isSchoolBookingPage = this.route.snapshot.routeConfig?.path === 'school-booking';
     this.currentUser = this.auth.getCurrentUser();
     this.loadWomenSafetyProtectionMode();
     this.profileImageUrl = this.currentUser?.profileImageUrl || this.buildUserAvatar(this.currentUser);
@@ -1136,17 +1534,37 @@ export class BookingComponent implements OnDestroy {
     this.refreshLocationSuggestions();
     this.ensureNearbyHotelsHeartbeat();
 
-    const user = this.auth.getCurrentUser();
-    if (user) {
-      this.historySubscription = this.bookingService.getBookingsForUser$(user.id).subscribe((items) => {
-        this.bookingHistory = [...items].sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
+    this.authSubscription = this.auth.user$.subscribe((user) => {
+      this.currentUser = user;
+      this.historySubscription?.unsubscribe();
+
+      if (!user) {
+        this.bookingHistory = [];
         this.refreshLocationSuggestions();
-      });
-    }
+        return;
+      }
+
+      this.historySubscription = this.bookingService.bookings$
+        .pipe(
+          map((items) => items.filter((item) => {
+            const itemUserId = String(item.userId || '').trim();
+            const userId = String(user.id || '').trim();
+            const itemUserName = String(item.userName || '').trim().toLowerCase();
+            const userName = String(user.displayName || '').trim().toLowerCase();
+            return itemUserId === userId || (!!userName && itemUserName === userName);
+          }))
+        )
+        .subscribe((items) => {
+          this.bookingHistory = [...items].sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+          this.refreshLocationSuggestions();
+        });
+    });
 
     this.routeQueryParamsSubscription = this.route.queryParamMap.subscribe((params) => {
+      const isSchoolBookingPage = this.route.snapshot.routeConfig?.path === 'school-booking';
+      this.isSchoolBookingPage = isSchoolBookingPage;
       const history = params.get('history');
       const bookingId = params.get('bookingId');
       const appliedCompletedFilter = history === 'completed';
@@ -1159,11 +1577,12 @@ export class BookingComponent implements OnDestroy {
       const bookingFor = params.get('bookingFor');
       const rideMode = params.get('rideMode');
 
-      if (appliedCompletedFilter) {
+      if (appliedCompletedFilter && !bookingId) {
         this.historyFilter = 'completed';
       }
 
       if (bookingId) {
+        this.historyFilter = 'all';
         this.historySearch = bookingId;
       }
 
@@ -1180,14 +1599,26 @@ export class BookingComponent implements OnDestroy {
         this.onWomenSafetyProtectionModeChange();
       }
 
+      if (womenSafety === '1') {
+        this.activateFocusedMode('womenSafety');
+      }
+
       if (teenageRide === '1' && !this.teenageRideMode) {
         this.teenageRideMode = true;
         this.onTeenageRideModeChange();
       }
 
-      if (lunchBox === '1' && !this.lunchBoxDeliveryMode) {
+      if (teenageRide === '1') {
+        this.activateFocusedMode('teen');
+      }
+
+      if ((lunchBox === '1' || isSchoolBookingPage) && !this.lunchBoxDeliveryMode) {
         this.lunchBoxDeliveryMode = true;
         this.onLunchBoxDeliveryModeChange();
+      }
+
+      if (lunchBox === '1' || isSchoolBookingPage) {
+        this.activateFocusedMode('school');
       }
 
       if (pickupService === '1' && !this.pickupServiceMode) {
@@ -1212,6 +1643,7 @@ export class BookingComponent implements OnDestroy {
 
       if (appliedCompletedFilter || bookingId) {
         this.notifications.push('Showing your completed ride in booking history.', 'success');
+        setTimeout(() => this.scrollToBookingHistory(), 50);
       }
     });
   }
@@ -1233,6 +1665,7 @@ export class BookingComponent implements OnDestroy {
     }
 
     this.historySubscription?.unsubscribe();
+    this.authSubscription?.unsubscribe();
     this.routeQueryParamsSubscription?.unsubscribe();
 
     if (this.speechRecognition) {
@@ -1280,9 +1713,7 @@ export class BookingComponent implements OnDestroy {
           this.notifications.push('Live captains unavailable. Showing nearby fallback captains.', 'warning');
         }
 
-        const matchesVehicle = this.rankNearbyCaptains(
-          this.nearbyCaptains.filter((captain) => captain.vehicleType === this.vehicleType)
-        );
+        const matchesVehicle = this.captainsForCurrentService(this.nearbyCaptains);
         const currentSelected = this.selectedCaptain
           ? matchesVehicle.find((captain) => captain.id === this.selectedCaptain?.id && this.isCaptainAvailable(captain))
           : undefined;
@@ -1299,9 +1730,7 @@ export class BookingComponent implements OnDestroy {
       },
       error: () => {
         this.nearbyCaptains = this.generateFallbackNearbyCaptains();
-        const matchesVehicle = this.rankNearbyCaptains(
-          this.nearbyCaptains.filter((captain) => captain.vehicleType === this.vehicleType)
-        );
+        const matchesVehicle = this.captainsForCurrentService(this.nearbyCaptains);
         this.selectedCaptain = this.pickBestAvailableCaptain(matchesVehicle) || null;
 
         if (!this.captainFallbackNoticeShown) {
@@ -1322,8 +1751,7 @@ export class BookingComponent implements OnDestroy {
   }
 
   get filteredNearbyCaptains(): NearbyCaptain[] {
-    const matchingVehicle = this.nearbyCaptains.filter((captain) => captain.vehicleType === this.vehicleType);
-    return this.rankNearbyCaptains(matchingVehicle);
+    return this.captainsForCurrentService(this.nearbyCaptains);
   }
 
   get mapCaptains(): NearbyCaptain[] {
@@ -1393,17 +1821,22 @@ export class BookingComponent implements OnDestroy {
   }
 
   onVehicleTypeChange(vehicleType: VehicleType): void {
+    if (this.serviceType === 'food') {
+      this.vehicleType = 'bike';
+      return;
+    }
+
     this.vehicleType = vehicleType;
     const list = this.filteredNearbyCaptains;
     if (list.length === 0) {
       this.selectedCaptain = null;
-      this.updateEstimatedFare(2.5, this.vehicleType);
+      this.updateEstimatedFare(this.getFareDistanceKm(), this.vehicleType);
       return;
     }
     const next = this.pickBestAvailableCaptain(list);
     if (!next) {
       this.selectedCaptain = null;
-      this.updateEstimatedFare(2.5, this.vehicleType);
+      this.updateEstimatedFare(this.getFareDistanceKm(), this.vehicleType);
       return;
     }
     this.selectCaptain(next);
@@ -1420,34 +1853,72 @@ export class BookingComponent implements OnDestroy {
     }
     this.selectedCaptain = captain;
     this.vehicleType = captain.vehicleType;
-    this.updateEstimatedFare(captain.distanceKm, captain.vehicleType);
+    this.updateEstimatedFare(this.getFareDistanceKm(), captain.vehicleType);
     this.clearAvailabilitySurcharge();
   }
 
   onServiceTypeChange(serviceType: ServiceType): void {
     this.serviceType = serviceType;
     this.showAllHotels = false;
+
+    if (serviceType === 'food') {
+      this.vehicleType = 'bike';
+      if (this.selectedCaptain && !this.foodDeliveryVehicleTypes.includes(this.selectedCaptain.vehicleType)) {
+        this.selectedCaptain = null;
+      }
+      this.notificationTarget = 'all';
+      this.applyFoodDropFromCustomerLocation();
+      if (this.selectedHotelForFood) {
+        this.applyFoodPickupFromHotel(this.selectedHotelForFood);
+      }
+    }
+
+    if (serviceType !== 'food') {
+      this.selectedHotelId = '';
+      this.selectedHotelMenu = [];
+      this.foodCartItems = [];
+      this.foodCheckoutOpen = false;
+      this.selectedUpiApp = 'phonepe';
+    }
+
+    this.refreshNearbyCaptains();
     this.refreshNearbyHotelsLive(true);
     this.ensureNearbyHotelsHeartbeat();
   }
 
-  onPickupLocationInputChanged(): void {
-    if (this.serviceType !== 'food') {
-      return;
+  onPickupLocationInputChanged(refreshNetworkData = false): void {
+    this.refreshLocationSuggestions();
+    this.popularPlaces = this.buildPopularPlaces();
+
+    if (refreshNetworkData) {
+      this.refreshNearbyCaptains();
+      if (this.selectedCaptain) {
+        this.updateEstimatedFare(this.getFareDistanceKm(), this.selectedCaptain.vehicleType);
+      }
     }
 
-    this.refreshNearbyHotelsLive(true);
+    if (this.serviceType === 'food') {
+      this.refreshNearbyHotelsLive(true);
+    }
   }
 
   setFoodPreference(preference: 'all' | 'veg' | 'nonveg'): void {
     this.foodPreference = preference;
     this.showAllHotels = false;
+
+    if (this.selectedHotelForFood) {
+      this.loadHotelMenuForSelectedHotel(this.selectedHotelForFood, true);
+    }
   }
 
   onWomenSafetyProtectionModeChange(): void {
     this.persistWomenSafetyProtectionMode();
     const modeLabel = this.womenSafetyProtectionMode ? 'enabled' : 'disabled';
     this.notifications.push(`Women Safety Protection mode ${modeLabel}.`, 'info');
+
+    if (!this.womenSafetyProtectionMode && this.focusedMode === 'womenSafety') {
+      this.focusedMode = 'all';
+    }
 
     const bestCaptain = this.pickBestAvailableCaptain(this.filteredNearbyCaptains);
     if (bestCaptain) {
@@ -1459,11 +1930,16 @@ export class BookingComponent implements OnDestroy {
     if (this.teenageRideMode) {
       this.bookingFor = 'others';
       this.notificationTarget = 'preferred';
+      this.activateFocusedMode('teen');
       if (!this.rideNotes.toLowerCase().includes('teenage ride mode')) {
         this.rideNotes = `${this.rideNotes ? `${this.rideNotes} | ` : ''}Teenage Ride Mode`;
       }
       this.notifications.push('Teenage Ride Mode enabled. Booking is set for Others with preferred captain alerts.', 'info');
       return;
+    }
+
+    if (this.focusedMode === 'teen') {
+      this.focusedMode = 'all';
     }
 
     this.notifications.push('Teenage Ride Mode disabled.', 'info');
@@ -1480,12 +1956,12 @@ export class BookingComponent implements OnDestroy {
   get topRatedNearbyHotels(): NearbyHotel[] {
     return [...this.filteredNearbyHotels]
       .sort((a, b) => {
-        if (b.rating === a.rating) {
-          return a.distanceKm - b.distanceKm;
+        if (a.distanceKm === b.distanceKm) {
+          return b.rating - a.rating;
         }
-        return b.rating - a.rating;
+        return a.distanceKm - b.distanceKm;
       })
-      .slice(0, 3);
+      .slice(0, 10);
   }
 
   get displayedNearbyHotels(): NearbyHotel[] {
@@ -1494,6 +1970,148 @@ export class BookingComponent implements OnDestroy {
 
   toggleHotelView(): void {
     this.showAllHotels = !this.showAllHotels;
+  }
+
+  get selectedHotelForFood(): NearbyHotel | undefined {
+    return this.nearbyHotels.find((hotel) => hotel.id === this.selectedHotelId);
+  }
+
+  get foodCartSubtotal(): number {
+    return this.foodCartItems.reduce((sum, row) => sum + (row.qty * row.item.price), 0);
+  }
+
+  get foodDeliveryFee(): number {
+    const hotel = this.selectedHotelForFood;
+    if (!hotel) {
+      return 0;
+    }
+    return Math.max(20, Math.round(hotel.distanceKm * 12));
+  }
+
+  get foodPlatformFee(): number {
+    return this.foodCartItems.length > 0 ? 4 : 0;
+  }
+
+  get foodCartTotal(): number {
+    return this.foodCartSubtotal + this.foodDeliveryFee + this.foodPlatformFee;
+  }
+
+  get canDirectFoodBook(): boolean {
+    return this.serviceType !== 'food' || (this.foodCartItems.length > 0 && this.foodCheckoutOpen);
+  }
+
+  selectHotelForFood(hotel: NearbyHotel): void {
+    this.selectedHotelId = hotel.id;
+    this.selectedHotelMenu = [];
+    this.foodCartItems = [];
+    this.foodCheckoutOpen = false;
+    this.foodMenuLoading = true;
+
+    this.applyFoodPickupFromHotel(hotel);
+    this.applyFoodDropFromCustomerLocation();
+    this.loadHotelMenuForSelectedHotel(hotel);
+  }
+
+  onBookingForChange(): void {
+    if (this.serviceType !== 'food') {
+      return;
+    }
+
+    this.applyFoodDropFromCustomerLocation();
+  }
+
+  increaseFoodItemQty(item: FoodMenuItem): void {
+    const existing = this.foodCartItems.find((row) => row.item.id === item.id);
+    if (existing) {
+      existing.qty += 1;
+      return;
+    }
+    this.foodCartItems = [...this.foodCartItems, { item, qty: 1 }];
+  }
+
+  decreaseFoodItemQty(item: FoodMenuItem): void {
+    const existing = this.foodCartItems.find((row) => row.item.id === item.id);
+    if (!existing) {
+      return;
+    }
+    if (existing.qty <= 1) {
+      this.foodCartItems = this.foodCartItems.filter((row) => row.item.id !== item.id);
+      return;
+    }
+    existing.qty -= 1;
+  }
+
+  foodItemQty(itemId: string): number {
+    return this.foodCartItems.find((row) => row.item.id === itemId)?.qty || 0;
+  }
+
+  openFoodCheckout(): void {
+    if (!this.selectedHotelForFood) {
+      this.notifications.push('Please select a hotel first.', 'warning');
+      return;
+    }
+    if (this.foodCartItems.length === 0) {
+      this.notifications.push('Please add at least one menu item.', 'warning');
+      return;
+    }
+    if (this.paymentMethod === 'upi' && !this.selectedUpiApp) {
+      this.selectedUpiApp = 'phonepe';
+    }
+    this.foodCheckoutOpen = true;
+  }
+
+  confirmFoodPaymentAndBook(): void {
+    if (this.serviceType !== 'food') {
+      this.bookNow();
+      return;
+    }
+
+    if (this.paymentMethod === 'upi') {
+      if (!this.selectedUpiApp) {
+        this.notifications.push('Please select a UPI app.', 'warning');
+        return;
+      }
+
+      const launched = this.launchSelectedUpiApp();
+      if (!launched) {
+        this.notifications.push('Unable to open selected UPI app on this device/browser.', 'warning');
+      } else {
+        this.notifications.push('Opening selected UPI app for payment...', 'info');
+      }
+    }
+
+    this.foodCheckoutOpen = true;
+    this.bookNow();
+  }
+
+  private launchSelectedUpiApp(): boolean {
+    const option = this.upiAppOptions.find((item) => item.id === this.selectedUpiApp);
+    if (!option) {
+      return false;
+    }
+
+    const payeeVpa = 'payments@routex';
+    const payeeName = 'RouteX';
+    const amount = this.foodCartTotal.toFixed(2);
+    const transactionNote = encodeURIComponent(`RouteX Food Order ${Date.now()}`);
+
+    const appDeepLinks: Record<'phonepe' | 'gpay' | 'amazonpay', string> = {
+      phonepe: `phonepe://pay?pa=${encodeURIComponent(payeeVpa)}&pn=${encodeURIComponent(payeeName)}&am=${amount}&cu=INR&tn=${transactionNote}`,
+      gpay: `tez://upi/pay?pa=${encodeURIComponent(payeeVpa)}&pn=${encodeURIComponent(payeeName)}&am=${amount}&cu=INR&tn=${transactionNote}`,
+      amazonpay: `amazonpay://upi/pay?pa=${encodeURIComponent(payeeVpa)}&pn=${encodeURIComponent(payeeName)}&am=${amount}&cu=INR&tn=${transactionNote}`
+    };
+
+    const fallbackUpiUrl = `upi://pay?pa=${encodeURIComponent(payeeVpa)}&pn=${encodeURIComponent(payeeName)}&am=${amount}&cu=INR&tn=${transactionNote}`;
+
+    try {
+      window.location.href = appDeepLinks[option.id];
+      setTimeout(() => {
+        window.location.href = fallbackUpiUrl;
+      }, 900);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   vehicleIcon(vehicleType: VehicleType): string {
@@ -1512,14 +2130,64 @@ export class BookingComponent implements OnDestroy {
     return '🚚';
   }
 
+  vehiclePriceBadge(vehicleType: VehicleType): string {
+    if (vehicleType === 'scooter') {
+      return 'Cheapest';
+    }
+    if (vehicleType === 'bike') {
+      return 'Budget';
+    }
+    return '';
+  }
+
+  vehiclePriceHint(vehicleType: VehicleType): string {
+    if (vehicleType === 'scooter') {
+      return 'Save Rs 5-Rs 15 vs Bike';
+    }
+    if (vehicleType === 'bike') {
+      return 'Low fare option';
+    }
+    return '';
+  }
+
   statusBadge(status: NearbyCaptain['availability']): string {
     if (status === 'available') {
       return 'text-bg-success';
     }
-    if (status === 'arriving') {
-      return 'text-bg-info';
+    return 'text-bg-warning';
+  }
+
+  captainAvailabilityLabel(status: NearbyCaptain['availability']): string {
+    if (status === 'available') {
+      return 'Available';
     }
-    return 'text-bg-secondary';
+    return 'Booked';
+  }
+
+  kycStatusLabel(status: KycStatus | undefined): string {
+    if (status === 'verified') {
+      return 'Verified';
+    }
+    if (status === 'pending') {
+      return 'Pending';
+    }
+    if (status === 'rejected') {
+      return 'Rejected';
+    }
+    return 'Not Started';
+  }
+
+  kycBadgeClass(status: KycStatus | undefined): string {
+    if (status === 'verified') {
+      return 'kyc-verified';
+    }
+    if (status === 'pending') {
+      return 'kyc-pending';
+    }
+    if (status === 'rejected') {
+      return 'kyc-rejected';
+    }
+    return 'kyc-not-started';
   }
 
   historyStatusLabel(status: Booking['status']): string {
@@ -1561,6 +2229,9 @@ export class BookingComponent implements OnDestroy {
 
   onLunchBoxDeliveryModeChange(): void {
     if (!this.lunchBoxDeliveryMode) {
+      if (this.focusedMode === 'school') {
+        this.focusedMode = 'all';
+      }
       return;
     }
 
@@ -1579,7 +2250,42 @@ export class BookingComponent implements OnDestroy {
       return;
     }
 
+    this.pickupSelectedShopName = '';
+    this.pickupItemGridSelection = [];
+
     this.notifications.push('Pickup Service mode disabled.', 'info');
+  }
+
+  get pickupShopOptions(): string[] {
+    const names = this.nearbyHotels
+      .map((hotel) => (hotel.name || '').trim())
+      .filter((name) => !!name);
+
+    return Array.from(new Set(names)).sort((a, b) => a.localeCompare(b));
+  }
+
+  onPickupShopSelected(shopName: string): void {
+    this.pickupSelectedShopName = shopName || '';
+    if (!this.pickupSelectedShopName) {
+      return;
+    }
+
+    this.pickupShopName = this.pickupSelectedShopName;
+    const matched = this.nearbyHotels.find((hotel) => hotel.name === this.pickupSelectedShopName);
+    if (matched?.locationLabel) {
+      this.pickupAddress = matched.locationLabel;
+    }
+  }
+
+  togglePickupItemGridOption(label: string): void {
+    const exists = this.pickupItemGridSelection.includes(label);
+    this.pickupItemGridSelection = exists
+      ? this.pickupItemGridSelection.filter((item) => item !== label)
+      : [...this.pickupItemGridSelection, label];
+  }
+
+  isPickupItemGridSelected(label: string): boolean {
+    return this.pickupItemGridSelection.includes(label);
   }
 
   historyStatusBadge(status: Booking['status']): string {
@@ -1628,7 +2334,7 @@ export class BookingComponent implements OnDestroy {
           this.dropAddress = label;
           this.saveRecentLocation('drop', { name: label, lat, lng });
           if (this.selectedCaptain) {
-            this.updateEstimatedFare(this.selectedCaptain.distanceKm, this.selectedCaptain.vehicleType);
+            this.updateEstimatedFare(this.getFareDistanceKm(), this.selectedCaptain.vehicleType);
           }
         }
 
@@ -1672,7 +2378,7 @@ export class BookingComponent implements OnDestroy {
     this.dropLng = preset.lng;
     this.saveRecentLocation('drop', preset);
     if (this.selectedCaptain) {
-      this.updateEstimatedFare(this.selectedCaptain.distanceKm, this.selectedCaptain.vehicleType);
+      this.updateEstimatedFare(this.getFareDistanceKm(), this.selectedCaptain.vehicleType);
     }
     this.refreshLocationSuggestions();
   }
@@ -1685,12 +2391,29 @@ export class BookingComponent implements OnDestroy {
       return;
     }
 
-    if (!this.selectedCaptain) {
-      this.notifications.push('Please select a captain from nearby list.', 'warning');
-      return;
+    if (!this.selectedCaptain && this.serviceType !== 'food') {
+      if (!this.selectedCaptain) {
+        this.notifications.push('Please select a captain from nearby list.', 'warning');
+        return;
+      }
     }
 
-    if (!this.isCaptainAvailable(this.selectedCaptain)) {
+    if (this.serviceType === 'food') {
+      if (!this.selectedHotelForFood) {
+        this.notifications.push('Please select a hotel from nearby list.', 'warning');
+        return;
+      }
+      if (this.foodCartItems.length === 0) {
+        this.notifications.push('Please add food items before booking.', 'warning');
+        return;
+      }
+      if (!this.foodCheckoutOpen) {
+        this.notifications.push('Please proceed to payment before placing food order.', 'warning');
+        return;
+      }
+    }
+
+    if (this.selectedCaptain && !this.isCaptainAvailable(this.selectedCaptain)) {
       this.selectedCaptain = null;
       this.applyCaptainNotReadyFee(this.vehicleType);
       return;
@@ -1715,6 +2438,8 @@ export class BookingComponent implements OnDestroy {
       }
     }
 
+    const estimatedFare = this.serviceType === 'food' ? this.foodCartTotal : this.totalEstimatedFare;
+
     const request: BookingRequest = {
       bookingFor: this.bookingFor,
       recipientName: this.bookingFor === 'others' ? this.recipientName.trim() : undefined,
@@ -1733,14 +2458,20 @@ export class BookingComponent implements OnDestroy {
         lat: Number(this.dropLat),
         lng: Number(this.dropLng)
       },
-      captainId: this.selectedCaptain.id,
-      captainName: this.selectedCaptain.name,
-      captainPhone: this.selectedCaptain.phone,
+      captainId: this.selectedCaptain?.id,
+      captainName: this.selectedCaptain?.name,
+      captainPhone: this.selectedCaptain?.phone,
       notificationTarget: this.notificationTarget,
-      preferredCaptainId: this.notificationTarget === 'preferred' ? this.selectedCaptain.id : undefined,
-      preferredCaptainName: this.notificationTarget === 'preferred' ? this.selectedCaptain.name : undefined,
-      estimatedFare: this.totalEstimatedFare,
-      rideNotes: this.buildCombinedRideNotes()
+      preferredCaptainId: this.notificationTarget === 'preferred' ? this.selectedCaptain?.id : undefined,
+      preferredCaptainName: this.notificationTarget === 'preferred' ? this.selectedCaptain?.name : undefined,
+      estimatedFare,
+      rideNotes: this.buildCombinedRideNotes(),
+      pickupServiceMode: this.pickupServiceMode,
+      pickupShopName: this.pickupShopName.trim() || undefined,
+      pickupShopPhone: this.pickupShopPhone.trim() || undefined,
+      pickupItemDetails: this.pickupItemDetails.trim() || undefined,
+      pickupShopInstructions: this.pickupShopInstructions.trim() || undefined,
+      pickupItemGridSelection: this.pickupItemGridSelection.length > 0 ? [...this.pickupItemGridSelection] : undefined
     };
 
     this.saveRecentLocation('pickup', { name: request.pickup.address, lat: request.pickup.lat, lng: request.pickup.lng });
@@ -1761,10 +2492,27 @@ export class BookingComponent implements OnDestroy {
         estimatedFare: booking.estimatedFare
       })
       .subscribe({ error: () => void 0 });
-    this.notifications.push(
-      `Ride request ${booking.id} sent. Waiting for captain acceptance. Once accepted, start ride with OTP from tracking/history.`,
-      'info'
-    );
+    if (this.serviceType === 'food') {
+      this.notifications.push(
+        `Order ${booking.id} placed. Searching for captains now. You can track each step on the tracking page.`,
+        'info'
+      );
+    } else {
+      this.notifications.push(
+        `Ride request ${booking.id} sent. Waiting for captain acceptance. Once accepted, start ride with OTP from tracking/history.`,
+        'info'
+      );
+    }
+
+    if (request.captainId) {
+      this.nearbyCaptains = this.nearbyCaptains.map((captain) =>
+        captain.id === request.captainId
+          ? { ...captain, availability: 'busy' }
+          : captain
+      );
+    }
+
+    this.router.navigate(['/tracking', booking.id]);
   }
 
   rebookFromHistory(historyBooking: Booking): void {
@@ -1785,8 +2533,105 @@ export class BookingComponent implements OnDestroy {
     this.router.navigate(['/tracking', booking.id]);
   }
 
+  private scrollToBookingHistory(): void {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    const section = document.getElementById('booking-history-section');
+    if (!section) {
+      return;
+    }
+
+    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
   openLunchboxBookingsPage(): void {
-    this.router.navigate(['/lunchbox-bookings']);
+    this.activateFocusedMode('school');
+    this.notifications.push('RouteX School Delivery mode opened.', 'info');
+    this.router.navigate(['/school-booking'], {
+      queryParams: {
+        lunchBox: 1,
+        service: 'food'
+      }
+    });
+  }
+
+  get focusedModeTitle(): string {
+    if (this.focusedMode === 'womenSafety') {
+      return 'Women Safety Protection Mode';
+    }
+
+    if (this.focusedMode === 'teen') {
+      return 'Teenage Ride Mode';
+    }
+
+    if (this.focusedMode === 'school') {
+      return 'RouteX School Delivery Mode';
+    }
+
+    return 'All Modes';
+  }
+
+  get focusedModeHint(): string {
+    if (this.focusedMode === 'womenSafety') {
+      return 'Only women safety booking options are shown.';
+    }
+
+    if (this.focusedMode === 'teen') {
+      return 'Only teenage ride booking options are shown.';
+    }
+
+    if (this.focusedMode === 'school') {
+      return 'Only RouteX School booking options are shown.';
+    }
+
+    return 'All booking options are visible.';
+  }
+
+  get focusedModeAvatar(): string {
+    if (this.focusedMode === 'womenSafety') {
+      return '🛡️';
+    }
+
+    if (this.focusedMode === 'teen') {
+      return '🧒';
+    }
+
+    if (this.focusedMode === 'school') {
+      return '🎒';
+    }
+
+    return '🚚';
+  }
+
+  clearFocusedMode(): void {
+    this.focusedMode = 'all';
+  }
+
+  private activateFocusedMode(mode: FocusedBookingMode): void {
+    this.focusedMode = mode;
+
+    if (mode === 'womenSafety') {
+      this.womenSafetyProtectionMode = true;
+      this.persistWomenSafetyProtectionMode();
+      this.serviceType = 'parcel';
+      return;
+    }
+
+    if (mode === 'teen') {
+      this.teenageRideMode = true;
+      this.bookingFor = 'others';
+      this.serviceType = 'parcel';
+      return;
+    }
+
+    if (mode === 'school') {
+      this.lunchBoxDeliveryMode = true;
+      this.serviceType = 'food';
+      this.bookingFor = 'others';
+      this.applyLunchDropAddressFromSchool(this.lunchSchoolAddress);
+    }
   }
 
   setHistoryFilter(filter: 'all' | 'completed' | 'cancelled' | 'scheduled'): void {
@@ -1839,8 +2684,8 @@ export class BookingComponent implements OnDestroy {
   private calculateFare(distanceKm: number, vehicleType: VehicleType): number {
     const multipliers: Record<VehicleType, number> = {
       bike: 1,
-      auto: 1.25,
-      scooter: 1.1,
+      scooter: 0.9,
+      auto: 1.2,
       car: 1.5,
       van: 1.9,
       truck: 2.4
@@ -1850,24 +2695,40 @@ export class BookingComponent implements OnDestroy {
     const distanceFare = distanceKm * 15;
     const trafficMultiplier = this.getTrafficMultiplier(this.trafficCondition);
     const weatherMultiplier = this.getWeatherMultiplier(this.weatherCondition);
+    const bikeSubtotal = (baseFare + distanceFare) * multipliers.bike;
+    const bikeTotal = Math.round(bikeSubtotal * trafficMultiplier * weatherMultiplier);
     const subtotal = (baseFare + distanceFare) * multipliers[vehicleType];
-    const total = Math.round(subtotal * trafficMultiplier * weatherMultiplier);
+    let total = Math.round(subtotal * trafficMultiplier * weatherMultiplier);
+
+    if (vehicleType === 'scooter') {
+      const discount = this.scooterDiscountForDistance(distanceKm);
+      total = Math.max(1, bikeTotal - discount);
+    }
 
     this.fareBreakdown = {
       baseFare,
       distanceFare: Math.round(distanceFare),
       trafficMultiplier,
       weatherMultiplier,
-      vehicleMultiplier: multipliers[vehicleType],
+      vehicleMultiplier: bikeSubtotal > 0 ? this.round(total / Math.max(1, Math.round(bikeSubtotal * trafficMultiplier * weatherMultiplier))) : multipliers[vehicleType],
       total
     };
 
     return total;
   }
 
+  private scooterDiscountForDistance(distanceKm: number): number {
+    const distanceBased = Math.round(Math.max(0, distanceKm) * 2);
+    return Math.min(15, Math.max(5, distanceBased));
+  }
+
   private updateEstimatedFare(distanceKm: number, vehicleType: VehicleType): void {
     this.estimatedFare = this.calculateFare(distanceKm, vehicleType);
     this.fetchLiveFare(distanceKm, vehicleType);
+  }
+
+  private getFareDistanceKm(): number {
+    return Math.max(2.5, this.routeDistanceKm || 0);
   }
 
   private getTrafficMultiplier(condition: TrafficCondition): number {
@@ -1914,7 +2775,7 @@ export class BookingComponent implements OnDestroy {
         lat: pickupLat,
         lng: pickupLng,
         radiusMeters: 3500,
-        limit: 12,
+        limit: 20,
         preference: 'all'
       })
       .subscribe({
@@ -1925,6 +2786,17 @@ export class BookingComponent implements OnDestroy {
 
           const mapped = this.mapNearbyHotelsFromApi(response.hotels || []);
           this.nearbyHotels = mapped.length > 0 ? mapped : this.generateNearbyHotelsFallback();
+          if (this.selectedHotelId && !this.nearbyHotels.some((hotel) => hotel.id === this.selectedHotelId)) {
+            this.selectedHotelId = '';
+            this.selectedHotelMenu = [];
+            this.foodCartItems = [];
+            this.foodCheckoutOpen = false;
+            this.foodMenuLoading = false;
+          }
+          const selectedHotel = this.selectedHotelForFood;
+          if (selectedHotel) {
+            this.loadHotelMenuForSelectedHotel(selectedHotel, true);
+          }
           this.nearbyHotelsLastUpdatedAt = response.updatedAt ? new Date(response.updatedAt) : new Date();
           this.showAllHotels = false;
           this.nearbyHotelsApiWarningShown = false;
@@ -1935,6 +2807,9 @@ export class BookingComponent implements OnDestroy {
           }
 
           this.nearbyHotels = this.generateNearbyHotelsFallback();
+          if (this.selectedHotelForFood) {
+            this.loadHotelMenuForSelectedHotel(this.selectedHotelForFood, true);
+          }
           this.nearbyHotelsLastUpdatedAt = new Date();
           this.showAllHotels = false;
 
@@ -1968,19 +2843,86 @@ export class BookingComponent implements OnDestroy {
     return items
       .filter((item) => !!item?.id && !!item?.name)
       .map((item) => {
-        const category: 'veg' | 'nonveg' = item.category === 'nonveg' ? 'nonveg' : 'veg';
+        const rawCategory = String(item.category || '').toLowerCase();
+        const category: 'veg' | 'nonveg' = rawCategory.includes('non') ? 'nonveg' : 'veg';
+        const estimatedPoint = this.estimateCoordsFromAddress(
+          String(item.locationLabel || item.name),
+          Number(this.pickupLat),
+          Number(this.pickupLng)
+        );
         return {
           id: String(item.id),
           name: String(item.name),
           category,
           locationLabel: String(item.locationLabel || 'Nearby'),
+          lat: estimatedPoint.lat,
+          lng: estimatedPoint.lng,
           distanceKm: this.round(Math.max(0.2, Number(item.distanceKm || 0))),
           etaMinutes: Math.max(5, Math.round(Number(item.etaMinutes || 0))),
           rating: Math.round(Math.max(1, Number(item.rating || 0)) * 10) / 10,
-          openNow: Boolean(item.openNow)
+          openNow: Boolean(item.openNow),
+          cuisine: String(item.cuisine || '').trim() || undefined,
+          priceForTwo: Number.isFinite(Number(item.priceForTwo)) ? Math.max(99, Math.round(Number(item.priceForTwo))) : undefined,
+          imageUrl: String(item.imageUrl || '').trim() || undefined
         };
       })
       .sort((a, b) => a.distanceKm - b.distanceKm || b.rating - a.rating);
+  }
+
+  private mapHotelMenuFromApi(items: HotelMenuApiItem[], hotel: NearbyHotel): FoodMenuItem[] {
+    return items
+      .filter((item) => !!item?.id && !!item?.name)
+      .map((item, index) => {
+        const rawCategory = String(item.category || hotel.category || '').toLowerCase();
+        const category: 'veg' | 'nonveg' = rawCategory.includes('non') ? 'nonveg' : 'veg';
+        return {
+          id: String(item.id),
+          name: String(item.name),
+          category,
+          price: Math.max(49, Math.round(Number(item.price || 0))),
+          isTop: Boolean(item.isTop ?? index < 3),
+          description: String(item.description || '').trim() || undefined,
+          imageUrl: String(item.imageUrl || '').trim() || undefined
+        };
+      });
+  }
+
+  private loadHotelMenuForSelectedHotel(hotel: NearbyHotel, preserveCart = false): void {
+    this.foodMenuLoading = true;
+    this.placesService.getHotelMenu({
+      hotelId: hotel.id,
+      preference: this.foodPreference,
+      limit: 10,
+      topOnly: false
+    }).subscribe({
+      next: (response) => {
+        const mapped = this.mapHotelMenuFromApi(response.items || [], hotel);
+        this.selectedHotelMenu = mapped.length > 0 ? mapped : this.buildHotelMenu(hotel);
+
+        if (preserveCart) {
+          this.foodCartItems = this.foodCartItems.filter((row) =>
+            this.selectedHotelMenu.some((item) => item.id === row.item.id)
+          );
+          if (this.foodCartItems.length === 0) {
+            this.foodCheckoutOpen = false;
+          }
+        }
+
+        this.foodMenuLoading = false;
+      },
+      error: () => {
+        this.selectedHotelMenu = this.buildHotelMenu(hotel);
+        if (preserveCart) {
+          this.foodCartItems = this.foodCartItems.filter((row) =>
+            this.selectedHotelMenu.some((item) => item.id === row.item.id)
+          );
+          if (this.foodCartItems.length === 0) {
+            this.foodCheckoutOpen = false;
+          }
+        }
+        this.foodMenuLoading = false;
+      }
+    });
   }
 
   private generateNearbyHotelsFallback(): NearbyHotel[] {
@@ -1991,14 +2933,20 @@ export class BookingComponent implements OnDestroy {
     const etaDrift = (timeBucket % 3) - 1;
 
     const catalog = [
-      { id: 'HT-1', name: 'Green Leaf Tiffins', category: 'veg' as const, lat: 17.4457, lng: 78.3908, locationLabel: 'Madhapur' },
-      { id: 'HT-2', name: 'Sri Annapurna Meals', category: 'veg' as const, lat: 17.4511, lng: 78.3792, locationLabel: 'Hitech City' },
-      { id: 'HT-3', name: 'Veggie Delight Kitchen', category: 'veg' as const, lat: 17.4388, lng: 78.3684, locationLabel: 'Gachibowli' },
-      { id: 'HT-4', name: 'Royal Biryani House', category: 'nonveg' as const, lat: 17.4296, lng: 78.4019, locationLabel: 'Jubilee Hills' },
-      { id: 'HT-5', name: 'Spice Route Grill', category: 'nonveg' as const, lat: 17.4544, lng: 78.3982, locationLabel: 'Kondapur' },
-      { id: 'HT-6', name: 'Nawab Kebab Point', category: 'nonveg' as const, lat: 17.4421, lng: 78.4136, locationLabel: 'Ameerpet' },
-      { id: 'HT-7', name: 'City Dosa Hub', category: 'veg' as const, lat: 17.4349, lng: 78.3851, locationLabel: 'SR Nagar' },
-      { id: 'HT-8', name: 'Tandoori Street', category: 'nonveg' as const, lat: 17.4482, lng: 78.3727, locationLabel: 'Raidurg' }
+      { id: 'HT-1', name: 'Green Leaf Tiffins', category: 'veg' as const, lat: 17.4457, lng: 78.3908, locationLabel: 'Madhapur', cuisine: 'South Indian', priceForTwo: 280, imageUrl: 'https://images.unsplash.com/photo-1512058564366-18510be2db19?auto=format&fit=crop&w=900&q=80' },
+      { id: 'HT-2', name: 'Sri Annapurna Meals', category: 'veg' as const, lat: 17.4511, lng: 78.3792, locationLabel: 'Hitech City', cuisine: 'Andhra Veg Meals', priceForTwo: 300, imageUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=900&q=80' },
+      { id: 'HT-3', name: 'Veggie Delight Kitchen', category: 'veg' as const, lat: 17.4388, lng: 78.3684, locationLabel: 'Gachibowli', cuisine: 'Pure Veg', priceForTwo: 320, imageUrl: 'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=900&q=80' },
+      { id: 'HT-4', name: 'Royal Biryani House', category: 'nonveg' as const, lat: 17.4296, lng: 78.4019, locationLabel: 'Jubilee Hills', cuisine: 'Biryani, Hyderabadi', priceForTwo: 520, imageUrl: 'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?auto=format&fit=crop&w=900&q=80' },
+      { id: 'HT-5', name: 'Spice Route Grill', category: 'nonveg' as const, lat: 17.4544, lng: 78.3982, locationLabel: 'Kondapur', cuisine: 'Grill, Kebab', priceForTwo: 470, imageUrl: 'https://images.unsplash.com/photo-1603894584373-5ac82b2ae398?auto=format&fit=crop&w=900&q=80' },
+      { id: 'HT-6', name: 'Nawab Kebab Point', category: 'nonveg' as const, lat: 17.4421, lng: 78.4136, locationLabel: 'Ameerpet', cuisine: 'Kebabs, Rolls', priceForTwo: 430, imageUrl: 'https://images.unsplash.com/photo-1529193591184-b1d58069ecdd?auto=format&fit=crop&w=900&q=80' },
+      { id: 'HT-7', name: 'City Dosa Hub', category: 'veg' as const, lat: 17.4349, lng: 78.3851, locationLabel: 'SR Nagar', cuisine: 'Dosa, Tiffins', priceForTwo: 260, imageUrl: 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?auto=format&fit=crop&w=900&q=80' },
+      { id: 'HT-8', name: 'Tandoori Street', category: 'nonveg' as const, lat: 17.4482, lng: 78.3727, locationLabel: 'Raidurg', cuisine: 'Tandoor, North Indian', priceForTwo: 480, imageUrl: 'https://images.unsplash.com/photo-1603894584373-5ac82b2ae398?auto=format&fit=crop&w=900&q=80' },
+      { id: 'HT-9', name: 'Andhra Spice Bowl', category: 'nonveg' as const, lat: 17.4429, lng: 78.3954, locationLabel: 'Madhapur', cuisine: 'Andhra, Curry Bowls', priceForTwo: 440, imageUrl: 'https://images.unsplash.com/photo-1562967914-608f82629710?auto=format&fit=crop&w=900&q=80' },
+      { id: 'HT-10', name: 'Pure Veg Thali Point', category: 'veg' as const, lat: 17.4392, lng: 78.3893, locationLabel: 'Hitech City', cuisine: 'Thali, North Indian', priceForTwo: 320, imageUrl: 'https://images.unsplash.com/photo-1596797038530-2c107aa76c45?auto=format&fit=crop&w=900&q=80' },
+      { id: 'HT-11', name: 'Family Dum Biryani', category: 'nonveg' as const, lat: 17.4336, lng: 78.4041, locationLabel: 'Jubilee Hills', cuisine: 'Dum Biryani', priceForTwo: 560, imageUrl: 'https://images.unsplash.com/photo-1701579231373-429419e65180?auto=format&fit=crop&w=900&q=80' },
+      { id: 'HT-12', name: 'Healthy Millet Meals', category: 'veg' as const, lat: 17.4539, lng: 78.3861, locationLabel: 'Kondapur', cuisine: 'Healthy, Millet', priceForTwo: 340, imageUrl: 'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=900&q=80' },
+      { id: 'HT-13', name: 'Spicy Chicken Kitchen', category: 'nonveg' as const, lat: 17.4476, lng: 78.4082, locationLabel: 'Ameerpet', cuisine: 'Fried Chicken', priceForTwo: 460, imageUrl: 'https://images.unsplash.com/photo-1562967914-608f82629710?auto=format&fit=crop&w=900&q=80' },
+      { id: 'HT-14', name: 'South Meals Express', category: 'veg' as const, lat: 17.4367, lng: 78.3774, locationLabel: 'Gachibowli', cuisine: 'Meals, Curry', priceForTwo: 290, imageUrl: 'https://images.unsplash.com/photo-1515003197210-e0cd71810b5f?auto=format&fit=crop&w=900&q=80' }
     ];
 
     const ranked = catalog.map((hotel, index) => {
@@ -2014,10 +2962,15 @@ export class BookingComponent implements OnDestroy {
         name: hotel.name,
         category: hotel.category,
         locationLabel: hotel.locationLabel,
+        lat: hotel.lat,
+        lng: hotel.lng,
         distanceKm,
         etaMinutes,
         rating,
-        openNow: (timeBucket + index) % 6 !== 0
+        openNow: (timeBucket + index) % 6 !== 0,
+        cuisine: hotel.cuisine,
+        priceForTwo: hotel.priceForTwo,
+        imageUrl: hotel.imageUrl
       };
     });
 
@@ -2050,6 +3003,23 @@ export class BookingComponent implements OnDestroy {
         this.weatherCondition = response.weatherCondition;
         this.fareBreakdown = response.breakdown;
         this.estimatedFare = response.breakdown.total;
+
+        if (vehicleType === 'scooter') {
+          const bikeEquivalentTotal = Math.round(
+            (response.breakdown.baseFare + response.breakdown.distanceFare)
+            * this.getTrafficMultiplier(response.trafficCondition)
+            * this.getWeatherMultiplier(response.weatherCondition)
+          );
+          const discount = this.scooterDiscountForDistance(response.distanceKm || distanceKm);
+          const scooterTotal = Math.max(1, bikeEquivalentTotal - discount);
+
+          this.estimatedFare = scooterTotal;
+          this.fareBreakdown = {
+            ...response.breakdown,
+            vehicleMultiplier: bikeEquivalentTotal > 0 ? this.round(scooterTotal / bikeEquivalentTotal) : 0.9,
+            total: scooterTotal
+          };
+        }
 
         const sourceLabel = response.source.googleTraffic && response.source.openWeather
           ? 'Live Google Traffic + OpenWeather'
@@ -2102,6 +3072,8 @@ export class BookingComponent implements OnDestroy {
     const locationLat = this.round(this.pickupLat + (((hash % 120) - 60) / 5000));
     const locationLng = this.round(this.pickupLng + ((((Math.floor(hash / 120)) % 120) - 60) / 5000));
     const locationLabel = this.dynamicCurrentLocationLabel(locationLat, locationLng);
+    const normalizedAvailability: NearbyCaptain['availability'] = captain.availability === 'busy' ? 'busy' : 'available';
+    const kycStatus: KycStatus = captain.kycStatus || (captain.rating >= 4.7 ? 'verified' : 'pending');
 
     return {
       id: captain.id,
@@ -2112,7 +3084,9 @@ export class BookingComponent implements OnDestroy {
       rating: this.round(captain.rating || 4.5),
       etaMinutes,
       distanceKm,
-      availability: captain.availability || 'available',
+      availability: normalizedAvailability,
+      kycStatus,
+      kycReferenceId: captain.kycReferenceId,
       locationLabel,
       locationLat,
       locationLng
@@ -2479,17 +3453,26 @@ export class BookingComponent implements OnDestroy {
       return;
     }
 
+    const pendingImage = this.selectedProfileImage;
     this.savingProfileImage = true;
-    this.auth.updateProfileImage(this.selectedProfileImage).subscribe({
+    this.auth.updateProfileImage(pendingImage).subscribe({
       next: (response) => {
+        const updatedImage = response.profileImageUrl || pendingImage;
         this.savingProfileImage = false;
-        this.auth.applyProfileImage(response.profileImageUrl);
-        this.profileImageUrl = response.profileImageUrl;
+        this.auth.applyProfileImage(updatedImage);
+        this.profileImageUrl = updatedImage;
         this.selectedProfileImage = '';
         this.notifications.push(response.message || 'Profile photo updated.', 'success');
       },
       error: (error) => {
         this.savingProfileImage = false;
+        if (pendingImage.startsWith('data:image/')) {
+          this.auth.applyProfileImage(pendingImage);
+          this.profileImageUrl = pendingImage;
+          this.selectedProfileImage = '';
+          this.notifications.push('Profile photo applied locally. Server sync failed, please retry later.', 'warning');
+          return;
+        }
         this.notifications.push(error?.error?.error || 'Failed to update profile photo.', 'error');
       }
     });
@@ -2660,7 +3643,7 @@ export class BookingComponent implements OnDestroy {
     this.refreshNearbyHotelsLive(true);
 
     if (this.selectedCaptain) {
-      this.updateEstimatedFare(this.selectedCaptain.distanceKm, this.selectedCaptain.vehicleType);
+      this.updateEstimatedFare(this.getFareDistanceKm(), this.selectedCaptain.vehicleType);
     }
 
     this.notifications.push(`Trip updated by voice: ${from} -> ${to}`, 'success');
@@ -2683,7 +3666,7 @@ export class BookingComponent implements OnDestroy {
     this.dropLng = estimated.lng;
 
     if (this.selectedCaptain) {
-      this.updateEstimatedFare(this.selectedCaptain.distanceKm, this.selectedCaptain.vehicleType);
+      this.updateEstimatedFare(this.getFareDistanceKm(), this.selectedCaptain.vehicleType);
     }
 
     this.refreshLocationSuggestions();
@@ -2713,12 +3696,20 @@ export class BookingComponent implements OnDestroy {
     });
   }
 
+  private captainsForCurrentService(captains: NearbyCaptain[]): NearbyCaptain[] {
+    if (this.serviceType === 'food') {
+      return this.rankNearbyCaptains(
+        captains.filter((captain) => this.foodDeliveryVehicleTypes.includes(captain.vehicleType))
+      );
+    }
+
+    return this.rankNearbyCaptains(captains.filter((captain) => captain.vehicleType === this.vehicleType));
+  }
+
   private captainPriorityScore(captain: NearbyCaptain): number {
     const availabilityBonus = captain.availability === 'available'
       ? 120
-      : captain.availability === 'arriving'
-        ? 60
-        : 0;
+      : 0;
 
     if (this.womenSafetyProtectionMode) {
       return availabilityBonus + captain.rating * 40 + Math.max(0, 18 - captain.etaMinutes) + Math.max(0, 8 - captain.distanceKm);
@@ -2839,10 +3830,11 @@ export class BookingComponent implements OnDestroy {
   }
 
   private generateFallbackNearbyCaptains(): NearbyCaptain[] {
-    const baseCaptains: Array<{ name: string; phone: string; vehicleType: VehicleType; rating: number }> = [
-      { name: 'Captain Ravi', phone: '9999900003', vehicleType: 'bike', rating: 4.7 },
-      { name: 'Captain Priya', phone: '9999900004', vehicleType: 'auto', rating: 4.8 },
-      { name: 'Captain Arjun', phone: '9999900005', vehicleType: 'car', rating: 4.9 }
+    const baseCaptains: Array<{ name: string; phone: string; vehicleType: VehicleType; rating: number; kycStatus: KycStatus; kycReferenceId: string }> = [
+      { name: 'Captain Ravi', phone: '9999900003', vehicleType: 'bike', rating: 4.7, kycStatus: 'verified', kycReferenceId: 'KYC-RX-1102' },
+      { name: 'Captain Kavya', phone: '9999900007', vehicleType: 'scooter', rating: 4.6, kycStatus: 'pending', kycReferenceId: 'KYC-RX-2134' },
+      { name: 'Captain Priya', phone: '9999900004', vehicleType: 'auto', rating: 4.8, kycStatus: 'verified', kycReferenceId: 'KYC-RX-3411' },
+      { name: 'Captain Arjun', phone: '9999900005', vehicleType: 'car', rating: 4.9, kycStatus: 'verified', kycReferenceId: 'KYC-RX-4298' }
     ];
 
     const seed = this.hashNumber(`${this.pickupLat}:${this.pickupLng}:${this.dropLat}:${this.dropLng}`);
@@ -2850,7 +3842,7 @@ export class BookingComponent implements OnDestroy {
     return baseCaptains.map((captain, index) => {
       const distanceKm = this.round(0.6 + ((seed + index * 11) % 35) / 10);
       const etaMinutes = Math.max(3, Math.round(distanceKm * 2.8));
-      const availability: NearbyCaptain['availability'] = (seed + index) % 4 === 0 ? 'arriving' : 'available';
+      const availability: NearbyCaptain['availability'] = 'available';
 
       return {
         id: `fallback-${captain.vehicleType}-${index + 1}`,
@@ -2862,6 +3854,8 @@ export class BookingComponent implements OnDestroy {
         etaMinutes,
         distanceKm,
         availability,
+        kycStatus: captain.kycStatus,
+        kycReferenceId: captain.kycReferenceId,
         locationLat: this.round(this.pickupLat + ((index - 1) * 0.0035)),
         locationLng: this.round(this.pickupLng + (((seed % 3) - 1) * 0.003)),
         locationLabel: this.dynamicCurrentLocationLabel(
@@ -2873,11 +3867,45 @@ export class BookingComponent implements OnDestroy {
   }
 
   private buildPopularPlaces(): PopularPlace[] {
-    const names = ['Airport Road Hub', 'City Mall', 'Metro Junction', 'Lake Side Street', 'Tech Park Gate'];
-    return names.slice(0, 3).map((name, index) => {
-      const distanceKm = this.round(0.8 + ((this.pickupLat + this.pickupLng + index) % 4));
-      const etaMinutes = Math.max(4, Math.round(distanceKm * 3 + 2));
-      const captainHint = this.nearbyCaptains[index]?.name || `Captain ${index + 1}`;
+    const pickupLat = Number(this.pickupLat);
+    const pickupLng = Number(this.pickupLng);
+    if (!Number.isFinite(pickupLat) || !Number.isFinite(pickupLng)) {
+      return [];
+    }
+
+    const zonePresets: Record<string, string[]> = {
+      'hitech city metro': ['Mindspace Circle', 'Cyber Towers Walkway', 'Shilparamam Junction'],
+      'gachibowli circle': ['DLF Street', 'Botanical Garden Gate', 'Financial District Arch'],
+      'madhapur tech park': ['Ayyappa Society Road', 'Image Hospital Lane', 'Inorbit Signal'],
+      'banjara hills road 12': ['GVK One Lane', 'Jalagam Vengal Rao Park', 'Road 12 Food Street'],
+      'secunderabad station': ['Paradise Circle', 'Clock Tower Lane', 'Patny Center']
+    };
+
+    const nearestPreset = [...this.locationPresets].sort((a, b) => {
+      const aDistance = this.distanceSquared(pickupLat, pickupLng, a.lat, a.lng);
+      const bDistance = this.distanceSquared(pickupLat, pickupLng, b.lat, b.lng);
+      return aDistance - bDistance;
+    })[0];
+
+    const address = this.pickupAddress.trim().toLowerCase();
+    const matchedPresetName = Object.keys(zonePresets).find((key) => address.includes(key.toLowerCase()));
+    const fallbackPresetName = nearestPreset?.name?.toLowerCase() || 'hitech city metro';
+    const cityPlaces = zonePresets[matchedPresetName || fallbackPresetName] || zonePresets['hitech city metro'];
+
+    const hotelDrivenPlaces = this.nearbyHotels
+      .slice(0, 3)
+      .map((hotel) => `${hotel.locationLabel} ${hotel.category === 'veg' ? 'Veg Hub' : 'Food Street'}`);
+
+    const placeNames = [...hotelDrivenPlaces, ...cityPlaces].filter((name, index, arr) => {
+      return arr.findIndex((item) => item.toLowerCase() === name.toLowerCase()) === index;
+    }).slice(0, 3);
+
+    const captainPool = this.filteredNearbyCaptains.length > 0 ? this.filteredNearbyCaptains : this.nearbyCaptains;
+    return placeNames.map((name, index) => {
+      const hotelDistance = this.nearbyHotels[index]?.distanceKm;
+      const distanceKm = this.round(Number.isFinite(Number(hotelDistance)) ? Number(hotelDistance) : 0.9 + index * 0.7);
+      const etaMinutes = Math.max(5, Math.round(distanceKm * 4.2 + 2));
+      const captainHint = captainPool[index]?.name || `Captain ${index + 1}`;
 
       return {
         name,
@@ -2886,6 +3914,50 @@ export class BookingComponent implements OnDestroy {
         captainHint
       };
     });
+  }
+
+  private applyFoodPickupFromHotel(hotel: NearbyHotel): void {
+    this.pickupAddress = hotel.locationLabel || hotel.name;
+
+    if (Number.isFinite(Number(hotel.lat)) && Number.isFinite(Number(hotel.lng))) {
+      this.pickupLat = this.round(Number(hotel.lat));
+      this.pickupLng = this.round(Number(hotel.lng));
+    } else {
+      const estimated = this.estimateCoordsFromAddress(this.pickupAddress, Number(this.pickupLat), Number(this.pickupLng));
+      this.pickupLat = estimated.lat;
+      this.pickupLng = estimated.lng;
+    }
+
+    this.pickupSearchTerm = this.pickupAddress;
+    this.refreshLocationSuggestions();
+    this.popularPlaces = this.buildPopularPlaces();
+  }
+
+  private applyFoodDropFromCustomerLocation(): void {
+    const fallbackAddress = this.dropAddress && this.dropAddress !== 'Drop Point'
+      ? this.dropAddress
+      : this.dynamicCurrentLocationLabel(Number(this.dropLat), Number(this.dropLng));
+
+    const raw = localStorage.getItem(LAST_LOCATION_KEY);
+    if (!raw) {
+      this.dropAddress = fallbackAddress;
+      this.dropSearchTerm = this.dropAddress;
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as { lat?: number; lng?: number; address?: string };
+      if (typeof parsed.lat === 'number' && typeof parsed.lng === 'number') {
+        this.dropLat = this.round(parsed.lat);
+        this.dropLng = this.round(parsed.lng);
+      }
+      this.dropAddress = parsed.address?.trim() || fallbackAddress;
+      this.dropSearchTerm = this.dropAddress;
+      this.refreshLocationSuggestions();
+    } catch {
+      this.dropAddress = fallbackAddress;
+      this.dropSearchTerm = this.dropAddress;
+    }
   }
 
   private buildUserAvatar(user: AppUser | null): string {
@@ -2912,6 +3984,9 @@ export class BookingComponent implements OnDestroy {
       if (this.pickupItemDetails.trim()) {
         pickupDetails.push(`Item: ${this.pickupItemDetails.trim()}`);
       }
+      if (this.pickupItemGridSelection.length > 0) {
+        pickupDetails.push(`Item Grid: ${this.pickupItemGridSelection.join(', ')}`);
+      }
       if (this.pickupShopInstructions.trim()) {
         pickupDetails.push(`Pickup Instructions: ${this.pickupShopInstructions.trim()}`);
       }
@@ -2919,7 +3994,7 @@ export class BookingComponent implements OnDestroy {
     }
 
     if (this.lunchBoxDeliveryMode) {
-      const lunchDetails: string[] = ['Lunch Box Delivery Mode'];
+      const lunchDetails: string[] = ['RouteX School Delivery Mode'];
       if (this.lunchStudentName.trim()) {
         lunchDetails.push(`Student: ${this.lunchStudentName.trim()}`);
       }
@@ -2936,12 +4011,23 @@ export class BookingComponent implements OnDestroy {
         lunchDetails.push(`Guardian Phone: ${this.lunchGuardianPhone.trim()}`);
       }
       if (this.lunchBoxDetails.trim()) {
-        lunchDetails.push(`Lunch Details: ${this.lunchBoxDetails.trim()}`);
+        lunchDetails.push(`RouteX Meal Details: ${this.lunchBoxDetails.trim()}`);
       }
       if (this.lunchDeliveryInstructions.trim()) {
         lunchDetails.push(`Instructions: ${this.lunchDeliveryInstructions.trim()}`);
       }
       sections.push(lunchDetails.join(' | '));
+    }
+
+    if (this.serviceType === 'food' && this.selectedHotelForFood && this.foodCartItems.length > 0) {
+      const ordered = this.foodCartItems.map((row) => `${row.item.name} x${row.qty}`).join(', ');
+      const foodDetails = [
+        `Food Hotel: ${this.selectedHotelForFood.name}`,
+        `Food Items: ${ordered}`,
+        `Food Total: Rs ${this.foodCartTotal}`,
+        `Payment: ${this.paymentMethod}`
+      ];
+      sections.push(foodDetails.join(' | '));
     }
 
     const modeNotes = sections.join(' | ');
@@ -2964,5 +4050,33 @@ export class BookingComponent implements OnDestroy {
 
   private persistWomenSafetyProtectionMode(): void {
     localStorage.setItem(this.womenSafetyModeStorageKey(), this.womenSafetyProtectionMode ? '1' : '0');
+  }
+
+  private buildHotelMenu(hotel: NearbyHotel): FoodMenuItem[] {
+    const isVegHotel = hotel.category === 'veg';
+    const prefix = hotel.name.split(' ')[0] || 'Chef';
+    const baseItems: Array<{ name: string; category: 'veg' | 'nonveg'; price: number; description: string; imageUrl: string }> = [
+      { name: `${prefix} Special Combo`, category: isVegHotel ? 'veg' : 'nonveg', price: isVegHotel ? 149 : 189, description: 'House special meal combo.', imageUrl: 'https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?auto=format&fit=crop&w=900&q=80' },
+      { name: isVegHotel ? 'Paneer Butter Curry' : 'Chicken Curry Bowl', category: isVegHotel ? 'veg' : 'nonveg', price: isVegHotel ? 179 : 229, description: 'Rich curry with signature masala.', imageUrl: 'https://images.unsplash.com/photo-1604909052743-94e838986d24?auto=format&fit=crop&w=900&q=80' },
+      { name: 'Jeera Rice', category: 'veg', price: 99, description: 'Aromatic jeera tempered rice.', imageUrl: 'https://images.unsplash.com/photo-1515003197210-e0cd71810b5f?auto=format&fit=crop&w=900&q=80' },
+      { name: isVegHotel ? 'Veg Biryani' : 'Chicken Biryani', category: isVegHotel ? 'veg' : 'nonveg', price: isVegHotel ? 169 : 239, description: 'Fragrant dum-cooked biryani.', imageUrl: 'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?auto=format&fit=crop&w=900&q=80' },
+      { name: 'Roti Basket', category: 'veg', price: 79, description: 'Assorted fresh breads.', imageUrl: 'https://images.unsplash.com/photo-1512058564366-18510be2db19?auto=format&fit=crop&w=900&q=80' },
+      { name: isVegHotel ? 'Mushroom Fry' : 'Tandoori Wings', category: isVegHotel ? 'veg' : 'nonveg', price: isVegHotel ? 159 : 219, description: 'Spicy pan tossed favorite.', imageUrl: 'https://images.unsplash.com/photo-1562967914-608f82629710?auto=format&fit=crop&w=900&q=80' },
+      { name: 'Curd Rice', category: 'veg', price: 89, description: 'Comfort curd rice bowl.', imageUrl: 'https://images.unsplash.com/photo-1515003197210-e0cd71810b5f?auto=format&fit=crop&w=900&q=80' },
+      { name: 'Gulab Jamun', category: 'veg', price: 69, description: 'Warm syrup soaked dessert.', imageUrl: 'https://images.unsplash.com/photo-1488477181946-6428a0291777?auto=format&fit=crop&w=900&q=80' }
+    ];
+
+    return baseItems
+      .filter((item) => this.foodPreference === 'all' || item.category === this.foodPreference)
+      .slice(0, 8)
+      .map((item, index) => ({
+        id: `${hotel.id}-menu-${index + 1}`,
+        name: item.name,
+        category: item.category,
+        price: item.price,
+        isTop: index < 3,
+        description: item.description,
+        imageUrl: item.imageUrl
+      }));
   }
 }

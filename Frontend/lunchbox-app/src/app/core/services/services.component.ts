@@ -105,8 +105,8 @@ import { Router } from '@angular/router';
 
         <button class="service-card" type="button" (click)="openLunchBox()">
           <div class="emoji">🎒</div>
-          <div class="title">Lunch Box</div>
-          <div class="subtitle">School lunch booking and history</div>
+          <div class="title">RouteX School Delivery</div>
+          <div class="subtitle">School meal booking and history</div>
         </button>
       </div>
     </div>
@@ -218,23 +218,23 @@ export class ServicesComponent {
   }
 
   openWomenSafetyMode(): void {
-    this.router.navigate(['/booking'], { queryParams: { womenSafety: 1 } });
+    this.router.navigate(['/booking'], { queryParams: { womenSafety: 1, service: 'parcel' } });
   }
 
   openTeenageRideMode(): void {
-    this.router.navigate(['/booking'], { queryParams: { teenRide: 1, bookingFor: 'others' } });
+    this.router.navigate(['/booking'], { queryParams: { teenRide: 1, bookingFor: 'others', service: 'parcel' } });
   }
 
   openScheduledRideMode(): void {
-    this.router.navigate(['/booking'], { queryParams: { rideMode: 'later' } });
+    this.router.navigate(['/booking'], { queryParams: { rideMode: 'later', service: 'parcel' } });
   }
 
   openBookingForOthersMode(): void {
-    this.router.navigate(['/booking'], { queryParams: { bookingFor: 'others' } });
+    this.router.navigate(['/booking'], { queryParams: { bookingFor: 'others', service: 'parcel' } });
   }
 
   openLunchBox(): void {
-    this.router.navigate(['/booking'], { queryParams: { lunchBox: 1, service: 'food' } });
+    this.router.navigate(['/school-booking'], { queryParams: { lunchBox: 1, service: 'food' } });
   }
 
   openPickupService(): void {

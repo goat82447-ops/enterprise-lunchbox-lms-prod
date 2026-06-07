@@ -21,6 +21,10 @@ import { OrderService } from '../../services/order.service';
         <h5 class="mb-2">Order #{{ order.id }}</h5>
         <p class="mb-2">Status: <span class="badge text-bg-success">{{ order.status }}</span></p>
         <p class="mb-2">ETA: {{ order.estimatedTime }} min</p>
+        <p class="mb-2" *ngIf="order.vehicleType">Vehicle: {{ order.vehicleType | titlecase }}</p>
+        <p class="mb-2" *ngIf="order.subtotal !== undefined">Subtotal: \${{ order.subtotal | number: '1.2-2' }}</p>
+        <p class="mb-2" *ngIf="order.deliveryFee !== undefined">Delivery Fee: \${{ order.deliveryFee | number: '1.2-2' }}</p>
+        <p class="mb-2">Total Fare: <strong>\${{ order.totalPrice | number: '1.2-2' }}</strong></p>
         <p class="mb-0">Delivery: {{ order.deliveryAddress }}</p>
       </div>
 
