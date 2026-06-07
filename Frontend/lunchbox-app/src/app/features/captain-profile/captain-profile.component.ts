@@ -4,11 +4,22 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { Router } from '@angular/router';
 import { Subject, takeUntil } from 'rxjs';
-import { AppUser, Booking, CaptainFeedbackComment } from '../../core/models/delivery.models';
+import { AppUser, Booking, CaptainFeedbackComment, KycStatus } from '../../core/models/delivery.models';
 import { AuthService } from '../../core/services/auth.service';
 import { BookingService } from '../../core/services/booking.service';
 import { NotificationService } from '../../core/services/notification.service';
 import { SafeResourceUrlPipe } from '../../shared/pipes/safe-resource-url.pipe';
+
+type CaptainKycFormState = {
+  userId: string;
+  kycStatus: KycStatus;
+  kycDocumentType: string;
+  kycDocumentNumberMasked: string;
+  kycReferenceId: string;
+  kycUpdatedAt: string;
+};
+
+const CAPTAIN_KYC_STORAGE_KEY = 'delivery_captain_kyc_state';
 
 @Component({
   selector: 'app-captain-profile',
@@ -25,6 +36,11 @@ import { SafeResourceUrlPipe } from '../../shared/pipes/safe-resource-url.pipe';
               <img class="dp-image mb-3" [src]="dpPreview || defaultDp" alt="Captain DP" />
               <h5 class="mb-0">{{ c.displayName }}</h5>
               <div class="text-muted small">{{ c.username }} • {{ c.captainVehicle || 'captain' }}</div>
+              <div class="mt-2">
+                <span class="verified-driver-badge" [ngClass]="kycBadgeClass(kycStatus)">
+                  {{ kycStatus === 'verified' ? 'Verified Driver Badge' : 'KYC ' + kycStatusLabel(kycStatus) }}
+                </span>
+              </div>
             </div>
 
             <hr />
@@ -32,6 +48,34 @@ import { SafeResourceUrlPipe } from '../../shared/pipes/safe-resource-url.pipe';
             <label class="form-label">Update DP (profile photo)</label>
             <input type="file" class="form-control form-control-sm mb-2" accept="image/*" (change)="onDpFileSelected($event)" />
             <button class="btn btn-sm btn-primary" type="button" (click)="saveDp()" [disabled]="!dpPreview || savingDp">Save DP</button>
+          </div>
+
+          <div class="card p-3 mt-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <h5 class="mb-0">Captain KYC Verification</h5>
+              <span class="badge" [ngClass]="kycBadgeClass(kycStatus)">{{ kycStatusLabel(kycStatus) }}</span>
+            </div>
+            <div class="small text-muted mb-2">Keep your KYC updated to show the Verified Driver Badge to riders.</div>
+            <div class="small mb-2" *ngIf="kycReferenceId"><strong>Reference:</strong> {{ kycReferenceId }}</div>
+            <div class="small mb-3" *ngIf="kycUpdatedAt"><strong>Last Updated:</strong> {{ kycUpdatedAt | date:'medium' }}</div>
+
+            <label class="form-label small mb-1">Document Type</label>
+            <select class="form-select form-select-sm mb-2" [(ngModel)]="kycDocumentType">
+              <option value="Driving License">Driving License</option>
+              <option value="Aadhaar">Aadhaar</option>
+              <option value="PAN">PAN</option>
+              <option value="Voter ID">Voter ID</option>
+            </select>
+
+            <label class="form-label small mb-1">Document Number</label>
+            <input class="form-control form-control-sm mb-2" placeholder="Enter document number" [(ngModel)]="kycDocumentNumber" />
+            <div class="small text-muted mb-3" *ngIf="kycDocumentNumber">Masked: {{ maskedDocumentNumber }}</div>
+
+            <div class="d-flex gap-2 flex-wrap">
+              <button class="btn btn-sm btn-primary" type="button" (click)="submitKyc()" [disabled]="!canSubmitKyc">Submit KYC</button>
+              <button class="btn btn-sm btn-success" type="button" (click)="markKycVerified()" [disabled]="kycStatus !== 'pending'">Mark Verified</button>
+              <button class="btn btn-sm btn-outline-danger" type="button" (click)="markKycRejected()" [disabled]="kycStatus !== 'pending'">Mark Rejected</button>
+            </div>
           </div>
         </div>
 
@@ -214,6 +258,35 @@ import { SafeResourceUrlPipe } from '../../shared/pipes/safe-resource-url.pipe';
         border-color: #0d6efd;
         box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.15);
       }
+
+      .verified-driver-badge {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+        padding: 4px 10px;
+        border: 1px solid transparent;
+      }
+
+      .verified-driver-badge.kyc-verified {
+        background: #dcfce7;
+        color: #166534;
+        border-color: #86efac;
+      }
+
+      .verified-driver-badge.kyc-pending {
+        background: #fef3c7;
+        color: #92400e;
+        border-color: #fcd34d;
+      }
+
+      .verified-driver-badge.kyc-rejected,
+      .verified-driver-badge.kyc-not-started {
+        background: #fee2e2;
+        color: #991b1b;
+        border-color: #fecaca;
+      }
     `
   ]
 })
@@ -238,6 +311,11 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
   private notificationPermissionAsked = false;
   highlightedDeliveryBookingId = '';
   readyForPickupMessage = '';
+  kycStatus: KycStatus = 'not_started';
+  kycDocumentType = 'Driving License';
+  kycDocumentNumber = '';
+  kycReferenceId = '';
+  kycUpdatedAt = '';
 
   private readonly destroy$ = new Subject<void>();
 
@@ -254,6 +332,7 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
       this.captain = user;
       this.dpPreview = user?.profileImageUrl || '';
       this.defaultDp = `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.displayName || 'Captain')}&background=f8d7da&color=7a1632&size=128`;
+      this.loadKycState(user);
       this.loadStats();
       this.refreshActiveRides();
       this.refreshCaptainLocation();
@@ -351,18 +430,100 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
       return;
     }
 
+    const pendingImage = this.dpPreview;
     this.savingDp = true;
-    this.authService.updateProfileImage(this.dpPreview).subscribe({
+    this.authService.updateProfileImage(pendingImage).subscribe({
       next: (response) => {
+        const updatedImage = response.profileImageUrl || pendingImage;
         this.savingDp = false;
-        this.authService.applyProfileImage(response.profileImageUrl);
+        this.dpPreview = updatedImage;
+        this.authService.applyProfileImage(updatedImage);
         this.notifications.push(response.message, 'success');
       },
       error: (error) => {
         this.savingDp = false;
+        if (pendingImage.startsWith('data:image/')) {
+          this.dpPreview = pendingImage;
+          this.authService.applyProfileImage(pendingImage);
+          this.notifications.push('Profile image applied locally. Server sync failed, please retry later.', 'warning');
+          return;
+        }
         this.notifications.push(error?.error?.error || 'Failed to update profile image.', 'error');
       }
     });
+  }
+
+  get maskedDocumentNumber(): string {
+    const value = this.kycDocumentNumber.trim();
+    if (value.length <= 4) {
+      return value;
+    }
+    return `${'*'.repeat(Math.max(0, value.length - 4))}${value.slice(-4)}`;
+  }
+
+  get canSubmitKyc(): boolean {
+    return this.kycDocumentType.trim().length > 0 && this.kycDocumentNumber.trim().length >= 6;
+  }
+
+  kycStatusLabel(status: KycStatus): string {
+    if (status === 'verified') {
+      return 'Verified';
+    }
+    if (status === 'pending') {
+      return 'Pending';
+    }
+    if (status === 'rejected') {
+      return 'Rejected';
+    }
+    return 'Not Started';
+  }
+
+  kycBadgeClass(status: KycStatus): string {
+    if (status === 'verified') {
+      return 'kyc-verified';
+    }
+    if (status === 'pending') {
+      return 'kyc-pending';
+    }
+    if (status === 'rejected') {
+      return 'kyc-rejected';
+    }
+    return 'kyc-not-started';
+  }
+
+  submitKyc(): void {
+    if (!this.canSubmitKyc) {
+      this.notifications.push('Enter valid document details before submitting KYC.', 'warning');
+      return;
+    }
+
+    this.kycStatus = 'pending';
+    this.kycReferenceId = this.generateKycReference();
+    this.kycUpdatedAt = new Date().toISOString();
+    this.persistKycState();
+    this.notifications.push('KYC submitted successfully and moved to pending verification.', 'success');
+  }
+
+  markKycVerified(): void {
+    if (this.kycStatus !== 'pending') {
+      return;
+    }
+
+    this.kycStatus = 'verified';
+    this.kycUpdatedAt = new Date().toISOString();
+    this.persistKycState();
+    this.notifications.push('Captain KYC verified. Verified Driver Badge is now active.', 'success');
+  }
+
+  markKycRejected(): void {
+    if (this.kycStatus !== 'pending') {
+      return;
+    }
+
+    this.kycStatus = 'rejected';
+    this.kycUpdatedAt = new Date().toISOString();
+    this.persistKycState();
+    this.notifications.push('Captain KYC rejected. Please re-submit correct document details.', 'warning');
   }
 
   openRideTracking(booking: Booking): void {
@@ -597,5 +758,69 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
         this.notifications.push(error?.error?.error || 'Failed to load captain feedback stats.', 'warning');
       }
     });
+  }
+
+  private loadKycState(user: AppUser | null): void {
+    if (!user) {
+      this.kycStatus = 'not_started';
+      this.kycDocumentType = 'Driving License';
+      this.kycDocumentNumber = '';
+      this.kycReferenceId = '';
+      this.kycUpdatedAt = '';
+      return;
+    }
+
+    let stored: CaptainKycFormState | null = null;
+    const raw = localStorage.getItem(CAPTAIN_KYC_STORAGE_KEY);
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw) as CaptainKycFormState;
+        if (parsed.userId === user.id) {
+          stored = parsed;
+        }
+      } catch {
+        stored = null;
+      }
+    }
+
+    this.kycStatus = stored?.kycStatus || user.kycStatus || 'not_started';
+    this.kycDocumentType = stored?.kycDocumentType || user.kycDocumentType || 'Driving License';
+    this.kycDocumentNumber = '';
+    this.kycReferenceId = stored?.kycReferenceId || user.kycReferenceId || '';
+    this.kycUpdatedAt = stored?.kycUpdatedAt || user.kycUpdatedAt || '';
+  }
+
+  private persistKycState(): void {
+    const userId = this.captain?.id;
+    if (!userId) {
+      return;
+    }
+
+    const payload: CaptainKycFormState = {
+      userId,
+      kycStatus: this.kycStatus,
+      kycDocumentType: this.kycDocumentType.trim() || 'Driving License',
+      kycDocumentNumberMasked: this.maskedDocumentNumber,
+      kycReferenceId: this.kycReferenceId,
+      kycUpdatedAt: this.kycUpdatedAt || new Date().toISOString()
+    };
+
+    localStorage.setItem(CAPTAIN_KYC_STORAGE_KEY, JSON.stringify(payload));
+    this.authService.applyCaptainKycStatus(this.kycStatus, {
+      kycDocumentType: payload.kycDocumentType,
+      kycReferenceId: payload.kycReferenceId,
+      kycUpdatedAt: payload.kycUpdatedAt
+    });
+  }
+
+  private generateKycReference(): string {
+    const stamp = Date.now().toString().slice(-6);
+    const initials = (this.captain?.displayName || 'CP')
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() || '')
+      .join('');
+    return `KYC-${initials || 'CP'}-${stamp}`;
   }
 }
