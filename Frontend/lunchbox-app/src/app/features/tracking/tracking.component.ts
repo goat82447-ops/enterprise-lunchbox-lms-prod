@@ -15,9 +15,93 @@ import { SafeResourceUrlPipe } from '../../shared/pipes/safe-resource-url.pipe';
   imports: [CommonModule, FormsModule, RouterLink, SafeResourceUrlPipe],
   template: `
     <div class="container py-4">
-      <h2 class="mb-3">Live Tracking</h2>
+      <h2 class="mb-2">Activity Center</h2>
+      <p class="text-muted mb-3">Live tracking and past ride details in one place.</p>
 
-      <div *ngIf="!booking" class="alert alert-info">
+      <div class="activity-stats mb-4" *ngIf="activityBookings.length">
+        <div class="activity-stat-card">
+          <div class="stat-label">Total Rides</div>
+          <div class="stat-value">{{ activityBookings.length }}</div>
+        </div>
+        <div class="activity-stat-card">
+          <div class="stat-label">Live Rides</div>
+          <div class="stat-value text-danger">{{ liveBookings.length }}</div>
+        </div>
+        <div class="activity-stat-card">
+          <div class="stat-label">Past Rides</div>
+          <div class="stat-value text-success">{{ pastBookings.length }}</div>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-4" *ngIf="activityBookings.length">
+        <div class="col-lg-6">
+          <div class="card p-3 activity-list-card h-100">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <h5 class="mb-0">Live Tracking</h5>
+              <span class="badge text-bg-danger" *ngIf="liveBookings.length">Live</span>
+            </div>
+            <div class="text-muted small mb-2" *ngIf="!liveBookings.length">No active rides right now.</div>
+            <div class="activity-list" *ngIf="liveBookings.length">
+              <button
+                type="button"
+                class="activity-item"
+                [class.active]="booking?.id === item.id"
+                *ngFor="let item of liveBookings"
+                (click)="openBookingFromActivity(item)"
+              >
+                <div class="activity-item-top">
+                  <strong>{{ item.id }}</strong>
+                  <span class="status-chip" [ngClass]="statusChipClass(item.status)">{{ statusLabel(item.status) }}</span>
+                </div>
+                <div class="activity-item-meta">{{ item.pickup.address }} -> {{ item.drop.address }}</div>
+                <div class="activity-item-meta">{{ item.serviceType | titlecase }} • {{ item.vehicleType | titlecase }} • {{ item.updatedAt | date: 'short' }}</div>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-6">
+          <div class="card p-3 activity-list-card h-100">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <h5 class="mb-0">Past Ride Details</h5>
+              <span class="badge text-bg-secondary" *ngIf="pastBookings.length">History</span>
+            </div>
+
+            <div class="d-flex gap-2 mb-2 flex-wrap">
+              <select class="form-select form-select-sm history-filter" [(ngModel)]="historyFilter">
+                <option value="all">All</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+              <input
+                class="form-control form-control-sm history-search"
+                placeholder="Search booking id / service / vehicle"
+                [(ngModel)]="historySearch"
+              />
+            </div>
+
+            <div class="text-muted small mb-2" *ngIf="!filteredPastBookings.length">No past rides found for your filter.</div>
+            <div class="activity-list" *ngIf="filteredPastBookings.length">
+              <button
+                type="button"
+                class="activity-item"
+                [class.active]="booking?.id === item.id"
+                *ngFor="let item of filteredPastBookings"
+                (click)="openBookingFromActivity(item)"
+              >
+                <div class="activity-item-top">
+                  <strong>{{ item.id }}</strong>
+                  <span class="status-chip" [ngClass]="statusChipClass(item.status)">{{ statusLabel(item.status) }}</span>
+                </div>
+                <div class="activity-item-meta">{{ item.pickup.address }} -> {{ item.drop.address }}</div>
+                <div class="activity-item-meta">{{ item.serviceType | titlecase }} • {{ item.vehicleType | titlecase }} • {{ item.updatedAt | date: 'short' }}</div>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div *ngIf="!booking && !activityBookings.length" class="alert alert-info">
         No booking selected. Go to <a routerLink="/booking">Booking</a>.
       </div>
 
@@ -25,7 +109,26 @@ import { SafeResourceUrlPipe } from '../../shared/pipes/safe-resource-url.pipe';
         <div class="col-lg-5">
           <div class="card p-3 h-100">
             <h5>{{ booking.id }}<span class="badge bg-success ms-2" *ngIf="isLiveTracking">🔴 LIVE</span></h5>
-            <div class="progress-timeline mb-3" *ngIf="booking.status === 'assigned' || booking.status === 'pickup_in_progress' || booking.status === 'in_transit'">
+            <div class="food-progress-card mb-3" *ngIf="booking.serviceType === 'food'">
+              <div class="food-progress-title">Food Order Flow</div>
+              <div class="food-progress-subtitle">{{ foodFlowStatusText(booking.status) }}</div>
+              <div class="food-confirmation-countdown" *ngIf="showFoodConfirmationCountdown()">
+                Confirming your order in {{ formatFoodConfirmationCountdown() }}
+              </div>
+              <div class="food-progress-list">
+                <div
+                  class="food-progress-item"
+                  *ngFor="let step of foodFlowSteps; let index = index"
+                  [class.completed]="isFoodStepCompleted(index)"
+                  [class.active]="isFoodStepActive(index)"
+                >
+                  <div class="food-step-bullet">{{ index + 1 }}</div>
+                  <div class="food-step-label">{{ step }}</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="progress-timeline mb-3" *ngIf="booking.serviceType !== 'food' && (booking.status === 'assigned' || booking.status === 'pickup_in_progress' || booking.status === 'in_transit')">
               <div class="progress-step" [class.completed]="isStageCompleted(0)" [class.active]="isStageActive(0)">
                 <div class="step-icon">✓</div>
                 <div class="step-label">Accepted</div>
@@ -229,6 +332,128 @@ import { SafeResourceUrlPipe } from '../../shared/pipes/safe-resource-url.pipe';
     </div>
   `,
   styles: [`
+    .activity-stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .activity-stat-card {
+      border: 1px solid #dee2e6;
+      border-radius: 12px;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+      padding: 12px;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: #6c757d;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+
+    .stat-value {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: #0f172a;
+      line-height: 1.2;
+    }
+
+    .activity-list-card {
+      border-radius: 14px;
+      border: 1px solid #e5e7eb;
+      box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+    }
+
+    .activity-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 320px;
+      overflow-y: auto;
+      padding-right: 2px;
+    }
+
+    .activity-item {
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      background: #fff;
+      padding: 10px;
+      text-align: left;
+      width: 100%;
+      transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+    }
+
+    .activity-item:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 14px rgba(15, 23, 42, 0.08);
+      border-color: #93c5fd;
+    }
+
+    .activity-item.active {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.16);
+      background: #f8fbff;
+    }
+
+    .activity-item-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+
+    .activity-item-meta {
+      font-size: 12px;
+      color: #64748b;
+      line-height: 1.35;
+    }
+
+    .status-chip {
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: 999px;
+      padding: 2px 8px;
+      border: 1px solid transparent;
+      white-space: nowrap;
+    }
+
+    .status-live {
+      background: #fee2e2;
+      color: #b91c1c;
+      border-color: #fecaca;
+    }
+
+    .status-completed {
+      background: #dcfce7;
+      color: #166534;
+      border-color: #bbf7d0;
+    }
+
+    .status-cancelled {
+      background: #e5e7eb;
+      color: #334155;
+      border-color: #cbd5e1;
+    }
+
+    .status-other {
+      background: #ede9fe;
+      color: #5b21b6;
+      border-color: #ddd6fe;
+    }
+
+    .history-filter {
+      width: 140px;
+      min-width: 140px;
+    }
+
+    .history-search {
+      min-width: 180px;
+      flex: 1;
+    }
+
     .progress-timeline {
       display: flex;
       align-items: center;
@@ -238,6 +463,104 @@ import { SafeResourceUrlPipe } from '../../shared/pipes/safe-resource-url.pipe';
       border-radius: 10px;
       border: 1px solid #dee2e6;
       margin-bottom: 12px;
+    }
+
+    .food-progress-card {
+      background: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-radius: 10px;
+      padding: 12px;
+    }
+
+    .food-progress-title {
+      font-weight: 700;
+      color: #1f2937;
+      font-size: 14px;
+    }
+
+    .food-progress-subtitle {
+      margin-top: 2px;
+      margin-bottom: 8px;
+      font-size: 12px;
+      color: #475569;
+      font-weight: 600;
+    }
+
+    .food-confirmation-countdown {
+      margin-bottom: 8px;
+      padding: 6px 8px;
+      border-radius: 8px;
+      border: 1px solid #bfdbfe;
+      background: #eff6ff;
+      color: #1d4ed8;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .food-progress-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .food-progress-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      background: #ffffff;
+      transition: border-color 0.2s ease, background 0.2s ease;
+    }
+
+    .food-step-bullet {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      background: #e5e7eb;
+      color: #4b5563;
+      flex-shrink: 0;
+    }
+
+    .food-step-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #475569;
+      line-height: 1.25;
+    }
+
+    .food-progress-item.active {
+      border-color: #0d6efd;
+      background: #eff6ff;
+    }
+
+    .food-progress-item.active .food-step-bullet {
+      background: #0d6efd;
+      color: #ffffff;
+    }
+
+    .food-progress-item.active .food-step-label {
+      color: #0d6efd;
+    }
+
+    .food-progress-item.completed {
+      border-color: #22c55e;
+      background: #f0fdf4;
+    }
+
+    .food-progress-item.completed .food-step-bullet {
+      background: #22c55e;
+      color: #ffffff;
+    }
+
+    .food-progress-item.completed .food-step-label {
+      color: #15803d;
     }
 
     .progress-step {
@@ -492,6 +815,10 @@ import { SafeResourceUrlPipe } from '../../shared/pipes/safe-resource-url.pipe';
     }
 
     @media (max-width: 576px) {
+      .activity-stats {
+        grid-template-columns: 1fr;
+      }
+
       .progress-timeline {
         gap: 2px;
       }
@@ -526,8 +853,14 @@ export class TrackingComponent implements OnInit, OnDestroy {
   private static readonly AUTO_CLOSE_DELAY_MS = 5 * 60 * 1000;
   private static readonly RATE_PER_KM_RS = 10;
   private static readonly MIN_RIDE_END_MINUTES = 2;
+  private static readonly FOOD_CONFIRMATION_DELAY_SECONDS = 2 * 60;
 
   booking?: Booking;
+  activityBookings: Booking[] = [];
+  liveBookings: Booking[] = [];
+  pastBookings: Booking[] = [];
+  historyFilter: 'all' | 'completed' | 'cancelled' = 'all';
+  historySearch = '';
   googleMapUrl = '';
   currentRole: string | undefined;
   stars = [1, 2, 3, 4, 5];
@@ -545,6 +878,13 @@ export class TrackingComponent implements OnInit, OnDestroy {
   distanceToDrop = 0;
   distanceToPickup = 0;
   pickupEtaMinutes = 0;
+  readonly foodFlowSteps = [
+    'Searching for captains',
+    'Captain accepted your order',
+    'Captain going to hotel/restaurant',
+    'Captain picked up your order',
+    'Captain arriving'
+  ];
   estimatedTime = 0;
   payableAmount = 0;
   readonly PICKUP_ARRIVAL_THRESHOLD = 0.2; // 200 meters
@@ -574,9 +914,12 @@ export class TrackingComponent implements OnInit, OnDestroy {
     { icon: '📝', label: 'Other', desc: 'Different reason' }
   ];
   private readonly destroy$ = new Subject<void>();
+  private readonly liveTrackingStop$ = new Subject<void>();
   private autoCloseTimeoutId?: ReturnType<typeof setTimeout>;
   private autoCloseIntervalId?: ReturnType<typeof setInterval>;
+  private foodCountdownIntervalId?: ReturnType<typeof setInterval>;
   private autoCloseDueAt = 0;
+  private nowTickMs = Date.now();
   private captainPaymentRedirectHandled = false;
   private statusRedirectHandled = false;
 
@@ -589,11 +932,17 @@ export class TrackingComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
+    this.foodCountdownIntervalId = setInterval(() => {
+      this.nowTickMs = Date.now();
+    }, 1000);
+
     this.currentRole = this.authService.getCurrentUser()?.role;
+    this.watchActivityBookings();
 
     this.route.paramMap.pipe(takeUntil(this.destroy$)).subscribe(params => {
       const bookingId = params.get('id');
       if (!bookingId) {
+        this.tryAutoSelectBooking();
         return;
       }
 
@@ -626,14 +975,107 @@ export class TrackingComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.clearAutoCloseTimer();
+    if (this.foodCountdownIntervalId) {
+      clearInterval(this.foodCountdownIntervalId);
+      this.foodCountdownIntervalId = undefined;
+    }
+    this.liveTrackingStop$.next();
+    this.liveTrackingStop$.complete();
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  get filteredPastBookings(): Booking[] {
+    const term = this.historySearch.trim().toLowerCase();
+
+    return this.pastBookings.filter((item) => {
+      const byFilter = this.historyFilter === 'all' || item.status === this.historyFilter;
+      if (!byFilter) {
+        return false;
+      }
+
+      if (!term) {
+        return true;
+      }
+
+      const searchable = `${item.id} ${item.serviceType} ${item.vehicleType} ${item.pickup.address} ${item.drop.address}`.toLowerCase();
+      return searchable.includes(term);
+    });
+  }
+
+  openBookingFromActivity(item: Booking): void {
+    if (this.booking?.id === item.id) {
+      return;
+    }
+
+    this.router.navigate(['/tracking', item.id]);
+  }
+
+  statusChipClass(status: Booking['status']): string {
+    if (this.isLiveStatus(status)) {
+      return 'status-live';
+    }
+
+    if (status === 'completed' || status === 'delivered') {
+      return 'status-completed';
+    }
+
+    if (status === 'cancelled') {
+      return 'status-cancelled';
+    }
+
+    return 'status-other';
+  }
+
+  private watchActivityBookings(): void {
+    this.bookingService.bookings$.pipe(takeUntil(this.destroy$)).subscribe((bookings) => {
+      const currentUser = this.authService.getCurrentUser();
+      const role = currentUser?.role;
+
+      let relevant = bookings;
+
+      if (role === 'customer') {
+        relevant = bookings.filter((item) => item.userId === currentUser?.id);
+      } else if (role === 'captain') {
+        relevant = bookings.filter((item) => item.captainId === currentUser?.id);
+      }
+
+      this.activityBookings = [...relevant].sort(
+        (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      );
+
+      this.liveBookings = this.activityBookings.filter((item) => this.isLiveStatus(item.status));
+      this.pastBookings = this.activityBookings.filter((item) => !this.isLiveStatus(item.status));
+
+      if (!this.route.snapshot.paramMap.get('id')) {
+        this.tryAutoSelectBooking();
+      }
+    });
+  }
+
+  private tryAutoSelectBooking(): void {
+    if (this.booking) {
+      return;
+    }
+
+    const candidate = this.liveBookings[0] || this.pastBookings[0];
+    if (!candidate) {
+      return;
+    }
+
+    this.router.navigate(['/tracking', candidate.id]);
+  }
+
+  private isLiveStatus(status: Booking['status']): boolean {
+    return status === 'created' || status === 'assigned' || status === 'pickup_in_progress' || status === 'in_transit' || status === 'arriving';
   }
 
   /**
    * Setup live location tracking - updates every 2 seconds
    */
   private setupLiveTracking(booking: Booking): void {
+    this.liveTrackingStop$.next();
+
     if (booking.status === 'completed' || booking.status === 'cancelled' || booking.status === 'delivered') {
       this.isLiveTracking = false;
       return;
@@ -663,6 +1105,7 @@ export class TrackingComponent implements OnInit, OnDestroy {
             this.booking = updatedBooking;
           }
         }),
+        takeUntil(this.liveTrackingStop$),
         takeUntil(this.destroy$)
       )
       .subscribe();
@@ -993,6 +1436,77 @@ export class TrackingComponent implements OnInit, OnDestroy {
     };
 
     return labels[status] || status;
+  }
+
+  foodFlowStatusText(status: Booking['status']): string {
+    if (status === 'cancelled') {
+      return 'Order cancelled';
+    }
+    if (status === 'completed' || status === 'delivered') {
+      return 'Order delivered successfully';
+    }
+    return this.foodFlowSteps[Math.max(0, this.getFoodFlowStage(status))];
+  }
+
+  showFoodConfirmationCountdown(): boolean {
+    return !!this.booking && this.booking.serviceType === 'food' && this.booking.status === 'created';
+  }
+
+  formatFoodConfirmationCountdown(): string {
+    if (!this.booking || this.booking.serviceType !== 'food') {
+      return '0:00';
+    }
+
+    const createdAt = new Date(this.booking.createdAt).getTime();
+    if (Number.isNaN(createdAt)) {
+      return '0:00';
+    }
+
+    const elapsedSeconds = Math.floor((this.nowTickMs - createdAt) / 1000);
+    const remaining = Math.max(0, TrackingComponent.FOOD_CONFIRMATION_DELAY_SECONDS - elapsedSeconds);
+    const minutes = Math.floor(remaining / 60);
+    const seconds = remaining % 60;
+    return `${minutes}:${String(seconds).padStart(2, '0')}`;
+  }
+
+  isFoodStepActive(step: number): boolean {
+    if (!this.booking || this.booking.serviceType !== 'food') {
+      return false;
+    }
+
+    if (this.booking.status === 'completed' || this.booking.status === 'delivered' || this.booking.status === 'cancelled') {
+      return false;
+    }
+
+    return this.getFoodFlowStage(this.booking.status) === step;
+  }
+
+  isFoodStepCompleted(step: number): boolean {
+    if (!this.booking || this.booking.serviceType !== 'food') {
+      return false;
+    }
+
+    if (this.booking.status === 'completed' || this.booking.status === 'delivered') {
+      return true;
+    }
+
+    return this.getFoodFlowStage(this.booking.status) > step;
+  }
+
+  private getFoodFlowStage(status: Booking['status']): number {
+    if (status === 'completed' || status === 'delivered' || status === 'arriving') {
+      return 4;
+    }
+    if (status === 'in_transit') {
+      return 3;
+    }
+    if (status === 'pickup_in_progress') {
+      return 2;
+    }
+    if (status === 'assigned') {
+      return 1;
+    }
+    return 0;
   }
 
   showPickupApproachInfo(booking: Booking): boolean {
