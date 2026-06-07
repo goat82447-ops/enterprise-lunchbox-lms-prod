@@ -19,7 +19,7 @@ import { ChatbotComponent } from './shared/components/chatbot/chatbot.component'
     <nav class="navbar navbar-expand-lg navbar-dark sticky-top app-nav">
       <div class="container-fluid">
         <a class="navbar-brand d-flex align-items-center gap-2" routerLink="/">
-          <span class="brand-logo" aria-hidden="true">RX</span>
+          <img src="assets/lunchbox-logo.svg" alt="RouteX logo" class="brand-logo-img" />
           <span class="brand-text">{{ t('appName') }}</span>
         </a>
         <button
@@ -36,43 +36,43 @@ import { ChatbotComponent } from './shared/components/chatbot/chatbot.component'
           <ul class="navbar-nav ms-auto gap-2 align-items-center">
             <!-- Public links -->
             <li class="nav-item" *ngIf="!(isLoggedIn$ | async)">
-              <a class="nav-link" routerLink="/login" routerLinkActive="active">{{ t('login') }}</a>
+              <a class="nav-link" routerLink="/login" routerLinkActive="active" (click)="handleNavLinkClick()">{{ t('login') }}</a>
             </li>
             <li class="nav-item" *ngIf="!(isLoggedIn$ | async)">
-              <a class="nav-link" routerLink="/register" routerLinkActive="active">{{ t('register') }}</a>
+              <a class="nav-link" routerLink="/register" routerLinkActive="active" (click)="handleNavLinkClick()">{{ t('register') }}</a>
             </li>
 
             <!-- Customer links -->
-            <li class="nav-item" *ngIf="(isLoggedIn$ | async) && !(isAdmin$ | async) && !(isCaptain$ | async)">
-              <a class="nav-link" routerLink="/home" routerLinkActive="active">Home</a>
+            <li class="nav-item hide-on-mobile-nav" *ngIf="(isLoggedIn$ | async) && !(isAdmin$ | async) && !(isCaptain$ | async)">
+              <a class="nav-link" routerLink="/home" routerLinkActive="active" (click)="handleNavLinkClick()">Home</a>
             </li>
-            <li class="nav-item" *ngIf="(isLoggedIn$ | async) && !(isAdmin$ | async) && !(isCaptain$ | async)">
-              <a class="nav-link" routerLink="/services" routerLinkActive="active">Services</a>
+            <li class="nav-item hide-on-mobile-nav" *ngIf="(isLoggedIn$ | async) && !(isAdmin$ | async) && !(isCaptain$ | async)">
+              <a class="nav-link" routerLink="/services" routerLinkActive="active" (click)="handleNavLinkClick()">Services</a>
             </li>
-            <li class="nav-item" *ngIf="(isLoggedIn$ | async) && !(isAdmin$ | async) && !(isCaptain$ | async)">
-              <a class="nav-link" routerLink="/activity" routerLinkActive="active">Activity</a>
+            <li class="nav-item hide-on-mobile-nav" *ngIf="(isLoggedIn$ | async) && !(isAdmin$ | async) && !(isCaptain$ | async)">
+              <a class="nav-link" routerLink="/activity" routerLinkActive="active" (click)="handleNavLinkClick()">Activity</a>
             </li>
-            <li class="nav-item" *ngIf="(isLoggedIn$ | async) && !(isAdmin$ | async) && !(isCaptain$ | async)">
-              <a class="nav-link" routerLink="/account" routerLinkActive="active">Account</a>
+            <li class="nav-item hide-on-mobile-nav" *ngIf="(isLoggedIn$ | async) && !(isAdmin$ | async) && !(isCaptain$ | async)">
+              <a class="nav-link" routerLink="/account" routerLinkActive="active" (click)="handleNavLinkClick()">Account</a>
             </li>
 
             <!-- Captain links -->
             <li class="nav-item" *ngIf="(isLoggedIn$ | async) && (isCaptain$ | async)">
-              <a class="nav-link" routerLink="/captain-profile" routerLinkActive="active">{{ t('jobsDeliveries') }}</a>
+              <a class="nav-link" routerLink="/captain-profile" routerLinkActive="active" (click)="handleNavLinkClick()">{{ t('jobsDeliveries') }}</a>
             </li>
 
             <!-- Admin links -->
             <li class="nav-item" *ngIf="(isLoggedIn$ | async) && (isAdmin$ | async)">
-              <a class="nav-link" routerLink="/booking" routerLinkActive="active">{{ t('bookDelivery') }}</a>
+              <a class="nav-link" routerLink="/booking" routerLinkActive="active" (click)="handleNavLinkClick()">{{ t('bookDelivery') }}</a>
             </li>
             <li class="nav-item" *ngIf="(isLoggedIn$ | async) && (isAdmin$ | async) && showTrackBookingLink">
-              <a class="nav-link" routerLink="/tracking" routerLinkActive="active">{{ t('trackBooking') }}</a>
+              <a class="nav-link" routerLink="/tracking" routerLinkActive="active" (click)="handleNavLinkClick()">{{ t('trackBooking') }}</a>
             </li>
             <li class="nav-item" *ngIf="(isLoggedIn$ | async) && (isAdmin$ | async)">
-              <a class="nav-link" routerLink="/admin" routerLinkActive="active">{{ t('adminPanel') }}</a>
+              <a class="nav-link" routerLink="/admin" routerLinkActive="active" (click)="handleNavLinkClick()">{{ t('adminPanel') }}</a>
             </li>
             <li class="nav-item" *ngIf="(isLoggedIn$ | async) && (isAdmin$ | async)">
-              <a class="nav-link" routerLink="/audit" routerLinkActive="active">{{ t('auditLogs') }}</a>
+              <a class="nav-link" routerLink="/audit" routerLinkActive="active" (click)="handleNavLinkClick()">{{ t('auditLogs') }}</a>
             </li>
 
             <!-- Language selector (inline buttons) -->
@@ -114,7 +114,7 @@ import { ChatbotComponent } from './shared/components/chatbot/chatbot.component'
 
             <!-- Quick action button -->
             <li class="nav-item" *ngIf="(isLoggedIn$ | async) && !(isCaptain$ | async)">
-              <button class="btn btn-brand-action btn-sm ms-2" routerLink="/booking">Quick Book</button>
+              <button class="btn btn-brand-action btn-sm ms-2" routerLink="/booking" (click)="handleNavLinkClick()">Quick Book</button>
             </li>
 
             <!-- Notification center -->
@@ -260,25 +260,6 @@ import { ChatbotComponent } from './shared/components/chatbot/chatbot.component'
           <span class="tab-label">Account</span>
         </span>
       </a>
-      <a class="tab-item" routerLink="/about-us" routerLinkActive="active" [class.active]="isBottomTabActive('about')" aria-label="About Us">
-        <span class="tab-pill">
-          <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="9" />
-            <path d="M12 10.5v5" />
-            <circle cx="12" cy="7.5" r="0.9" fill="currentColor" stroke="none" />
-          </svg>
-          <span class="tab-label">{{ t('aboutUsNav') }}</span>
-        </span>
-      </a>
-      <a class="tab-item" routerLink="/contact" routerLinkActive="active" [class.active]="isBottomTabActive('contact')" aria-label="Contact">
-        <span class="tab-pill">
-          <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M4 6h16v12H4z" />
-            <path d="m4 7 8 6 8-6" />
-          </svg>
-          <span class="tab-label">{{ t('contactNav') }}</span>
-        </span>
-      </a>
     </nav>
 
     <footer class="app-footer" aria-label="RouteX footer">
@@ -333,6 +314,12 @@ export class AppComponent {
 
   toggleNav(): void {
     this.isNavOpen = !this.isNavOpen;
+  }
+
+  handleNavLinkClick(): void {
+    if (typeof window !== 'undefined' && window.innerWidth < 992) {
+      this.isNavOpen = false;
+    }
   }
 
   changeLanguage(lang: LanguageCode): void {
@@ -417,7 +404,7 @@ export class AppComponent {
     return '/account';
   }
 
-  isBottomTabActive(tab: 'home' | 'services' | 'activity' | 'account' | 'about' | 'contact'): boolean {
+  isBottomTabActive(tab: 'home' | 'services' | 'activity' | 'account'): boolean {
     const currentPath = this.router.url.split('?')[0] || '/';
 
     if (tab === 'home') {
@@ -432,15 +419,7 @@ export class AppComponent {
       return currentPath.startsWith('/activity') || currentPath.startsWith('/tracking');
     }
 
-    if (tab === 'account') {
-      return currentPath.startsWith('/account') || currentPath.startsWith('/admin') || currentPath.startsWith('/captain-profile');
-    }
-
-    if (tab === 'about') {
-      return currentPath.startsWith('/about-us');
-    }
-
-    return currentPath.startsWith('/contact');
+    return currentPath.startsWith('/account') || currentPath.startsWith('/admin') || currentPath.startsWith('/captain-profile');
   }
 
   getAvatarUrl(user: AppUser): string {

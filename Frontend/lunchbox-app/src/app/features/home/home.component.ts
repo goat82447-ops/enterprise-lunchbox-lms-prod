@@ -27,7 +27,7 @@ import { IntegrationHealthService } from '../../core/services/integration-health
           />
           <div>
             <div class="brand-pill">ROUTEX SUPER APP</div>
-            <h1 class="display-5 fw-bold mb-2 mt-2">One App. All City Deliveries.</h1>
+            <h1 class="display-5 fw-bold mb-2 mt-2 hero-headline">One App. Every Journey 🚀</h1>
             <p class="lead mb-4">Book food, parcel, pickup service, women safety rides, and more with live captain tracking.</p>
             <div class="d-grid d-md-flex gap-2 flex-wrap">
               <a routerLink="/booking" class="btn btn-danger btn-lg">{{ t('bookDelivery') }}</a>
@@ -169,7 +169,7 @@ import { IntegrationHealthService } from '../../core/services/integration-health
 
       .hero-brand {
         display: grid;
-        grid-template-columns: 140px 1fr;
+        grid-template-columns: minmax(104px, 128px) 1fr;
         gap: 18px;
         align-items: center;
       }
@@ -180,11 +180,19 @@ import { IntegrationHealthService } from '../../core/services/integration-health
 
       .hero-logo {
         width: 100%;
-        max-width: 140px;
+        max-width: 128px;
+        aspect-ratio: 1 / 1;
+        object-fit: contain;
         border-radius: 14px;
         border: 1px solid rgba(255, 255, 255, 0.26);
         background: rgba(255, 255, 255, 0.08);
         padding: 6px;
+      }
+
+      .hero-headline {
+        font-size: clamp(2.05rem, 1.3rem + 2.2vw, 3.2rem);
+        line-height: 1.1;
+        letter-spacing: 0.01em;
       }
 
       .brand-pill {
@@ -452,7 +460,7 @@ import { IntegrationHealthService } from '../../core/services/integration-health
         }
 
         .hero-card .display-5 {
-          font-size: 1.72rem;
+          font-size: 1.94rem;
           line-height: 1.2;
         }
 
@@ -470,7 +478,7 @@ import { IntegrationHealthService } from '../../core/services/integration-health
         }
 
         .hero-logo {
-          max-width: 180px;
+          max-width: 132px;
         }
 
         .hero-metrics {
