@@ -1,5 +1,6 @@
 export const environment = {
   production: false,
+  appVersion: '1.0.3',
   authApiBase: 'http://localhost:3000',
   parcelApiBase: 'http://localhost:3000',
   gatewayApiBase: 'http://localhost:3000',
