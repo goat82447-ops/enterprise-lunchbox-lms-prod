@@ -228,6 +228,49 @@ import { environment } from '../environments/environment';
       <router-outlet></router-outlet>
     </main>
 
+    <nav class="bottom-tab-nav" aria-label="Mobile bottom navigation" *ngIf="(isLoggedIn$ | async) && !(isAdmin$ | async) && !(isCaptain$ | async)">
+      <a class="tab-item" [class.active]="isBottomTabActive('home')" routerLink="/home" aria-label="Home">
+        <span class="tab-pill">
+          <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 10.5L12 3l9 7.5"></path>
+            <path d="M5 9.5V21h14V9.5"></path>
+          </svg>
+          <span class="tab-label">Home</span>
+        </span>
+      </a>
+
+      <a class="tab-item" [class.active]="isBottomTabActive('services')" [routerLink]="servicesTabRoute()" aria-label="Services">
+        <span class="tab-pill">
+          <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="4" y="4" width="6" height="6" rx="1"></rect>
+            <rect x="14" y="4" width="6" height="6" rx="1"></rect>
+            <rect x="4" y="14" width="6" height="6" rx="1"></rect>
+            <rect x="14" y="14" width="6" height="6" rx="1"></rect>
+          </svg>
+          <span class="tab-label">Services</span>
+        </span>
+      </a>
+
+      <a class="tab-item" [class.active]="isBottomTabActive('activity')" [routerLink]="activityTabRoute()" aria-label="Activity">
+        <span class="tab-pill">
+          <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <polyline points="3,13 8,13 10,8 14,18 16,13 21,13"></polyline>
+          </svg>
+          <span class="tab-label">Activity</span>
+        </span>
+      </a>
+
+      <a class="tab-item" [class.active]="isBottomTabActive('account')" [routerLink]="accountTabRoute()" aria-label="Account">
+        <span class="tab-pill">
+          <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="8" r="3.5"></circle>
+            <path d="M5 20c1.6-3 4-4.5 7-4.5s5.4 1.5 7 4.5"></path>
+          </svg>
+          <span class="tab-label">Account</span>
+        </span>
+      </a>
+    </nav>
+
     <footer class="app-footer" aria-label="RouteX footer">
       <div class="container-fluid footer-inner">
         <div class="footer-top-row">
