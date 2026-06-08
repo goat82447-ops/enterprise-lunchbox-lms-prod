@@ -1382,17 +1382,6 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
       }
 
-      .vehicle-map-canvas {
-        position: relative;
-        height: 240px;
-        border-radius: 12px;
-        border: 1px solid #cbd5e1;
-        background:
-          radial-gradient(circle at 10% 20%, rgba(147, 197, 253, 0.22) 0, transparent 35%),
-          linear-gradient(135deg, #f8fafc, #e2e8f0);
-        overflow: hidden;
-      }
-
       .vehicle-map-real {
         height: 260px;
         border-radius: 12px;
@@ -1413,43 +1402,6 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         z-index: 700;
         pointer-events: none;
         text-shadow: 0 6px 12px rgba(15, 23, 42, 0.35);
-      }
-
-      .map-pin {
-        position: absolute;
-        transform: translate(-50%, -50%);
-        width: 28px;
-        height: 28px;
-        border: none;
-        border-radius: 50%;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        box-shadow: 0 5px 12px rgba(2, 6, 23, 0.22);
-      }
-
-      .map-pin.pickup {
-        background: #0ea5e9;
-        color: #ffffff;
-        z-index: 2;
-      }
-
-      .map-pin.drop {
-        background: #22c55e;
-        color: #ffffff;
-        z-index: 2;
-      }
-
-      .map-pin.captain {
-        background: #f97316;
-        color: #ffffff;
-        z-index: 3;
-        cursor: pointer;
-      }
-
-      .map-pin.captain.selected {
-        background: #111827;
-        box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.25), 0 8px 16px rgba(2, 6, 23, 0.35);
       }
 
       @media (max-width: 576px) {
@@ -1518,11 +1470,6 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         .history-item,
         .popular-place {
           padding: 9px;
-        }
-
-        .map-pin {
-          width: 24px;
-          height: 24px;
         }
       }
 
