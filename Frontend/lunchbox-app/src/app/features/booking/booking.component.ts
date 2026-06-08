@@ -552,8 +552,6 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
               <div class="small text-success mt-1" *ngIf="promoStatusLevel === 'success'">{{ promoStatusMessage }}</div>
               <div class="small text-danger mt-1" *ngIf="promoStatusLevel === 'error'">{{ promoStatusMessage }}</div>
             </div>
-
-export class BookingComponent implements AfterViewInit, OnDestroy {
             <h5 class="mb-2">Pickup</h5>
             <div class="d-flex gap-2 mb-2 flex-wrap">
               <button class="btn btn-outline-primary btn-sm" type="button" (click)="allowCurrentLocation('pickup')">Allow Current Location</button>
