@@ -11,6 +11,7 @@ import { LanguageCode, LanguageService } from './core/services/language.service'
 import { ThemeCode, ThemeService } from './core/services/theme.service';
 import { ChatbotComponent } from './shared/components/chatbot/chatbot.component';
 import { environment } from '../environments/environment';
+import { SupportService } from './core/services/support.service';
 
 @Component({
   selector: 'app-root',
@@ -290,16 +291,159 @@ import { environment } from '../environments/environment';
     <!-- RouteX Assistant -->
     <app-chatbot></app-chatbot>
 
+    <div class="app-feedback-overlay" *ngIf="showAppFeedbackWidget" role="dialog" aria-modal="true" aria-label="Application feedback">
+      <div class="app-feedback-modal">
+        <div class="app-feedback-title">Rate This App</div>
+        <div class="app-feedback-subtitle">Please give your app experience rating.</div>
+
+        <div class="feedback-type-switch" role="group" aria-label="Feedback context">
+          <button
+            type="button"
+            class="btn btn-sm"
+            [class.btn-primary]="selectedFeedbackType === 'open'"
+            [class.btn-outline-primary]="selectedFeedbackType !== 'open'"
+            (click)="selectedFeedbackType = 'open'"
+          >
+            App Open
+          </button>
+          <button
+            type="button"
+            class="btn btn-sm"
+            [class.btn-primary]="selectedFeedbackType === 'close'"
+            [class.btn-outline-primary]="selectedFeedbackType !== 'close'"
+            (click)="selectedFeedbackType = 'close'"
+          >
+            App Close
+          </button>
+        </div>
+
+        <div class="star-row" aria-label="5 star rating">
+          <button
+            type="button"
+            class="star-btn"
+            *ngFor="let star of feedbackStars"
+            [class.active]="star <= appRating"
+            (click)="setAppRating(star)"
+            [attr.aria-label]="'Rate ' + star + ' stars'"
+          >&#9733;</button>
+        </div>
+        <div class="star-caption" *ngIf="appRating > 0">{{ appRating }}/5 selected</div>
+
+        <textarea
+          class="form-control form-control-sm mt-2"
+          rows="2"
+          maxlength="250"
+          placeholder="Optional feedback note"
+          [(ngModel)]="appFeedbackNote"
+        ></textarea>
+
+        <div class="app-feedback-actions">
+          <button type="button" class="btn btn-sm btn-success" [disabled]="appRating < 1 || isSubmittingAppFeedback" (click)="submitAppFeedback()">
+            {{ isSubmittingAppFeedback ? 'Submitting...' : 'Submit' }}
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" (click)="dismissAppFeedbackWidget()">Later</button>
+        </div>
+      </div>
+    </div>
+
 
   `,
-  styles: []
+  styles: [
+    `
+      .app-feedback-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 1065;
+        background: rgba(2, 6, 23, 0.45);
+        display: grid;
+        place-items: center;
+        padding: 16px;
+      }
+
+      .app-feedback-modal {
+        width: min(360px, calc(100vw - 24px));
+        border: 1px solid #dbeafe;
+        border-radius: 16px;
+        background: #ffffff;
+        box-shadow: 0 16px 36px rgba(15, 23, 42, 0.26);
+        padding: 14px;
+      }
+
+      .feedback-type-switch {
+        display: flex;
+        gap: 8px;
+        margin-top: 8px;
+      }
+
+      .star-row {
+        display: flex;
+        gap: 6px;
+        justify-content: center;
+        margin-top: 10px;
+      }
+
+      .star-btn {
+        border: none;
+        background: transparent;
+        color: #cbd5e1;
+        font-size: 1.65rem;
+        line-height: 1;
+        padding: 0 2px;
+        cursor: pointer;
+      }
+
+      .star-btn.active {
+        color: #f59e0b;
+      }
+
+      .star-caption {
+        text-align: center;
+        font-size: 0.82rem;
+        color: #334155;
+        margin-top: 4px;
+      }
+
+      .app-feedback-widget {
+        position: fixed;
+        right: 14px;
+        bottom: 86px;
+        width: min(320px, calc(100vw - 28px));
+        z-index: 1060;
+        border: 1px solid #bbf7d0;
+        border-radius: 12px;
+        background: #f0fdf4;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.15);
+        padding: 10px;
+      }
+
+      .app-feedback-title {
+        font-weight: 700;
+        color: #166534;
+      }
+
+      .app-feedback-subtitle {
+        font-size: 0.82rem;
+        color: #3f3f46;
+        margin-top: 2px;
+      }
+
+      .app-feedback-actions {
+        display: flex;
+        gap: 6px;
+        margin-top: 8px;
+        flex-wrap: wrap;
+      }
+    `
+  ]
 })
 export class AppComponent {
+  private readonly appFeedbackSubmittedKey = 'routex_app_feedback_submitted_v1';
   private languageService = inject(LanguageService);
   notificationService = inject(NotificationService);
   private authService = inject(AuthService);
   private router = inject(Router);
   private themeService = inject(ThemeService);
+  private supportService = inject(SupportService);
 
   isNavOpen = false;
   showNotificationCenter = false;
@@ -317,6 +461,12 @@ export class AppComponent {
   notificationCount$: Observable<number> = this.notifications$.pipe(map(notifs => notifs.length));
   currentYear = new Date().getFullYear();
   appVersion = environment.appVersion;
+  showAppFeedbackWidget = this.shouldShowAppFeedbackWidget();
+  selectedFeedbackType: 'open' | 'close' = 'open';
+  appRating = 0;
+  appFeedbackNote = '';
+  isSubmittingAppFeedback = false;
+  readonly feedbackStars = [1, 2, 3, 4, 5];
 
   t(key: string): string {
     return this.languageService.t(key);
@@ -457,6 +607,46 @@ export class AppComponent {
     this.router.navigate(['/home']);
   }
 
+  dismissAppFeedbackWidget(): void {
+    this.showAppFeedbackWidget = false;
+  }
+
+  setAppRating(value: number): void {
+    this.appRating = value;
+  }
+
+  submitAppFeedback(): void {
+    if (this.appRating < 1 || this.isSubmittingAppFeedback) {
+      return;
+    }
+
+    const type = this.selectedFeedbackType;
+    const eventLabel = type === 'open' ? 'App Open Feedback' : 'App Close Feedback';
+    const payload = {
+      feedbackType: type,
+      feedbackLabel: eventLabel,
+      appVersion: this.appVersion,
+      route: this.router.url,
+      submittedAt: new Date().toISOString(),
+      rating: this.appRating,
+      note: (this.appFeedbackNote || '').trim() || undefined
+    };
+
+    this.isSubmittingAppFeedback = true;
+    this.supportService.submitAppFeedback(payload).subscribe({
+      next: () => {
+        this.notificationService.push(`${eventLabel} submitted. Thank you.`, 'success');
+        this.isSubmittingAppFeedback = false;
+        this.markAppFeedbackSubmitted();
+        this.showAppFeedbackWidget = false;
+      },
+      error: (error) => {
+        this.notificationService.push(error?.error?.error || `Failed to submit ${eventLabel}.`, 'error');
+        this.isSubmittingAppFeedback = false;
+      }
+    });
+  }
+
   @HostListener('document:click')
   onDocumentClick(): void {
     if (this.showProfileMenu) {
@@ -472,5 +662,21 @@ export class AppComponent {
   @HostListener('window:online')
   onOnline(): void {
     this.isNetworkDown = false;
+  }
+
+  private shouldShowAppFeedbackWidget(): boolean {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return true;
+    }
+
+    return window.localStorage.getItem(this.appFeedbackSubmittedKey) !== '1';
+  }
+
+  private markAppFeedbackSubmitted(): void {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return;
+    }
+
+    window.localStorage.setItem(this.appFeedbackSubmittedKey, '1');
   }
 }

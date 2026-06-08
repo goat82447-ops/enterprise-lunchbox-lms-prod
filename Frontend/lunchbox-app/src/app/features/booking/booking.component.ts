@@ -1,4 +1,4 @@
-import { Component, OnDestroy } from '@angular/core';
+import { AfterViewInit, Component, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -9,6 +9,7 @@ import { BookingService } from '../../core/services/booking.service';
 import { LanguageService } from '../../core/services/language.service';
 import { NotificationService } from '../../core/services/notification.service';
 import { HotelMenuApiItem, NearbyHotelApiItem, PlacesService } from '../../core/services/places.service';
+import { PromoRule, PromoService } from '../../core/services/promo.service';
 import { PricingService } from '../../core/services/pricing.service';
 
 type LocationPreset = {
@@ -453,6 +454,8 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
                   <div class="food-cart-row"><span>Delivery Fee</span><strong>₹{{ foodDeliveryFee }}</strong></div>
                   <div class="food-cart-row"><span>Platform Fee</span><strong>₹{{ foodPlatformFee }}</strong></div>
                   <div class="food-cart-row total"><span>Grand Total</span><strong>₹{{ foodCartTotal }}</strong></div>
+                  <div class="food-cart-row text-success" *ngIf="promoDiscountAmount > 0"><span>Promo ({{ appliedPromoCode }})</span><strong>-₹{{ promoDiscountAmount }}</strong></div>
+                  <div class="food-cart-row total" *ngIf="promoDiscountAmount > 0"><span>Payable</span><strong>₹{{ foodPayableTotal }}</strong></div>
                   <button type="button" class="btn btn-danger btn-sm mt-2" (click)="openFoodCheckout()">Proceed to Payment</button>
                 </div>
 
@@ -475,8 +478,21 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
                     </div>
                   </div>
 
+                  <div class="mb-2">
+                    <label class="form-label small mb-1">Promo Code</label>
+                    <div class="input-group input-group-sm">
+                      <input class="form-control" placeholder="Enter promo code" [(ngModel)]="promoCodeInput" />
+                      <button class="btn btn-outline-primary" type="button" (click)="applyPromoCode()" [disabled]="isApplyingPromo">{{ isApplyingPromo ? 'Applying...' : 'Apply' }}</button>
+                      <button class="btn btn-outline-secondary" type="button" (click)="removePromoCode()" *ngIf="appliedPromoCode">Remove</button>
+                    </div>
+                    <div class="small text-success mt-1" *ngIf="promoStatusLevel === 'success'">{{ promoStatusMessage }}</div>
+                    <div class="small text-danger mt-1" *ngIf="promoStatusLevel === 'error'">{{ promoStatusMessage }}</div>
+                  </div>
+
+                  <div class="small text-muted mb-2">Total: ₹{{ foodCartTotal }} <span *ngIf="promoDiscountAmount > 0">| Promo: -₹{{ promoDiscountAmount }} | Payable: ₹{{ foodPayableTotal }}</span></div>
+
                   <button type="button" class="btn btn-success btn-sm" (click)="confirmFoodPaymentAndBook()">
-                    Pay ₹{{ foodCartTotal }} in RouteX & Place Order
+                    Pay ₹{{ foodPayableTotal }} in RouteX & Place Order
                   </button>
                 </div>
               </div>
@@ -526,7 +542,16 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
                 {{ option }}
               </label>
             </div>
-
+            <div class="mb-3" *ngIf="serviceType !== 'food'">
+              <label class="form-label small mb-1">Promo Code</label>
+              <div class="input-group input-group-sm">
+                <input class="form-control" placeholder="Enter promo code" [(ngModel)]="promoCodeInput" />
+                <button class="btn btn-outline-primary" type="button" (click)="applyPromoCode()" [disabled]="isApplyingPromo">{{ isApplyingPromo ? 'Applying...' : 'Apply' }}</button>
+                <button class="btn btn-outline-secondary" type="button" (click)="removePromoCode()" *ngIf="appliedPromoCode">Remove</button>
+              </div>
+              <div class="small text-success mt-1" *ngIf="promoStatusLevel === 'success'">{{ promoStatusMessage }}</div>
+              <div class="small text-danger mt-1" *ngIf="promoStatusLevel === 'error'">{{ promoStatusMessage }}</div>
+            </div>
             <h5 class="mb-2">Pickup</h5>
             <div class="d-flex gap-2 mb-2 flex-wrap">
               <button class="btn btn-outline-primary btn-sm" type="button" (click)="allowCurrentLocation('pickup')">Allow Current Location</button>
@@ -549,7 +574,6 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
 
             <h5 class="mb-2">Drop Location</h5>
             <div class="d-flex gap-2 mb-2 flex-wrap">
-              <button class="btn btn-outline-primary btn-sm" type="button" (click)="allowCurrentLocation('drop')">Allow Current Location</button>
               <input
                 class="form-control form-control-sm preset-select"
                 placeholder="Search drop place (example: Ameerpet)"
@@ -563,8 +587,8 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
             </div>
             <input class="form-control mb-2" placeholder="Drop address" [(ngModel)]="dropAddress" />
             <div class="row g-2 mb-3">
-              <div class="col"><input class="form-control" type="number" step="0.00001" placeholder="Drop latitude" [(ngModel)]="dropLat" /></div>
-              <div class="col"><input class="form-control" type="number" step="0.00001" placeholder="Drop longitude" [(ngModel)]="dropLng" /></div>
+              <div class="col"><input class="form-control" type="number" step="0.00001" placeholder="Drop latitude" [(ngModel)]="dropLat" (ngModelChange)="onDropLocationInputChanged(true)" /></div>
+              <div class="col"><input class="form-control" type="number" step="0.00001" placeholder="Drop longitude" [(ngModel)]="dropLng" (ngModelChange)="onDropLocationInputChanged(true)" /></div>
             </div>
 
             <div class="trip-summary mb-3" *ngIf="hasRouteCoordinates">
@@ -690,40 +714,25 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
                 </div>
               </div>
               <div class="small text-muted mb-2">
-                Pickup and drop are fixed. Captain pins update automatically when live tracking is enabled.
+                Move map to your target place, keep the pin at center, then confirm pickup or drop.
+              </div>
+              <div class="small text-primary mb-2" *ngIf="mapSelectionTarget">
+                {{ mapSelectionTargetLabel() }} selection mode active.
+              </div>
+              <div class="small mb-2" [class.text-muted]="!mapCenterAddressLoading" [class.text-primary]="mapCenterAddressLoading" *ngIf="hasMapPoints">
+                {{ mapCenterAddressStatusText() }}
               </div>
 
-              <div class="vehicle-map-canvas" *ngIf="hasMapPoints; else mapNotReady">
-                <div
-                  class="map-pin pickup"
-                  [style.left.%]="mapLeftPercent(pickupLng)"
-                  [style.top.%]="mapTopPercent(pickupLat)"
-                  title="Pickup"
-                >
+              <div class="vehicle-map-real-wrap" *ngIf="hasMapPoints; else mapNotReady">
+                <div class="vehicle-map-real" id="vehicle-live-map"></div>
+                <div class="map-center-pin" aria-hidden="true">
                   <span>📍</span>
                 </div>
+              </div>
 
-                <div
-                  class="map-pin drop"
-                  [style.left.%]="mapLeftPercent(dropLng)"
-                  [style.top.%]="mapTopPercent(dropLat)"
-                  title="Drop"
-                >
-                  <span>🏁</span>
-                </div>
-
-                <button
-                  type="button"
-                  class="map-pin captain"
-                  [class.selected]="selectedCaptain?.id === captain.id"
-                  *ngFor="let captain of mapCaptains"
-                  [style.left.%]="mapLeftPercent(captain.locationLng || dropLng)"
-                  [style.top.%]="mapTopPercent(captain.locationLat || dropLat)"
-                  (click)="selectCaptain(captain)"
-                  [title]="captain.name + ' • ETA ' + captain.etaMinutes + ' min'"
-                >
-                  <span>{{ vehicleIcon(captain.vehicleType) }}</span>
-                </button>
+              <div class="d-flex gap-2 mt-2 flex-wrap" *ngIf="hasMapPoints">
+                <button class="btn btn-primary btn-sm" type="button" (click)="confirmCenterMapPoint('pickup')">Set Pickup</button>
+                <button class="btn btn-success btn-sm" type="button" (click)="confirmCenterMapPoint('drop')">Set Drop</button>
               </div>
 
               <ng-template #mapNotReady>
@@ -783,6 +792,8 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
 
             <div class="fare-box mb-4">
               <div><strong>Estimated Fare:</strong> ₹{{ totalEstimatedFare }}</div>
+              <div class="small text-success" *ngIf="promoDiscountAmount > 0">Promo ({{ appliedPromoCode }}): -₹{{ promoDiscountAmount }}</div>
+              <div><strong>Payable Now:</strong> ₹{{ payableTotal }}</div>
               <small class="text-muted">Calculated using distance + traffic + weather + vehicle type.</small>
               <div class="small mt-2">Distance fare: ₹{{ fareBreakdown.distanceFare }}</div>
               <div class="small">Traffic: {{ trafficCondition | titlecase }} (x{{ fareBreakdown.trafficMultiplier }})</div>
@@ -1371,52 +1382,26 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
       }
 
-      .vehicle-map-canvas {
-        position: relative;
-        height: 240px;
+      .vehicle-map-real {
+        height: 260px;
         border-radius: 12px;
         border: 1px solid #cbd5e1;
-        background:
-          radial-gradient(circle at 10% 20%, rgba(147, 197, 253, 0.22) 0, transparent 35%),
-          linear-gradient(135deg, #f8fafc, #e2e8f0);
         overflow: hidden;
       }
 
-      .map-pin {
+      .vehicle-map-real-wrap {
+        position: relative;
+      }
+
+      .map-center-pin {
         position: absolute;
-        transform: translate(-50%, -50%);
-        width: 28px;
-        height: 28px;
-        border: none;
-        border-radius: 50%;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        box-shadow: 0 5px 12px rgba(2, 6, 23, 0.22);
-      }
-
-      .map-pin.pickup {
-        background: #0ea5e9;
-        color: #ffffff;
-        z-index: 2;
-      }
-
-      .map-pin.drop {
-        background: #22c55e;
-        color: #ffffff;
-        z-index: 2;
-      }
-
-      .map-pin.captain {
-        background: #f97316;
-        color: #ffffff;
-        z-index: 3;
-        cursor: pointer;
-      }
-
-      .map-pin.captain.selected {
-        background: #111827;
-        box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.25), 0 8px 16px rgba(2, 6, 23, 0.35);
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -100%);
+        font-size: 1.8rem;
+        z-index: 700;
+        pointer-events: none;
+        text-shadow: 0 6px 12px rgba(15, 23, 42, 0.35);
       }
 
       @media (max-width: 576px) {
@@ -1455,6 +1440,14 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
           height: 210px;
         }
 
+        .vehicle-map-real {
+          height: 220px;
+        }
+
+        .map-center-pin {
+          font-size: 1.6rem;
+        }
+
         .food-suggestion-box .btn-group {
           width: 100%;
         }
@@ -1477,11 +1470,6 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         .history-item,
         .popular-place {
           padding: 9px;
-        }
-
-        .map-pin {
-          width: 24px;
-          height: 24px;
         }
       }
 
@@ -1518,6 +1506,12 @@ export class BookingComponent implements OnDestroy {
   serviceType: ServiceType = 'parcel';
   paymentMethod: PaymentMethod = 'upi';
   selectedUpiApp: 'phonepe' | 'gpay' | 'amazonpay' | '' = 'phonepe';
+  promoCodeInput = '';
+  appliedPromoCode = '';
+  promoStatusMessage = '';
+  promoStatusLevel: 'success' | 'error' | '' = '';
+  isApplyingPromo = false;
+  private appliedPromoRule: PromoRule | null = null;
   bookingFor: 'self' | 'others' = 'self';
   recipientName = '';
   recipientPhone = '';
@@ -1618,6 +1612,16 @@ export class BookingComponent implements OnDestroy {
   private nearbyHotelsRequestCounter = 0;
   private nearbyHotelsApiWarningShown = false;
   private pendingFoodRouteHotelId = '';
+  private pickupReverseGeocodeRequestId = 0;
+  private dropReverseGeocodeRequestId = 0;
+  private pickupReverseGeocodeDebounceHandle: ReturnType<typeof setTimeout> | null = null;
+  private dropReverseGeocodeDebounceHandle: ReturnType<typeof setTimeout> | null = null;
+  private pickupPlaceSearchRequestId = 0;
+  private dropPlaceSearchRequestId = 0;
+  private pickupPlaceSearchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
+  private dropPlaceSearchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
+  pickupLiveSearchResults: LocationPreset[] = [];
+  dropLiveSearchResults: LocationPreset[] = [];
   private speechRecognition: any | null = null;
   voiceSupported = false;
   isVoiceListening = false;
@@ -1629,6 +1633,17 @@ export class BookingComponent implements OnDestroy {
   private pendingVoiceTrip?: { from: string; to: string; note?: string };
   availabilitySurcharge = 0;
   liveTrackMode = true;
+  mapSelectionTarget: 'pickup' | 'drop' | null = null;
+  private leafletAssetsPromise: Promise<void> | null = null;
+  private leafletMap: any = null;
+  private leafletTileLayer: any = null;
+  private leafletPickupMarker: any = null;
+  private leafletDropMarker: any = null;
+  private leafletCaptainMarkers = new Map<string, any>();
+  private mapCenterPreviewDebounceHandle: ReturnType<typeof setTimeout> | null = null;
+  private mapCenterPreviewRequestId = 0;
+  mapCenterAddressPreview = 'Move map to preview address';
+  mapCenterAddressLoading = false;
 
   pickupAddress = 'Pickup Point';
   pickupLat = 17.4372;
@@ -1645,6 +1660,7 @@ export class BookingComponent implements OnDestroy {
     private notifications: NotificationService,
     private pricingService: PricingService,
     private placesService: PlacesService,
+    private promoService: PromoService,
     private router: Router,
     private route: ActivatedRoute
   ) {
@@ -1806,6 +1822,40 @@ export class BookingComponent implements OnDestroy {
       this.medicinePrescriptionVerifyHandle = null;
     }
 
+    if (this.pickupReverseGeocodeDebounceHandle) {
+      clearTimeout(this.pickupReverseGeocodeDebounceHandle);
+      this.pickupReverseGeocodeDebounceHandle = null;
+    }
+
+    if (this.dropReverseGeocodeDebounceHandle) {
+      clearTimeout(this.dropReverseGeocodeDebounceHandle);
+      this.dropReverseGeocodeDebounceHandle = null;
+    }
+
+    if (this.pickupPlaceSearchDebounceHandle) {
+      clearTimeout(this.pickupPlaceSearchDebounceHandle);
+      this.pickupPlaceSearchDebounceHandle = null;
+    }
+
+    if (this.dropPlaceSearchDebounceHandle) {
+      clearTimeout(this.dropPlaceSearchDebounceHandle);
+      this.dropPlaceSearchDebounceHandle = null;
+    }
+
+    if (this.mapCenterPreviewDebounceHandle) {
+      clearTimeout(this.mapCenterPreviewDebounceHandle);
+      this.mapCenterPreviewDebounceHandle = null;
+    }
+
+    if (this.leafletMap) {
+      this.leafletMap.remove();
+      this.leafletMap = null;
+      this.leafletTileLayer = null;
+      this.leafletPickupMarker = null;
+      this.leafletDropMarker = null;
+      this.leafletCaptainMarkers.clear();
+    }
+
     this.historySubscription?.unsubscribe();
     this.authSubscription?.unsubscribe();
     this.routeQueryParamsSubscription?.unsubscribe();
@@ -1817,6 +1867,12 @@ export class BookingComponent implements OnDestroy {
       this.speechRecognition.onend = null;
       this.speechRecognition.stop();
     }
+  }
+
+  ngAfterViewInit(): void {
+    setTimeout(() => {
+      void this.ensureLeafletMapReady();
+    }, 0);
   }
 
   toggleVoiceBooking(): void {
@@ -1870,6 +1926,7 @@ export class BookingComponent implements OnDestroy {
 
         this.popularPlaces = this.buildPopularPlaces();
         this.ensureLiveTrackHeartbeat();
+        void this.syncLeafletMapMarkers();
       },
       error: () => {
         this.nearbyCaptains = this.generateFallbackNearbyCaptains();
@@ -1883,6 +1940,7 @@ export class BookingComponent implements OnDestroy {
 
         this.popularPlaces = this.buildPopularPlaces();
         this.ensureLiveTrackHeartbeat();
+        void this.syncLeafletMapMarkers();
       }
     });
   }
@@ -1891,6 +1949,7 @@ export class BookingComponent implements OnDestroy {
     const modeLabel = this.liveTrackMode ? 'enabled' : 'disabled';
     this.notifications.push(`Live track mode ${modeLabel}.`, 'info');
     this.ensureLiveTrackHeartbeat();
+    void this.syncLeafletMapMarkers();
   }
 
   get filteredNearbyCaptains(): NearbyCaptain[] {
@@ -1925,6 +1984,27 @@ export class BookingComponent implements OnDestroy {
 
   get totalEstimatedFare(): number {
     return Math.max(0, Math.round(this.estimatedFare + this.availabilitySurcharge));
+  }
+
+  get promoDiscountAmount(): number {
+    return this.evaluatePromoDiscount(this.activePayableBaseAmount());
+  }
+
+  get payableTotal(): number {
+    const baseAmount = this.activePayableBaseAmount();
+    return Math.max(0, Math.round(baseAmount - this.promoDiscountAmount));
+  }
+
+  get foodPayableTotal(): number {
+    return Math.max(0, Math.round(this.foodCartTotal - this.promoDiscountAmount));
+  }
+
+  mapSelectionTargetLabel(): string {
+    return this.mapSelectionTarget === 'pickup' ? 'Pickup' : 'Drop';
+  }
+
+  mapCenterAddressStatusText(): string {
+    return this.mapCenterAddressLoading ? 'Searching center address...' : `Center: ${this.mapCenterAddressPreview}`;
   }
 
   get hasRouteCoordinates(): boolean {
@@ -1988,16 +2068,19 @@ export class BookingComponent implements OnDestroy {
   selectCaptain(captain: NearbyCaptain | undefined): void {
     if (!captain) {
       this.selectedCaptain = null;
+      void this.syncLeafletMapMarkers();
       return;
     }
     if (!this.isCaptainAvailable(captain)) {
       this.selectedCaptain = null;
+      void this.syncLeafletMapMarkers();
       return;
     }
     this.selectedCaptain = captain;
     this.vehicleType = captain.vehicleType;
     this.updateEstimatedFare(this.getFareDistanceKm(), captain.vehicleType);
     this.clearAvailabilitySurcharge();
+    void this.syncLeafletMapMarkers();
   }
 
   onServiceTypeChange(serviceType: ServiceType): void {
@@ -2025,6 +2108,10 @@ export class BookingComponent implements OnDestroy {
       this.foodCartItems = [];
       this.foodCheckoutOpen = false;
       this.selectedUpiApp = 'phonepe';
+
+      setTimeout(() => {
+        void this.ensureLeafletMapReady();
+      }, 0);
 
       if (this.isFoodRoutePath(this.currentRoutePath())) {
         this.router.navigate(['/booking']);
@@ -2083,8 +2170,13 @@ export class BookingComponent implements OnDestroy {
   }
 
   onPickupLocationInputChanged(refreshNetworkData = false): void {
+    void this.ensureLeafletMapReady();
     this.refreshLocationSuggestions();
     this.popularPlaces = this.buildPopularPlaces();
+
+    if (refreshNetworkData) {
+      this.scheduleAddressFromCoordinates('pickup', Number(this.pickupLat), Number(this.pickupLng), 450);
+    }
 
     if (refreshNetworkData) {
       this.refreshNearbyCaptains();
@@ -2096,6 +2188,71 @@ export class BookingComponent implements OnDestroy {
     if (this.serviceType === 'food') {
       this.refreshNearbyHotelsLive(true);
     }
+
+    void this.syncLeafletMapMarkers();
+  }
+
+  onDropLocationInputChanged(refreshNetworkData = false): void {
+    void this.ensureLeafletMapReady();
+    this.refreshLocationSuggestions();
+
+    if (refreshNetworkData) {
+      this.scheduleAddressFromCoordinates('drop', Number(this.dropLat), Number(this.dropLng), 450);
+      if (this.selectedCaptain) {
+        this.updateEstimatedFare(this.getFareDistanceKm(), this.selectedCaptain.vehicleType);
+      }
+    }
+
+    void this.syncLeafletMapMarkers();
+  }
+
+  confirmCenterMapPoint(target: 'pickup' | 'drop'): void {
+    if (!this.hasMapPoints) {
+      this.notifications.push('Map is not ready. Add pickup and drop coordinates first.', 'warning');
+      return;
+    }
+
+    void this.ensureLeafletMapReady();
+    if (!this.leafletMap) {
+      this.notifications.push('Real-time map is still loading. Please try again.', 'warning');
+      return;
+    }
+
+    const center = this.leafletMap.getCenter();
+    const lat = this.round(Number(center?.lat));
+    const lng = this.round(Number(center?.lng));
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      this.notifications.push('Unable to detect map center. Please try again.', 'warning');
+      return;
+    }
+
+    this.mapSelectionTarget = target;
+    this.applyMapPickToTarget(target, lat, lng);
+  }
+
+  private applyMapPickToTarget(target: 'pickup' | 'drop', lat: number, lng: number): void {
+    const fallbackLabel = this.dynamicCurrentLocationLabel(lat, lng);
+
+    if (target === 'pickup') {
+      this.pickupLat = lat;
+      this.pickupLng = lng;
+      this.pickupAddress = fallbackLabel;
+      this.pickupSearchTerm = fallbackLabel;
+      this.onPickupLocationInputChanged(true);
+      this.refreshNearbyHotelsLive(true);
+      this.popularPlaces = this.buildPopularPlaces();
+    } else {
+      this.dropLat = lat;
+      this.dropLng = lng;
+      this.dropAddress = fallbackLabel;
+      this.dropSearchTerm = fallbackLabel;
+      this.onDropLocationInputChanged(true);
+    }
+
+    this.updateAddressFromCoordinates(target, lat, lng);
+    this.mapSelectionTarget = null;
+    void this.syncLeafletMapMarkers();
+    this.notifications.push(`${target === 'pickup' ? 'Pickup' : 'Drop'} location updated from map.`, 'success');
   }
 
   setFoodPreference(preference: 'all' | 'veg' | 'nonveg'): void {
@@ -2305,6 +2462,51 @@ export class BookingComponent implements OnDestroy {
     this.bookNow();
   }
 
+  applyPromoCode(): void {
+    const normalized = (this.promoCodeInput || '').trim().toUpperCase();
+    if (!normalized || this.isApplyingPromo) {
+      this.promoStatusLevel = 'error';
+      this.promoStatusMessage = normalized ? 'Promo validation in progress.' : 'Please enter promo code.';
+      return;
+    }
+
+    this.isApplyingPromo = true;
+    this.promoService.validatePromo(normalized, this.activePayableBaseAmount()).subscribe({
+      next: (response) => {
+        if (!response.valid || !response.promo) {
+          this.appliedPromoCode = '';
+          this.appliedPromoRule = null;
+          this.promoStatusLevel = 'error';
+          this.promoStatusMessage = response.error || 'Invalid promo code.';
+          this.isApplyingPromo = false;
+          return;
+        }
+
+        this.appliedPromoCode = response.code || response.promo.code;
+        this.appliedPromoRule = response.promo;
+        this.promoCodeInput = this.appliedPromoCode;
+        this.promoStatusLevel = 'success';
+        this.promoStatusMessage = `Promo ${this.appliedPromoCode} applied. You save ₹${this.promoDiscountAmount}.`;
+        this.isApplyingPromo = false;
+      },
+      error: (error) => {
+        this.appliedPromoCode = '';
+        this.appliedPromoRule = null;
+        this.promoStatusLevel = 'error';
+        this.promoStatusMessage = error?.error?.error || 'Failed to validate promo code.';
+        this.isApplyingPromo = false;
+      }
+    });
+  }
+
+  removePromoCode(): void {
+    this.appliedPromoCode = '';
+    this.appliedPromoRule = null;
+    this.promoCodeInput = '';
+    this.promoStatusLevel = '';
+    this.promoStatusMessage = '';
+  }
+
   private launchSelectedUpiApp(): boolean {
     const option = this.upiAppOptions.find((item) => item.id === this.selectedUpiApp);
     if (!option) {
@@ -2313,7 +2515,7 @@ export class BookingComponent implements OnDestroy {
 
     const payeeVpa = 'payments@routex';
     const payeeName = 'RouteX';
-    const amount = this.foodCartTotal.toFixed(2);
+    const amount = this.foodPayableTotal.toFixed(2);
     const transactionNote = encodeURIComponent(`RouteX Food Order ${Date.now()}`);
 
     const appDeepLinks: Record<'phonepe' | 'gpay' | 'amazonpay', string> = {
@@ -2333,6 +2535,31 @@ export class BookingComponent implements OnDestroy {
     } catch {
       return false;
     }
+  }
+
+  private activePayableBaseAmount(): number {
+    return this.serviceType === 'food' ? this.foodCartTotal : this.totalEstimatedFare;
+  }
+
+  private evaluatePromoDiscount(baseAmount: number): number {
+    if (!this.appliedPromoCode || !this.appliedPromoRule || baseAmount <= 0) {
+      return 0;
+    }
+
+    const promo = this.appliedPromoRule;
+    if (baseAmount < promo.minAmount) {
+      return 0;
+    }
+
+    if (promo.type === 'flat') {
+      return Math.min(baseAmount, promo.value);
+    }
+
+    const percentDiscount = Math.round((baseAmount * promo.value) / 100);
+    if (promo.maxDiscount !== undefined) {
+      return Math.min(percentDiscount, promo.maxDiscount);
+    }
+    return percentDiscount;
   }
 
   vehicleIcon(vehicleType: VehicleType): string {
@@ -2440,11 +2667,13 @@ export class BookingComponent implements OnDestroy {
 
   onPickupSearchTermChange(value: string): void {
     this.pickupSearchTerm = value || '';
+    this.schedulePlaceSearch('pickup', this.pickupSearchTerm);
     this.applyPickupPreset(this.pickupSearchTerm);
   }
 
   onDropSearchTermChange(value: string): void {
     this.dropSearchTerm = value || '';
+    this.schedulePlaceSearch('drop', this.dropSearchTerm);
     this.applyDropPreset(this.dropSearchTerm);
   }
 
@@ -2539,25 +2768,27 @@ export class BookingComponent implements OnDestroy {
       (position) => {
         const lat = this.round(position.coords.latitude);
         const lng = this.round(position.coords.longitude);
-        const label = this.dynamicCurrentLocationLabel(lat, lng);
+        const fallbackLabel = this.dynamicCurrentLocationLabel(lat, lng);
 
         if (target === 'pickup') {
           this.pickupLat = lat;
           this.pickupLng = lng;
-          this.pickupAddress = label;
-          this.saveRecentLocation('pickup', { name: label, lat, lng });
+          this.pickupAddress = fallbackLabel;
+          this.pickupSearchTerm = fallbackLabel;
           this.refreshNearbyCaptains();
           this.refreshNearbyHotelsLive(true);
           this.popularPlaces = this.buildPopularPlaces();
         } else {
           this.dropLat = lat;
           this.dropLng = lng;
-          this.dropAddress = label;
-          this.saveRecentLocation('drop', { name: label, lat, lng });
+          this.dropAddress = fallbackLabel;
+          this.dropSearchTerm = fallbackLabel;
           if (this.selectedCaptain) {
             this.updateEstimatedFare(this.getFareDistanceKm(), this.selectedCaptain.vehicleType);
           }
         }
+
+        this.updateAddressFromCoordinates(target, lat, lng);
 
         this.refreshLocationSuggestions();
 
@@ -2676,7 +2907,7 @@ export class BookingComponent implements OnDestroy {
       }
     }
 
-    const estimatedFare = this.serviceType === 'food' ? this.foodCartTotal : this.totalEstimatedFare;
+    const estimatedFare = this.payableTotal;
 
     const request: BookingRequest = {
       bookingFor: this.bookingFor,
@@ -3386,7 +3617,229 @@ export class BookingComponent implements OnDestroy {
           locationLabel: this.dynamicCurrentLocationLabel(locationLat, locationLng)
         };
       });
+
+      void this.syncLeafletMapMarkers();
     }, 3000);
+  }
+
+  private async ensureLeafletMapReady(): Promise<void> {
+    if (this.serviceType === 'food' || !this.hasMapPoints) {
+      return;
+    }
+
+    try {
+      await this.loadLeafletAssets();
+    } catch {
+      this.notifications.push('Unable to load real-time map right now.', 'warning');
+      return;
+    }
+
+    const host = document.getElementById('vehicle-live-map');
+    if (!host) {
+      return;
+    }
+
+    const L = (window as any).L;
+    if (!L) {
+      return;
+    }
+
+    if (!this.leafletMap) {
+      this.leafletMap = L.map(host, {
+        zoomControl: true,
+        attributionControl: true
+      }).setView([Number(this.pickupLat), Number(this.pickupLng)], 13);
+
+      this.leafletTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(this.leafletMap);
+
+      this.leafletMap.on('movestart', () => {
+        this.mapSelectionTarget = null;
+        this.mapCenterAddressLoading = true;
+        this.mapCenterAddressPreview = 'Move map to preview address';
+      });
+
+      this.leafletMap.on('moveend', () => {
+        const center = this.leafletMap?.getCenter();
+        const lat = this.round(Number(center?.lat));
+        const lng = this.round(Number(center?.lng));
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+          this.mapCenterAddressLoading = false;
+          return;
+        }
+        this.scheduleMapCenterPreview(lat, lng, 350);
+      });
+    }
+
+    if (!this.leafletPickupMarker) {
+      this.leafletPickupMarker = L.marker([Number(this.pickupLat), Number(this.pickupLng)], {
+        draggable: true,
+        title: 'Pickup'
+      }).addTo(this.leafletMap);
+
+      this.leafletPickupMarker.on('dragend', () => {
+        const point = this.leafletPickupMarker.getLatLng();
+        this.applyMapPickToTarget('pickup', this.round(Number(point.lat)), this.round(Number(point.lng)));
+      });
+    }
+
+    if (!this.leafletDropMarker) {
+      this.leafletDropMarker = L.marker([Number(this.dropLat), Number(this.dropLng)], {
+        draggable: true,
+        title: 'Drop'
+      }).addTo(this.leafletMap);
+
+      this.leafletDropMarker.on('dragend', () => {
+        const point = this.leafletDropMarker.getLatLng();
+        this.applyMapPickToTarget('drop', this.round(Number(point.lat)), this.round(Number(point.lng)));
+      });
+    }
+
+    setTimeout(() => {
+      this.leafletMap?.invalidateSize();
+    }, 0);
+
+    const initialCenter = this.leafletMap.getCenter();
+    const initialLat = this.round(Number(initialCenter?.lat));
+    const initialLng = this.round(Number(initialCenter?.lng));
+    if (Number.isFinite(initialLat) && Number.isFinite(initialLng)) {
+      this.scheduleMapCenterPreview(initialLat, initialLng, 0);
+    }
+
+    await this.syncLeafletMapMarkers();
+  }
+
+  private scheduleMapCenterPreview(lat: number, lng: number, debounceMs = 300): void {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return;
+    }
+
+    if (this.mapCenterPreviewDebounceHandle) {
+      clearTimeout(this.mapCenterPreviewDebounceHandle);
+      this.mapCenterPreviewDebounceHandle = null;
+    }
+
+    const requestId = ++this.mapCenterPreviewRequestId;
+    this.mapCenterAddressLoading = true;
+
+    this.mapCenterPreviewDebounceHandle = setTimeout(() => {
+      this.mapCenterPreviewDebounceHandle = null;
+      void this.reverseGeocodePlaceName(lat, lng)
+        .then((resolved) => {
+          if (requestId !== this.mapCenterPreviewRequestId) {
+            return;
+          }
+          this.mapCenterAddressPreview = (resolved || this.dynamicCurrentLocationLabel(lat, lng)).trim();
+          this.mapCenterAddressLoading = false;
+        })
+        .catch(() => {
+          if (requestId !== this.mapCenterPreviewRequestId) {
+            return;
+          }
+          this.mapCenterAddressPreview = this.dynamicCurrentLocationLabel(lat, lng);
+          this.mapCenterAddressLoading = false;
+        });
+    }, Math.max(0, debounceMs));
+  }
+
+  private async syncLeafletMapMarkers(): Promise<void> {
+    if (!this.leafletMap || !this.leafletPickupMarker || !this.leafletDropMarker) {
+      return;
+    }
+
+    const L = (window as any).L;
+    if (!L) {
+      return;
+    }
+
+    const pickupLatLng: [number, number] = [Number(this.pickupLat), Number(this.pickupLng)];
+    const dropLatLng: [number, number] = [Number(this.dropLat), Number(this.dropLng)];
+    this.leafletPickupMarker.setLatLng(pickupLatLng);
+    this.leafletDropMarker.setLatLng(dropLatLng);
+
+    const visibleCaptainIds = new Set(this.mapCaptains.map((captain) => captain.id));
+    for (const [captainId, marker] of this.leafletCaptainMarkers.entries()) {
+      if (!visibleCaptainIds.has(captainId)) {
+        this.leafletMap.removeLayer(marker);
+        this.leafletCaptainMarkers.delete(captainId);
+      }
+    }
+
+    this.mapCaptains.forEach((captain) => {
+      const lat = Number(captain.locationLat);
+      const lng = Number(captain.locationLng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        return;
+      }
+
+      const isSelected = this.selectedCaptain?.id === captain.id;
+      const markerColor = isSelected ? '#111827' : '#f97316';
+      const markerRadius = isSelected ? 8 : 6;
+      const popupLabel = `${captain.name} • ETA ${captain.etaMinutes} min`;
+      const existingMarker = this.leafletCaptainMarkers.get(captain.id);
+
+      if (existingMarker) {
+        existingMarker.setLatLng([lat, lng]);
+        existingMarker.setStyle({ color: markerColor, fillColor: markerColor, radius: markerRadius });
+      } else {
+        const marker = L.circleMarker([lat, lng], {
+          radius: markerRadius,
+          color: markerColor,
+          fillColor: markerColor,
+          fillOpacity: 0.9,
+          weight: 2
+        }).addTo(this.leafletMap);
+
+        marker.bindTooltip(popupLabel, { direction: 'top' });
+        marker.on('click', () => this.selectCaptain(captain));
+        this.leafletCaptainMarkers.set(captain.id, marker);
+      }
+    });
+  }
+
+  private loadLeafletAssets(): Promise<void> {
+    if ((window as any).L) {
+      return Promise.resolve();
+    }
+
+    if (this.leafletAssetsPromise) {
+      return this.leafletAssetsPromise;
+    }
+
+    this.leafletAssetsPromise = new Promise((resolve, reject) => {
+      const cssId = 'leaflet-cdn-css';
+      if (!document.getElementById(cssId)) {
+        const link = document.createElement('link');
+        link.id = cssId;
+        link.rel = 'stylesheet';
+        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+        document.head.appendChild(link);
+      }
+
+      const scriptId = 'leaflet-cdn-js';
+      const existingScript = document.getElementById(scriptId) as HTMLScriptElement | null;
+      if (existingScript) {
+        if ((window as any).L) {
+          resolve();
+          return;
+        }
+        existingScript.addEventListener('load', () => resolve(), { once: true });
+        existingScript.addEventListener('error', () => reject(new Error('Failed to load Leaflet JS.')), { once: true });
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.id = scriptId;
+      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+      script.async = true;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error('Failed to load Leaflet JS.'));
+      document.body.appendChild(script);
+    });
+
+    return this.leafletAssetsPromise;
   }
 
   private mapBounds(): {
@@ -3436,6 +3889,111 @@ export class BookingComponent implements OnDestroy {
     return String(phone || '').replace(/\D/g, '');
   }
 
+  private scheduleAddressFromCoordinates(
+    target: 'pickup' | 'drop',
+    lat: number,
+    lng: number,
+    debounceMs = 0
+  ): void {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return;
+    }
+
+    const activeHandle = target === 'pickup'
+      ? this.pickupReverseGeocodeDebounceHandle
+      : this.dropReverseGeocodeDebounceHandle;
+
+    if (activeHandle) {
+      clearTimeout(activeHandle);
+    }
+
+    const nextHandle = setTimeout(() => {
+      if (target === 'pickup') {
+        this.pickupReverseGeocodeDebounceHandle = null;
+      } else {
+        this.dropReverseGeocodeDebounceHandle = null;
+      }
+
+      this.updateAddressFromCoordinates(target, lat, lng);
+    }, Math.max(0, debounceMs));
+
+    if (target === 'pickup') {
+      this.pickupReverseGeocodeDebounceHandle = nextHandle;
+    } else {
+      this.dropReverseGeocodeDebounceHandle = nextHandle;
+    }
+  }
+
+  private updateAddressFromCoordinates(target: 'pickup' | 'drop', lat: number, lng: number): void {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return;
+    }
+
+    const requestId = target === 'pickup'
+      ? ++this.pickupReverseGeocodeRequestId
+      : ++this.dropReverseGeocodeRequestId;
+
+    void this.reverseGeocodePlaceName(lat, lng)
+      .then((resolvedAddress) => {
+        const latestRequestId = target === 'pickup'
+          ? this.pickupReverseGeocodeRequestId
+          : this.dropReverseGeocodeRequestId;
+        if (requestId !== latestRequestId) {
+          return;
+        }
+
+        const finalAddress = (resolvedAddress || this.dynamicCurrentLocationLabel(lat, lng)).trim();
+        if (!finalAddress) {
+          return;
+        }
+
+        if (target === 'pickup') {
+          this.pickupAddress = finalAddress;
+          this.pickupSearchTerm = finalAddress;
+        } else {
+          this.dropAddress = finalAddress;
+          this.dropSearchTerm = finalAddress;
+        }
+
+        this.saveRecentLocation(target, { name: finalAddress, lat, lng });
+        this.refreshLocationSuggestions();
+      })
+      .catch(() => {
+        // Silent fallback: keep current label if reverse geocoding fails.
+      });
+  }
+
+  private async reverseGeocodePlaceName(lat: number, lng: number): Promise<string | null> {
+    try {
+      const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(String(lat))}&lon=${encodeURIComponent(String(lng))}`;
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const payload = await response.json() as { display_name?: string };
+      const displayName = (payload.display_name || '').trim();
+      if (!displayName) {
+        return null;
+      }
+
+      const pieces = displayName
+        .split(',')
+        .map((part) => part.trim())
+        .filter((part) => !!part);
+
+      return pieces.slice(0, 4).join(', ');
+    } catch {
+      return null;
+    }
+  }
+
   private dynamicCurrentLocationLabel(lat: number, lng: number): string {
     const landmarks = ['Maha Laxmi Garden', 'City Center', 'Lake View', 'Tech Park', 'Metro Plaza'];
     const index = Math.abs(Math.round((lat + lng) * 1000)) % landmarks.length;
@@ -3456,7 +4014,7 @@ export class BookingComponent implements OnDestroy {
   }
 
   private filterLocationSuggestions(target: 'pickup' | 'drop', query: string): LocationPreset[] {
-    const source = target === 'pickup' ? this.pickupLocationSuggestions : this.dropLocationSuggestions;
+    const source = this.combinedLocationSuggestions(target);
     const text = (query || '').trim().toLowerCase();
     const pickupReference = { lat: Number(this.pickupLat), lng: Number(this.pickupLng) };
 
@@ -3472,7 +4030,7 @@ export class BookingComponent implements OnDestroy {
     const rankedStartsWith = this.rankByNearestToPickup(startsWithMatches, pickupReference.lat, pickupReference.lng);
     const rankedContains = this.rankByNearestToPickup(containsMatches, pickupReference.lat, pickupReference.lng);
 
-    return [...rankedStartsWith, ...rankedContains];
+    return [...rankedStartsWith, ...rankedContains].slice(0, 10);
   }
 
   private findLocationByName(target: 'pickup' | 'drop', name: string): LocationPreset | null {
@@ -3482,7 +4040,7 @@ export class BookingComponent implements OnDestroy {
     }
 
     const normalized = cleaned.toLowerCase();
-    const source = target === 'pickup' ? this.pickupLocationSuggestions : this.dropLocationSuggestions;
+    const source = this.combinedLocationSuggestions(target);
     const fromSuggestions = source.find((item) => item.name.trim().toLowerCase() === normalized);
     if (fromSuggestions) {
       return fromSuggestions;
@@ -3494,6 +4052,119 @@ export class BookingComponent implements OnDestroy {
     }
 
     return null;
+  }
+
+  private combinedLocationSuggestions(target: 'pickup' | 'drop'): LocationPreset[] {
+    const local = target === 'pickup' ? this.pickupLocationSuggestions : this.dropLocationSuggestions;
+    const live = target === 'pickup' ? this.pickupLiveSearchResults : this.dropLiveSearchResults;
+    const map = new Map<string, LocationPreset>();
+
+    [...local, ...live].forEach((item) => {
+      const key = (item.name || '').trim().toLowerCase();
+      if (!key) {
+        return;
+      }
+      if (!map.has(key)) {
+        map.set(key, {
+          name: item.name.trim(),
+          lat: this.round(Number(item.lat)),
+          lng: this.round(Number(item.lng))
+        });
+      }
+    });
+
+    return [...map.values()];
+  }
+
+  private schedulePlaceSearch(target: 'pickup' | 'drop', query: string, debounceMs = 300): void {
+    const normalized = (query || '').trim();
+    const existingHandle = target === 'pickup'
+      ? this.pickupPlaceSearchDebounceHandle
+      : this.dropPlaceSearchDebounceHandle;
+
+    if (existingHandle) {
+      clearTimeout(existingHandle);
+    }
+
+    if (normalized.length < 2) {
+      if (target === 'pickup') {
+        this.pickupLiveSearchResults = [];
+        this.pickupPlaceSearchDebounceHandle = null;
+      } else {
+        this.dropLiveSearchResults = [];
+        this.dropPlaceSearchDebounceHandle = null;
+      }
+      return;
+    }
+
+    const requestId = target === 'pickup'
+      ? ++this.pickupPlaceSearchRequestId
+      : ++this.dropPlaceSearchRequestId;
+
+    const run = async (): Promise<void> => {
+      try {
+        const places = await this.searchPlacesByText(normalized);
+        const latestRequestId = target === 'pickup' ? this.pickupPlaceSearchRequestId : this.dropPlaceSearchRequestId;
+        if (requestId !== latestRequestId) {
+          return;
+        }
+
+        if (target === 'pickup') {
+          this.pickupLiveSearchResults = places;
+          this.pickupPlaceSearchDebounceHandle = null;
+        } else {
+          this.dropLiveSearchResults = places;
+          this.dropPlaceSearchDebounceHandle = null;
+        }
+      } catch {
+        if (target === 'pickup') {
+          this.pickupLiveSearchResults = [];
+          this.pickupPlaceSearchDebounceHandle = null;
+        } else {
+          this.dropLiveSearchResults = [];
+          this.dropPlaceSearchDebounceHandle = null;
+        }
+      }
+    };
+
+    const nextHandle = setTimeout(() => {
+      run();
+    }, Math.max(0, debounceMs));
+
+    if (target === 'pickup') {
+      this.pickupPlaceSearchDebounceHandle = nextHandle;
+    } else {
+      this.dropPlaceSearchDebounceHandle = nextHandle;
+    }
+  }
+
+  private async searchPlacesByText(query: string): Promise<LocationPreset[]> {
+    const encoded = encodeURIComponent(query);
+    const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encoded}&countrycodes=in&addressdetails=0&limit=8`;
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      return [];
+    }
+
+    const payload = await response.json() as Array<{ display_name?: string; lat?: string; lon?: string }>;
+    if (!Array.isArray(payload)) {
+      return [];
+    }
+
+    return payload
+      .map((entry) => {
+        const lat = Number(entry.lat);
+        const lng = Number(entry.lon);
+        const fullName = String(entry.display_name || '').trim();
+        const primaryName = fullName.split(',').map((part) => part.trim()).filter(Boolean).slice(0, 2).join(', ');
+        return {
+          name: primaryName || fullName,
+          lat: this.round(lat),
+          lng: this.round(lng)
+        };
+      })
+      .filter((item) => !!item.name && Number.isFinite(item.lat) && Number.isFinite(item.lng));
   }
 
   private buildLocationSuggestions(target: 'pickup' | 'drop'): LocationPreset[] {
@@ -4419,7 +5090,7 @@ export class BookingComponent implements OnDestroy {
       const foodDetails = [
         `Food Hotel: ${this.selectedHotelForFood.name}`,
         `Food Items: ${ordered}`,
-        `Food Total: Rs ${this.foodCartTotal}`,
+        `Food Total: Rs ${this.foodPayableTotal}`,
         `Payment: ${this.paymentMethod}`
       ];
       sections.push(foodDetails.join(' | '));
