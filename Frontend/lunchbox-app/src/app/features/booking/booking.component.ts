@@ -719,10 +719,10 @@ export class BookingComponent implements AfterViewInit, OnDestroy {
                 Move map to your target place, keep the pin at center, then confirm pickup or drop.
               </div>
               <div class="small text-primary mb-2" *ngIf="mapSelectionTarget">
-                {{ mapSelectionTarget === 'pickup' ? 'Pickup' : 'Drop' }} selection mode active.
+                {{ mapSelectionTargetLabel() }} selection mode active.
               </div>
               <div class="small mb-2" [class.text-muted]="!mapCenterAddressLoading" [class.text-primary]="mapCenterAddressLoading" *ngIf="hasMapPoints">
-                {{ mapCenterAddressLoading ? 'Searching center address...' : ('Center: ' + mapCenterAddressPreview) }}
+                {{ mapCenterAddressStatusText() }}
               </div>
 
               <div class="vehicle-map-real-wrap" *ngIf="hasMapPoints; else mapNotReady">
@@ -2052,6 +2052,14 @@ export class BookingComponent implements OnDestroy {
 
   get foodPayableTotal(): number {
     return Math.max(0, Math.round(this.foodCartTotal - this.promoDiscountAmount));
+  }
+
+  mapSelectionTargetLabel(): string {
+    return this.mapSelectionTarget === 'pickup' ? 'Pickup' : 'Drop';
+  }
+
+  mapCenterAddressStatusText(): string {
+    return this.mapCenterAddressLoading ? 'Searching center address...' : `Center: ${this.mapCenterAddressPreview}`;
   }
 
   get hasRouteCoordinates(): boolean {
