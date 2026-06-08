@@ -54,6 +54,7 @@ type PopularPlace = {
 };
 
 type FocusedBookingMode = 'all' | 'womenSafety' | 'teen' | 'school';
+type FoodFlowStage = 'hotels' | 'menu';
 
 const LAST_LOCATION_KEY = 'delivery_last_location';
 const RECENT_LOCATIONS_KEY = 'delivery_recent_locations';
@@ -64,7 +65,7 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <div class="container py-4">
+    <div class="container py-4" [class.lunchbox-theme-page]="isLunchboxDeliveryPage">
       <div class="card p-3 mb-3 border-primary" *ngIf="isSchoolBookingPage">
         <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
           <div>
@@ -73,6 +74,17 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
             <div class="small text-muted">Use this page for daily lunch delivery booking, student details, and school handover instructions.</div>
           </div>
           <span class="badge text-bg-primary">School Mode Active</span>
+        </div>
+      </div>
+
+      <div class="card p-3 mb-3 border-danger lunchbox-hero-card" *ngIf="isLunchboxDeliveryPage">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+          <div>
+            <div class="small text-danger fw-semibold">LUNCHBOX DELIVERY PAGE</div>
+            <h4 class="mb-1">RouteX LunchBox Delivery</h4>
+            <div class="small text-muted">Use this dedicated page to place lunchbox orders with school and student details.</div>
+          </div>
+          <img src="assets/lunchbox-logo.svg" alt="LunchBox" class="lunchbox-hero-logo" />
         </div>
       </div>
 
@@ -96,7 +108,7 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
             <div class="small text-muted">Use this for school lunch delivery with child and school details.</div>
           </div>
           <div class="d-flex align-items-center gap-2">
-            <button class="btn btn-outline-primary btn-sm" type="button" (click)="openLunchboxBookingsPage()" *ngIf="!isSchoolBookingPage">Open RouteX School Page</button>
+            <button class="btn btn-outline-primary btn-sm" type="button" (click)="openLunchboxBookingsPage()" *ngIf="!isSchoolBookingPage && !isLunchboxDeliveryPage">Open LunchBox Delivery Page</button>
             <div class="form-check form-switch m-0 pt-1">
               <input
                 class="form-check-input"
@@ -195,7 +207,7 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         </div>
       </div>
 
-      <h2 class="mb-3">{{ isSchoolBookingPage ? 'RouteX School Booking' : 'Book Delivery' }}</h2>
+      <h2 class="mb-3">{{ isLunchboxDeliveryPage ? 'RouteX LunchBox Booking' : (isSchoolBookingPage ? 'RouteX School Booking' : 'Book Delivery') }}</h2>
       <p class="text-muted">Uber-style matching: pick from live nearby captains and confirm instantly.</p>
 
       <div class="status-banner mb-3" *ngIf="focusedMode === 'all' || focusedMode === 'womenSafety'">
@@ -252,7 +264,7 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         </div>
       </div>
 
-      <div class="card p-3 mb-4 voice-command-card">
+      <div class="card p-3 mb-4 voice-command-card" *ngIf="showGeneralBookingSections">
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
           <div>
             <h6 class="mb-1">Voice Booking Assistant</h6>
@@ -284,7 +296,7 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         <div class="small mt-2" *ngIf="voiceSupported && voiceTranscript">Heard: {{ voiceTranscript }}</div>
       </div>
 
-      <div class="card p-3 mb-4 how-to-book-card">
+      <div class="card p-3 mb-4 how-to-book-card" *ngIf="showGeneralBookingSections">
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
           <h5 class="mb-0">How to Book (Video Guide)</h5>
           <small class="text-muted">Watch before your first booking</small>
@@ -307,7 +319,7 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
       </div>
 
       <div class="row g-4">
-        <div class="col-lg-8">
+        <div class="col-12" [class.col-lg-8]="showGeneralBookingSections" [class.col-lg-12]="!showGeneralBookingSections">
           <div class="card p-4">
             <h5 class="mb-3" *ngIf="focusedMode === 'all'">Service Type</h5>
             <div class="d-flex flex-wrap gap-3 mb-4" *ngIf="focusedMode === 'all'">
@@ -324,12 +336,20 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
               </label>
             </div>
 
-            <div class="food-suggestion-box mb-4" *ngIf="serviceType === 'food'">
+            <div class="food-suggestion-box mb-4" id="food-booking-mode-box" *ngIf="serviceType === 'food'">
               <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-                <h6 class="mb-0">Suggested Nearby Hotels</h6>
+                <h6 class="mb-0">{{ foodFlowStage === 'menu' ? 'Selected Hotel Menu' : 'Suggested Nearby Hotels' }}</h6>
                 <div class="d-flex align-items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    class="btn btn-outline-primary btn-sm"
+                    *ngIf="foodFlowStage === 'menu'"
+                    (click)="backToFoodHotelSelection()"
+                  >
+                    Change Hotel
+                  </button>
                   <button type="button" class="btn btn-outline-secondary btn-sm" (click)="refreshNearbyHotelsLive(true)">Refresh Now</button>
-                  <div class="btn-group btn-group-sm" role="group" aria-label="Food preference filter">
+                  <div class="btn-group btn-group-sm" role="group" aria-label="Food preference filter" *ngIf="foodFlowStage !== 'menu'">
                     <button type="button" class="btn" [ngClass]="foodPreference === 'all' ? 'btn-danger' : 'btn-outline-secondary'" (click)="setFoodPreference('all')">All</button>
                     <button type="button" class="btn" [ngClass]="foodPreference === 'veg' ? 'btn-danger' : 'btn-outline-secondary'" (click)="setFoodPreference('veg')">Veg</button>
                     <button type="button" class="btn" [ngClass]="foodPreference === 'nonveg' ? 'btn-danger' : 'btn-outline-secondary'" (click)="setFoodPreference('nonveg')">Non-Veg</button>
@@ -337,11 +357,11 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
                 </div>
               </div>
 
-              <div class="small text-muted mb-2" *ngIf="!showAllHotels">Showing top rated hotels nearest to your pickup location.</div>
-              <div class="small text-muted mb-2" *ngIf="showAllHotels">Showing all nearby hotels nearest to your pickup location.</div>
+              <div class="small text-muted mb-2" *ngIf="foodFlowStage !== 'menu' && !showAllHotels">Showing top rated hotels nearest to your pickup location.</div>
+              <div class="small text-muted mb-2" *ngIf="foodFlowStage !== 'menu' && showAllHotels">Showing all nearby hotels nearest to your pickup location.</div>
               <div class="small text-muted mb-2">Live location: {{ pickupAddress || 'Pickup Point' }} • Updated: {{ nearbyHotelsLastUpdatedAt ? (nearbyHotelsLastUpdatedAt | date:'shortTime') : 'just now' }}</div>
 
-              <div class="hotel-grid" *ngIf="displayedNearbyHotels.length > 0">
+              <div class="hotel-grid" *ngIf="foodFlowStage !== 'menu' && displayedNearbyHotels.length > 0">
                 <div class="hotel-card" [class.selected]="selectedHotelId === hotel.id" *ngFor="let hotel of displayedNearbyHotels">
                   <img class="hotel-cover" [src]="hotel.imageUrl || defaultHotelImageUrl" [alt]="hotel.name" />
                   <div class="d-flex justify-content-between align-items-start">
@@ -361,11 +381,11 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
                 </div>
               </div>
 
-              <div class="alert alert-light border mt-2 mb-0" *ngIf="displayedNearbyHotels.length === 0">
+              <div class="alert alert-light border mt-2 mb-0" *ngIf="foodFlowStage !== 'menu' && displayedNearbyHotels.length === 0">
                 No nearby hotels found for selected preference.
               </div>
 
-              <div class="mt-2" *ngIf="filteredNearbyHotels.length > topRatedNearbyHotels.length">
+              <div class="mt-2" *ngIf="foodFlowStage !== 'menu' && filteredNearbyHotels.length > topRatedNearbyHotels.length">
                 <button
                   type="button"
                   class="btn btn-sm"
@@ -376,7 +396,20 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
                 </button>
               </div>
 
-              <div class="food-order-shell mt-3" *ngIf="selectedHotelForFood as selectedHotel">
+              <div class="d-flex gap-2 align-items-center border rounded p-2 bg-light" *ngIf="foodFlowStage === 'menu' && selectedHotelForFood as selectedHotel">
+                <img
+                  [src]="selectedHotel.imageUrl || defaultHotelImageUrl"
+                  [alt]="selectedHotel.name"
+                  style="width:58px;height:58px;object-fit:cover;border-radius:8px;border:1px solid #dbeafe;"
+                />
+                <div>
+                  <div class="fw-semibold">{{ selectedHotel.name }}</div>
+                  <div class="small text-muted">{{ selectedHotel.distanceKm }} km • ETA {{ selectedHotel.etaMinutes }} min • ⭐ {{ selectedHotel.rating }}</div>
+                  <div class="small text-muted">Pickup from: {{ selectedHotel.locationLabel }}</div>
+                </div>
+              </div>
+
+              <div class="food-order-shell mt-3" *ngIf="foodFlowStage === 'menu' && selectedHotelForFood as selectedHotel">
                 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
                   <div>
                     <h6 class="mb-0">{{ selectedHotel.name }} Menu</h6>
@@ -719,6 +752,35 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
             <h5 class="mb-2">Ride Notes (optional)</h5>
             <input class="form-control mb-3" placeholder="Ex: Ring doorbell, fragile package, call on arrival" [(ngModel)]="rideNotes" />
 
+            <div class="medicine-verification-card mb-4" *ngIf="serviceType === 'medicine'">
+              <h5 class="mb-2">Medicine Order Verification</h5>
+              <div class="small text-muted mb-2">Please add medicine names and upload doctor prescription. Booking will unlock only after verification.</div>
+
+              <label class="form-label small mb-1">Medicine Names</label>
+              <textarea
+                class="form-control mb-2"
+                rows="3"
+                placeholder="Example: Paracetamol 650mg, Azithromycin 500mg"
+                [(ngModel)]="medicineNames"
+              ></textarea>
+
+              <label class="form-label small mb-1">Doctor Prescription (Required)</label>
+              <input
+                type="file"
+                class="form-control form-control-sm mb-2"
+                accept="image/*,.pdf,application/pdf"
+                (change)="onMedicinePrescriptionFileSelected($event)"
+              />
+
+              <div class="small text-muted mb-1" *ngIf="medicinePrescriptionFileName">
+                Uploaded: {{ medicinePrescriptionFileName }}
+              </div>
+
+              <div class="alert py-2 px-3 mb-0" [ngClass]="medicinePrescriptionStatusClass" *ngIf="serviceType === 'medicine'">
+                {{ medicinePrescriptionStatusMessage }}
+              </div>
+            </div>
+
             <div class="fare-box mb-4">
               <div><strong>Estimated Fare:</strong> ₹{{ totalEstimatedFare }}</div>
               <small class="text-muted">Calculated using distance + traffic + weather + vehicle type.</small>
@@ -734,16 +796,19 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
               <a class="btn btn-outline-success btn-sm" [href]="whatsAppLink(selectedCaptain.phone)" target="_blank" rel="noopener">WhatsApp Captain</a>
             </div>
 
-            <button class="btn btn-danger" (click)="bookNow()" [disabled]="serviceType === 'food' && !canDirectFoodBook">
+            <button class="btn btn-danger" (click)="bookNow()" [disabled]="!canSubmitBooking">
               {{ bookingTimeMode === 'later' ? 'Schedule Booking' : 'Book Now' }}
             </button>
             <div class="small text-muted mt-2" *ngIf="serviceType === 'food' && !canDirectFoodBook">
               Select hotel, items, then proceed to payment to place food order.
             </div>
+            <div class="small text-muted mt-2" *ngIf="serviceType === 'medicine' && !isMedicineBookingReady">
+              Complete medicine details and wait for prescription verification to enable booking.
+            </div>
           </div>
         </div>
 
-        <div class="col-lg-4">
+        <div class="col-lg-4" *ngIf="showGeneralBookingSections">
           <div class="card p-4 mb-3" *ngIf="currentUser as u">
             <div class="d-flex align-items-center gap-3">
               <img [src]="profileImageUrl" (error)="onProfileImageError($event)" alt="Profile" class="profile-image" />
@@ -849,6 +914,51 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         gap: 10px;
         max-height: 360px;
         overflow-y: auto;
+      }
+
+      .lunchbox-theme-page {
+        position: relative;
+        isolation: isolate;
+      }
+
+      .lunchbox-theme-page::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        border-radius: 18px;
+        background:
+          radial-gradient(circle at 12% 10%, rgba(220, 53, 69, 0.16), transparent 44%),
+          radial-gradient(circle at 88% 16%, rgba(255, 193, 7, 0.16), transparent 40%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(255, 246, 239, 0.96));
+      }
+
+      .lunchbox-theme-page::after {
+        content: '';
+        position: absolute;
+        right: 16px;
+        bottom: 16px;
+        width: 130px;
+        height: 130px;
+        opacity: 0.09;
+        z-index: -1;
+        pointer-events: none;
+        background: center / contain no-repeat url('/assets/lunchbox-logo.svg');
+      }
+
+      .lunchbox-hero-card {
+        background: linear-gradient(135deg, #fff6f3 0%, #fffdfa 100%);
+        border-width: 2px;
+      }
+
+      .lunchbox-hero-logo {
+        width: 54px;
+        height: 54px;
+        border-radius: 10px;
+        padding: 4px;
+        border: 1px solid #f1c8cd;
+        background: #fff;
+        object-fit: contain;
       }
 
       .vehicle-grid {
@@ -965,6 +1075,13 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         border-radius: 10px;
         padding: 10px;
         background: #f8f9fa;
+      }
+
+      .medicine-verification-card {
+        border: 1px solid #f8d7da;
+        border-radius: 12px;
+        padding: 12px;
+        background: #fff9fa;
       }
 
       .trip-summary {
@@ -1382,6 +1499,7 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
 })
 export class BookingComponent implements OnDestroy {
   isSchoolBookingPage = false;
+  isLunchboxDeliveryPage = false;
   currentUser: AppUser | null = null;
   profileImageUrl = 'https://ui-avatars.com/api/?name=User&background=f0f4ff&color=0f172a&size=128';
   selectedProfileImage = '';
@@ -1437,12 +1555,19 @@ export class BookingComponent implements OnDestroy {
   showAllHotels = false;
   selectedHotelId = '';
   selectedHotelMenu: FoodMenuItem[] = [];
+  foodFlowStage: FoodFlowStage = 'hotels';
   foodCartItems: Array<{ item: FoodMenuItem; qty: number }> = [];
   foodCheckoutOpen = false;
   foodMenuLoading = false;
   defaultHotelImageUrl = 'https://images.unsplash.com/photo-1559339352-11d035aa65de?auto=format&fit=crop&w=900&q=80';
   defaultFoodItemImageUrl = 'https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?auto=format&fit=crop&w=900&q=80';
   rideNotes = '';
+  medicineNames = '';
+  medicinePrescriptionFileName = '';
+  medicinePrescriptionPayload = '';
+  medicinePrescriptionStatus: 'idle' | 'verifying' | 'verified' | 'rejected' = 'idle';
+  medicinePrescriptionStatusMessage = 'Upload doctor prescription to start verification.';
+  private medicinePrescriptionVerifyHandle: ReturnType<typeof setTimeout> | null = null;
   lunchBoxDeliveryMode = false;
   pickupServiceMode = false;
   pickupSelectedShopName = '';
@@ -1488,9 +1613,11 @@ export class BookingComponent implements OnDestroy {
   private historySubscription?: Subscription;
   private authSubscription?: Subscription;
   private routeQueryParamsSubscription?: Subscription;
+  private routeParamMapSubscription?: Subscription;
   private liveFareRequestCounter = 0;
   private nearbyHotelsRequestCounter = 0;
   private nearbyHotelsApiWarningShown = false;
+  private pendingFoodRouteHotelId = '';
   private speechRecognition: any | null = null;
   voiceSupported = false;
   isVoiceListening = false;
@@ -1521,9 +1648,11 @@ export class BookingComponent implements OnDestroy {
     private router: Router,
     private route: ActivatedRoute
   ) {
-    this.isSchoolBookingPage = this.route.snapshot.routeConfig?.path === 'school-booking';
+    const currentRoutePath = this.currentRoutePath();
+    this.syncPageFlagsFromRoute(currentRoutePath);
     this.currentUser = this.auth.getCurrentUser();
     this.loadWomenSafetyProtectionMode();
+    this.syncFoodRouteState();
     this.profileImageUrl = this.currentUser?.profileImageUrl || this.buildUserAvatar(this.currentUser);
     this.initializeVoiceBooking();
     this.loadLiveLocationDefaults();
@@ -1533,6 +1662,12 @@ export class BookingComponent implements OnDestroy {
     this.popularPlaces = this.buildPopularPlaces();
     this.refreshLocationSuggestions();
     this.ensureNearbyHotelsHeartbeat();
+
+    this.routeParamMapSubscription = this.route.paramMap.subscribe(() => {
+      const routePath = this.currentRoutePath();
+      this.syncPageFlagsFromRoute(routePath);
+      this.syncFoodRouteState();
+    });
 
     this.authSubscription = this.auth.user$.subscribe((user) => {
       this.currentUser = user;
@@ -1563,8 +1698,10 @@ export class BookingComponent implements OnDestroy {
     });
 
     this.routeQueryParamsSubscription = this.route.queryParamMap.subscribe((params) => {
-      const isSchoolBookingPage = this.route.snapshot.routeConfig?.path === 'school-booking';
-      this.isSchoolBookingPage = isSchoolBookingPage;
+      const currentRoutePath = this.currentRoutePath();
+      this.syncPageFlagsFromRoute(currentRoutePath);
+      const isSchoolBookingPage = this.isSchoolBookingPage;
+      const isLunchboxDeliveryPage = this.isLunchboxDeliveryPage;
       const history = params.get('history');
       const bookingId = params.get('bookingId');
       const appliedCompletedFilter = history === 'completed';
@@ -1612,12 +1749,12 @@ export class BookingComponent implements OnDestroy {
         this.activateFocusedMode('teen');
       }
 
-      if ((lunchBox === '1' || isSchoolBookingPage) && !this.lunchBoxDeliveryMode) {
+      if ((lunchBox === '1' || isSchoolBookingPage || isLunchboxDeliveryPage) && !this.lunchBoxDeliveryMode) {
         this.lunchBoxDeliveryMode = true;
         this.onLunchBoxDeliveryModeChange();
       }
 
-      if (lunchBox === '1' || isSchoolBookingPage) {
+      if (lunchBox === '1' || isSchoolBookingPage || isLunchboxDeliveryPage) {
         this.activateFocusedMode('school');
       }
 
@@ -1664,9 +1801,15 @@ export class BookingComponent implements OnDestroy {
       this.liveTrackHandle = null;
     }
 
+    if (this.medicinePrescriptionVerifyHandle) {
+      clearTimeout(this.medicinePrescriptionVerifyHandle);
+      this.medicinePrescriptionVerifyHandle = null;
+    }
+
     this.historySubscription?.unsubscribe();
     this.authSubscription?.unsubscribe();
     this.routeQueryParamsSubscription?.unsubscribe();
+    this.routeParamMapSubscription?.unsubscribe();
 
     if (this.speechRecognition) {
       this.speechRecognition.onresult = null;
@@ -1862,6 +2005,7 @@ export class BookingComponent implements OnDestroy {
     this.showAllHotels = false;
 
     if (serviceType === 'food') {
+      this.foodFlowStage = this.selectedHotelId ? 'menu' : 'hotels';
       this.vehicleType = 'bike';
       if (this.selectedCaptain && !this.foodDeliveryVehicleTypes.includes(this.selectedCaptain.vehicleType)) {
         this.selectedCaptain = null;
@@ -1874,16 +2018,68 @@ export class BookingComponent implements OnDestroy {
     }
 
     if (serviceType !== 'food') {
+      this.foodFlowStage = 'hotels';
+      this.pendingFoodRouteHotelId = '';
       this.selectedHotelId = '';
       this.selectedHotelMenu = [];
       this.foodCartItems = [];
       this.foodCheckoutOpen = false;
       this.selectedUpiApp = 'phonepe';
+
+      if (this.isFoodRoutePath(this.currentRoutePath())) {
+        this.router.navigate(['/booking']);
+      }
+    }
+
+    if (serviceType !== 'medicine') {
+      if (this.medicinePrescriptionVerifyHandle) {
+        clearTimeout(this.medicinePrescriptionVerifyHandle);
+        this.medicinePrescriptionVerifyHandle = null;
+      }
+      this.medicinePrescriptionStatus = 'idle';
+      this.medicinePrescriptionStatusMessage = 'Upload doctor prescription to start verification.';
     }
 
     this.refreshNearbyCaptains();
     this.refreshNearbyHotelsLive(true);
     this.ensureNearbyHotelsHeartbeat();
+  }
+
+  get isMedicineBookingReady(): boolean {
+    if (this.serviceType !== 'medicine') {
+      return true;
+    }
+
+    return this.medicineNames.trim().length > 0 && this.medicinePrescriptionStatus === 'verified';
+  }
+
+  get canSubmitBooking(): boolean {
+    if (this.serviceType === 'food') {
+      return this.canDirectFoodBook;
+    }
+
+    if (this.serviceType === 'medicine') {
+      return this.isMedicineBookingReady;
+    }
+
+    return true;
+  }
+
+  get showGeneralBookingSections(): boolean {
+    return this.focusedMode === 'all';
+  }
+
+  get medicinePrescriptionStatusClass(): string {
+    if (this.medicinePrescriptionStatus === 'verified') {
+      return 'alert-success';
+    }
+    if (this.medicinePrescriptionStatus === 'verifying') {
+      return 'alert-warning';
+    }
+    if (this.medicinePrescriptionStatus === 'rejected') {
+      return 'alert-danger';
+    }
+    return 'alert-secondary';
   }
 
   onPickupLocationInputChanged(refreshNetworkData = false): void {
@@ -1915,6 +2111,10 @@ export class BookingComponent implements OnDestroy {
     this.persistWomenSafetyProtectionMode();
     const modeLabel = this.womenSafetyProtectionMode ? 'enabled' : 'disabled';
     this.notifications.push(`Women Safety Protection mode ${modeLabel}.`, 'info');
+
+    if (this.womenSafetyProtectionMode) {
+      this.activateFocusedMode('womenSafety');
+    }
 
     if (!this.womenSafetyProtectionMode && this.focusedMode === 'womenSafety') {
       this.focusedMode = 'all';
@@ -2001,6 +2201,12 @@ export class BookingComponent implements OnDestroy {
   }
 
   selectHotelForFood(hotel: NearbyHotel): void {
+    this.selectHotelForFoodInternal(hotel, true);
+  }
+
+  private selectHotelForFoodInternal(hotel: NearbyHotel, navigateToMenuRoute: boolean): void {
+    this.foodFlowStage = 'menu';
+    this.pendingFoodRouteHotelId = '';
     this.selectedHotelId = hotel.id;
     this.selectedHotelMenu = [];
     this.foodCartItems = [];
@@ -2010,6 +2216,21 @@ export class BookingComponent implements OnDestroy {
     this.applyFoodPickupFromHotel(hotel);
     this.applyFoodDropFromCustomerLocation();
     this.loadHotelMenuForSelectedHotel(hotel);
+
+    if (navigateToMenuRoute && this.currentRoutePath() !== 'booking/food/menu/:hotelId') {
+      this.router.navigate(['/booking/food/menu', hotel.id]);
+    }
+
+    this.scrollFoodModeBoxToTop();
+  }
+
+  backToFoodHotelSelection(): void {
+    this.foodFlowStage = 'hotels';
+    this.pendingFoodRouteHotelId = '';
+    if (this.currentRoutePath() !== 'booking/food/hotels') {
+      this.router.navigate(['/booking/food/hotels']);
+    }
+    this.scrollFoodModeBoxToTop();
   }
 
   onBookingForChange(): void {
@@ -2398,6 +2619,23 @@ export class BookingComponent implements OnDestroy {
       }
     }
 
+    if (this.serviceType === 'medicine') {
+      if (!this.medicineNames.trim()) {
+        this.notifications.push('Please enter medicine names to continue.', 'warning');
+        return;
+      }
+
+      if (!this.medicinePrescriptionPayload) {
+        this.notifications.push('Please upload doctor prescription.', 'warning');
+        return;
+      }
+
+      if (this.medicinePrescriptionStatus !== 'verified') {
+        this.notifications.push('Prescription verification is pending. Please wait.', 'warning');
+        return;
+      }
+    }
+
     if (this.serviceType === 'food') {
       if (!this.selectedHotelForFood) {
         this.notifications.push('Please select a hotel from nearby list.', 'warning');
@@ -2548,8 +2786,8 @@ export class BookingComponent implements OnDestroy {
 
   openLunchboxBookingsPage(): void {
     this.activateFocusedMode('school');
-    this.notifications.push('RouteX School Delivery mode opened.', 'info');
-    this.router.navigate(['/school-booking'], {
+    this.notifications.push('RouteX LunchBox Delivery page opened.', 'info');
+    this.router.navigate(['/lunchbox-delivery'], {
       queryParams: {
         lunchBox: 1,
         service: 'food'
@@ -2786,7 +3024,19 @@ export class BookingComponent implements OnDestroy {
 
           const mapped = this.mapNearbyHotelsFromApi(response.hotels || []);
           this.nearbyHotels = mapped.length > 0 ? mapped : this.generateNearbyHotelsFallback();
+          this.tryApplyPendingFoodRouteHotelSelection();
+
+          if (this.pendingFoodRouteHotelId) {
+            this.pendingFoodRouteHotelId = '';
+            this.foodFlowStage = 'hotels';
+            if (this.isFoodMenuRoutePath(this.currentRoutePath())) {
+              this.notifications.push('Selected hotel is unavailable. Please choose another nearby hotel.', 'warning');
+              this.router.navigate(['/booking/food/hotels']);
+            }
+          }
+
           if (this.selectedHotelId && !this.nearbyHotels.some((hotel) => hotel.id === this.selectedHotelId)) {
+            this.foodFlowStage = 'hotels';
             this.selectedHotelId = '';
             this.selectedHotelMenu = [];
             this.foodCartItems = [];
@@ -2807,6 +3057,7 @@ export class BookingComponent implements OnDestroy {
           }
 
           this.nearbyHotels = this.generateNearbyHotelsFallback();
+          this.tryApplyPendingFoodRouteHotelSelection();
           if (this.selectedHotelForFood) {
             this.loadHotelMenuForSelectedHotel(this.selectedHotelForFood, true);
           }
@@ -3412,6 +3663,65 @@ export class BookingComponent implements OnDestroy {
       });
   }
 
+  onMedicinePrescriptionFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    const isImage = file.type.startsWith('image/');
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    if (!isImage && !isPdf) {
+      this.medicinePrescriptionStatus = 'rejected';
+      this.medicinePrescriptionStatusMessage = 'Unsupported file type. Upload image or PDF prescription.';
+      this.notifications.push('Please upload prescription as image or PDF.', 'warning');
+      input.value = '';
+      return;
+    }
+
+    if (file.size > 8 * 1024 * 1024) {
+      this.medicinePrescriptionStatus = 'rejected';
+      this.medicinePrescriptionStatusMessage = 'File too large. Please upload up to 8 MB.';
+      this.notifications.push('Prescription file is too large. Maximum allowed size is 8 MB.', 'warning');
+      input.value = '';
+      return;
+    }
+
+    this.medicinePrescriptionFileName = file.name;
+    this.medicinePrescriptionStatus = 'verifying';
+    this.medicinePrescriptionStatusMessage = 'We are verifying your doctor prescription. Please wait...';
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      this.medicinePrescriptionPayload = String(reader.result || '');
+      if (this.medicinePrescriptionVerifyHandle) {
+        clearTimeout(this.medicinePrescriptionVerifyHandle);
+      }
+
+      this.medicinePrescriptionVerifyHandle = setTimeout(() => {
+        const hasMedicineNames = this.medicineNames.trim().length > 0;
+        if (!hasMedicineNames) {
+          this.medicinePrescriptionStatus = 'rejected';
+          this.medicinePrescriptionStatusMessage = 'Add medicine names, then re-upload prescription for verification.';
+          return;
+        }
+
+        this.medicinePrescriptionStatus = 'verified';
+        this.medicinePrescriptionStatusMessage = 'Prescription verified. You can now confirm and place your medicine booking.';
+        this.notifications.push('Doctor prescription verified successfully.', 'success');
+      }, 2200);
+    };
+
+    reader.onerror = () => {
+      this.medicinePrescriptionStatus = 'rejected';
+      this.medicinePrescriptionStatusMessage = 'Could not read prescription file. Please try again.';
+      this.notifications.push('Failed to read prescription file.', 'error');
+    };
+
+    reader.readAsDataURL(file);
+  }
+
   private compressImage(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -3960,6 +4270,91 @@ export class BookingComponent implements OnDestroy {
     }
   }
 
+  private scrollFoodModeBoxToTop(): void {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    const section = document.getElementById('food-booking-mode-box');
+    if (!section) {
+      return;
+    }
+
+    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  private currentRoutePath(): string {
+    return this.route.snapshot.routeConfig?.path || '';
+  }
+
+  private isFoodHotelsRoutePath(path: string): boolean {
+    return path === 'booking/food/hotels';
+  }
+
+  private isFoodMenuRoutePath(path: string): boolean {
+    return path === 'booking/food/menu/:hotelId';
+  }
+
+  private isFoodRoutePath(path: string): boolean {
+    return this.isFoodHotelsRoutePath(path) || this.isFoodMenuRoutePath(path);
+  }
+
+  private syncPageFlagsFromRoute(path: string): void {
+    this.isSchoolBookingPage = path === 'school-booking';
+    this.isLunchboxDeliveryPage = path === 'lunchbox-delivery';
+  }
+
+  private syncFoodRouteState(): void {
+    const path = this.currentRoutePath();
+    if (!this.isFoodRoutePath(path)) {
+      this.pendingFoodRouteHotelId = '';
+      return;
+    }
+
+    if (this.serviceType !== 'food') {
+      this.onServiceTypeChange('food');
+    }
+
+    if (this.isFoodHotelsRoutePath(path)) {
+      this.foodFlowStage = 'hotels';
+      this.pendingFoodRouteHotelId = '';
+      return;
+    }
+
+    const hotelId = String(this.route.snapshot.paramMap.get('hotelId') || '').trim();
+    if (!hotelId) {
+      this.foodFlowStage = 'hotels';
+      this.pendingFoodRouteHotelId = '';
+      this.router.navigate(['/booking/food/hotels']);
+      return;
+    }
+
+    this.foodFlowStage = 'menu';
+    this.pendingFoodRouteHotelId = hotelId;
+    this.tryApplyPendingFoodRouteHotelSelection();
+  }
+
+  private tryApplyPendingFoodRouteHotelSelection(): void {
+    if (!this.pendingFoodRouteHotelId) {
+      return;
+    }
+
+    const hotel = this.nearbyHotels.find((item) => item.id === this.pendingFoodRouteHotelId);
+    if (!hotel) {
+      return;
+    }
+
+    const matchedHotelId = this.pendingFoodRouteHotelId;
+    this.pendingFoodRouteHotelId = '';
+
+    if (this.selectedHotelId === matchedHotelId && this.selectedHotelMenu.length > 0) {
+      this.foodFlowStage = 'menu';
+      return;
+    }
+
+    this.selectHotelForFoodInternal(hotel, false);
+  }
+
   private buildUserAvatar(user: AppUser | null): string {
     const label = encodeURIComponent(user?.displayName || 'Customer');
     return `https://ui-avatars.com/api/?name=${label}&background=f0f4ff&color=0f172a&size=128`;
@@ -4028,6 +4423,18 @@ export class BookingComponent implements OnDestroy {
         `Payment: ${this.paymentMethod}`
       ];
       sections.push(foodDetails.join(' | '));
+    }
+
+    if (this.serviceType === 'medicine') {
+      const medicineDetails: string[] = ['Medicine Delivery Mode'];
+      if (this.medicineNames.trim()) {
+        medicineDetails.push(`Medicines: ${this.medicineNames.trim()}`);
+      }
+      if (this.medicinePrescriptionFileName.trim()) {
+        medicineDetails.push(`Prescription: ${this.medicinePrescriptionFileName.trim()}`);
+      }
+      medicineDetails.push(`Prescription Status: ${this.medicinePrescriptionStatus}`);
+      sections.push(medicineDetails.join(' | '));
     }
 
     const modeNotes = sections.join(' | ');
