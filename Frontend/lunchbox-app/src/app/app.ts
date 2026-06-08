@@ -10,6 +10,7 @@ import { AppNotification, AppUser } from './core/models/delivery.models';
 import { LanguageCode, LanguageService } from './core/services/language.service';
 import { ThemeCode, ThemeService } from './core/services/theme.service';
 import { ChatbotComponent } from './shared/components/chatbot/chatbot.component';
+import { environment } from '../environments/environment';
 
 @Component({
   selector: 'app-root',
@@ -227,41 +228,6 @@ import { ChatbotComponent } from './shared/components/chatbot/chatbot.component'
       <router-outlet></router-outlet>
     </main>
 
-    <nav class="bottom-tab-nav" aria-label="Primary">
-      <a class="tab-item" routerLink="/home" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" [class.active]="isBottomTabActive('home')" aria-label="Home">
-        <span class="tab-pill">
-          <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M3.5 10.5 12 4l8.5 6.5v8A1.5 1.5 0 0 1 19 20h-3.5v-5h-7v5H5a1.5 1.5 0 0 1-1.5-1.5v-8Z" />
-          </svg>
-          <span class="tab-label">Home</span>
-        </span>
-      </a>
-      <a class="tab-item" [routerLink]="servicesTabRoute()" routerLinkActive="active" [class.active]="isBottomTabActive('services')" aria-label="Services">
-        <span class="tab-pill">
-          <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z" />
-          </svg>
-          <span class="tab-label">Services</span>
-        </span>
-      </a>
-      <a class="tab-item" [routerLink]="activityTabRoute()" routerLinkActive="active" [class.active]="isBottomTabActive('activity')" aria-label="Activity">
-        <span class="tab-pill">
-          <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M7 4h10a2 2 0 0 1 2 2v14l-3-2-3 2-3-2-3 2V6a2 2 0 0 1 2-2Z" />
-          </svg>
-          <span class="tab-label">Activity</span>
-        </span>
-      </a>
-      <a class="tab-item" [routerLink]="accountTabRoute()" routerLinkActive="active" [class.active]="isBottomTabActive('account')" aria-label="Account">
-        <span class="tab-pill">
-          <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M12 12a4.25 4.25 0 1 0 0-8.5 4.25 4.25 0 0 0 0 8.5ZM4 20a8 8 0 0 1 16 0" />
-          </svg>
-          <span class="tab-label">Account</span>
-        </span>
-      </a>
-    </nav>
-
     <footer class="app-footer" aria-label="RouteX footer">
       <div class="container-fluid footer-inner">
         <div class="footer-top-row">
@@ -274,7 +240,7 @@ import { ChatbotComponent } from './shared/components/chatbot/chatbot.component'
           <span class="footer-dot">•</span>
           <a class="footer-link" routerLink="/contact">{{ t('contactNav') }}</a>
         </div>
-        <div class="footer-copy">&copy; {{ currentYear }} RouteX. All rights reserved.</div>
+        <div class="footer-copy">&copy; {{ currentYear }} RouteX. All rights reserved. | Version {{ appVersion }}</div>
       </div>
     </footer>
 
@@ -307,6 +273,7 @@ export class AppComponent {
   notifications$: Observable<AppNotification[]> = this.notificationService.notifications$;
   notificationCount$: Observable<number> = this.notifications$.pipe(map(notifs => notifs.length));
   currentYear = new Date().getFullYear();
+  appVersion = environment.appVersion;
 
   t(key: string): string {
     return this.languageService.t(key);
@@ -412,7 +379,7 @@ export class AppComponent {
     }
 
     if (tab === 'services') {
-      return currentPath.startsWith('/services') || currentPath.startsWith('/school-booking');
+      return currentPath.startsWith('/services') || currentPath.startsWith('/school-booking') || currentPath.startsWith('/lunchbox-delivery');
     }
 
     if (tab === 'activity') {
