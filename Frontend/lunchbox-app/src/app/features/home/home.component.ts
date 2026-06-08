@@ -542,8 +542,7 @@ export class HomeComponent {
       icon: '🍔',
       title: 'Food Delivery',
       description: 'Nearby restaurants with live prep and captain ETA.',
-      route: '/booking',
-      queryParams: { service: 'food' }
+      route: '/booking/food/hotels'
     },
     {
       icon: '🛍️',
@@ -563,7 +562,7 @@ export class HomeComponent {
       icon: '🎒',
       title: 'School and Teen Rides',
       description: 'RouteX school delivery and teen-safe assisted ride options.',
-      route: '/school-booking',
+      route: '/lunchbox-delivery',
       queryParams: { lunchBox: 1, service: 'food' }
     }
   ];
