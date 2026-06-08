@@ -2,6 +2,7 @@
 
 :root,
 [data-theme='light'] {
+	--layout-max-width: 1180px;
 	--surface: #ffffff;
 	--surface-2: #f5f7fb;
 	--text-primary: #212529;
@@ -64,6 +65,7 @@ html, body {
 	font-family: 'Trebuchet MS', 'Segoe UI', Tahoma, sans-serif;
 	background: var(--page-bg);
 	color: var(--text-primary);
+	overflow-x: hidden;
 }
 
 * {
@@ -86,7 +88,10 @@ app-root {
 	min-height: 100vh;
 }
 
-.container,
+.container {
+	max-width: var(--layout-max-width);
+}
+
 .container-fluid {
 	max-width: 100%;
 }
@@ -194,13 +199,21 @@ footer {
 
 .app-main {
 	min-height: calc(100vh - 106px);
+	display: flex;
+	flex-direction: column;
+}
+
+.app-main .container {
+	width: 100%;
+	margin-left: auto;
+	margin-right: auto;
 }
 
 .app-footer {
 	border-top: 1px solid var(--border-color);
 	background: var(--surface);
 	color: var(--text-secondary);
-	padding: 10px 14px;
+	padding: 12px 14px;
 }
 
 .footer-inner {
@@ -254,6 +267,8 @@ footer {
 	font-size: 0.78rem;
 	opacity: 0.8;
 	text-align: center;
+	line-height: 1.35;
+	word-break: break-word;
 }
 
 .bottom-tab-nav {
@@ -356,6 +371,7 @@ footer {
 
 .brand-text {
 	color: var(--nav-text);
+	font-size: clamp(0.95rem, 0.88rem + 0.25vw, 1.1rem);
 }
 
 .app-nav .nav-link {
@@ -762,8 +778,11 @@ footer {
 
 	.app-nav .navbar-collapse {
 		margin-top: 0.5rem;
-		padding-top: 0.5rem;
+		padding: 0.65rem;
 		border-top: 1px solid var(--nav-border);
+		border-radius: 12px;
+		background: color-mix(in srgb, var(--surface) 18%, transparent 82%);
+		backdrop-filter: blur(8px);
 		max-height: calc(100vh - 90px);
 		overflow-y: auto;
 	}
@@ -782,6 +801,11 @@ footer {
 	.app-nav .btn-group {
 		width: 100%;
 		margin-left: 0 !important;
+		min-height: 42px;
+	}
+
+	.app-nav .nav-link {
+		padding: 0.6rem 0.85rem;
 	}
 
 	.app-nav .btn-group {
@@ -802,16 +826,16 @@ footer {
 		display: none !important;
 	}
 
-	.bottom-tab-nav {
-		display: grid;
-	}
-
 	.app-main {
-		padding-bottom: 96px;
+		padding-bottom: 0;
 	}
 }
 
 @media (max-width: 576px) {
+	.app-main {
+		min-height: calc(100vh - 122px);
+	}
+
 	.notification-center {
 		left: 12px;
 		right: 12px;
@@ -829,6 +853,26 @@ footer {
 	.network-down-banner {
 		left: 10px;
 		right: 10px;
-		bottom: 84px;
+		bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+	}
+
+	.footer-top-row,
+	.footer-links-row {
+		font-size: 0.8rem;
+		gap: 6px;
+	}
+
+	.footer-copy {
+		font-size: 0.74rem;
+		padding: 0 4px;
+	}
+}
+
+@media (min-width: 1200px) {
+	.app-nav .container-fluid,
+	.app-footer .container-fluid {
+		max-width: var(--layout-max-width);
+		margin-left: auto;
+		margin-right: auto;
 	}
 }
