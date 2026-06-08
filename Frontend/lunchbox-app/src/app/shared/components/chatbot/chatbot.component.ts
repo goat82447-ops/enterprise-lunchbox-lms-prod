@@ -20,15 +20,15 @@ interface ChatIntent {
   template: `
     <button class="chat-toggle" (click)="toggleChat()">
       <span class="toggle-dot"></span>
-      {{ isOpen ? 'Close Assistant' : 'Ask RouteX AI' }}
+      {{ isOpen ? 'Close Routie' : 'Ask Routie' }}
     </button>
 
     <section *ngIf="isOpen" class="chat-panel card">
       <header class="chat-header">
         <div class="assistant-avatar">AI</div>
         <div>
-          <h6 class="mb-0">RouteX Assistant</h6>
-          <small class="assistant-subtitle">Project-aware support for booking, services, and account help</small>
+          <h6 class="mb-0">Routie</h6>
+          <small class="assistant-subtitle">Routie helps with booking, tracking, services, and account support</small>
         </div>
       </header>
 
@@ -421,7 +421,7 @@ export class ChatbotComponent implements OnDestroy {
   ];
 
   messages: ChatMessage[] = [
-    { from: 'bot', text: 'Hi, I am RouteX Support. Ask me about booking, food hotels, pickup service, OTP, referral, insurance, safety modes, and payments.' }
+    { from: 'bot', text: "Hi! I'm Routie, your RouteX assistant. I can help with rides, food, groceries, courier deliveries, and tracking." }
   ];
 
   private thinkingTimeout: ReturnType<typeof setTimeout> | null = null;

@@ -210,6 +210,11 @@ export class ServicesComponent {
   constructor(private router: Router) {}
 
   openBooking(serviceType: string): void {
+    if (serviceType === 'food') {
+      this.router.navigate(['/booking/food/hotels']);
+      return;
+    }
+
     this.router.navigate(['/booking'], { queryParams: { service: serviceType } });
   }
 
@@ -234,7 +239,7 @@ export class ServicesComponent {
   }
 
   openLunchBox(): void {
-    this.router.navigate(['/school-booking'], { queryParams: { lunchBox: 1, service: 'food' } });
+    this.router.navigate(['/lunchbox-delivery'], { queryParams: { lunchBox: 1, service: 'food' } });
   }
 
   openPickupService(): void {

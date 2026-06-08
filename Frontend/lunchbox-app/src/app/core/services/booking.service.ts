@@ -12,6 +12,7 @@ const BOOKINGS_API = `${environment.parcelApiBase}/api/bookings`;
 @Injectable({ providedIn: 'root' })
 export class BookingService {
   private static readonly FOOD_CONFIRMATION_DELAY_MINUTES = 2;
+  private static readonly CAPTAIN_ACCEPT_TIMEOUT_MINUTES = 20;
   private readonly bookingsSubject = new BehaviorSubject<Booking[]>(this.loadBookings());
   readonly bookings$: Observable<Booking[]> = this.bookingsSubject.asObservable();
 
@@ -61,7 +62,7 @@ export class BookingService {
     const isScheduled = !!scheduledAt && new Date(scheduledAt).getTime() > Date.now();
     const otp = `${Math.floor(100000 + Math.random() * 900000)}`;
     const booking: Booking = {
-      id: `BK-${Date.now().toString().slice(-8)}`,
+      id: `RouteX-BK-${Date.now().toString().slice(-8)}`,
       userId: normalizedUserId,
       userName: normalizedUserName,
       bookingFor: request.bookingFor,
@@ -453,7 +454,7 @@ export class BookingService {
 
       const recentMinutes = this.minutesSince(item.updatedAt || item.createdAt);
       const active = item.status !== 'completed' && item.status !== 'cancelled';
-      const localTempId = item.id.startsWith('BK-');
+      const localTempId = item.id.startsWith('RouteX-BK-') || item.id.startsWith('BK-');
 
       return localTempId && active && recentMinutes <= 30;
     });
@@ -464,7 +465,7 @@ export class BookingService {
   }
 
   private isLikelyLocalTempMatch(localBooking: Booking, serverBooking: Booking): boolean {
-    if (!localBooking.id.startsWith('BK-')) {
+    if (!localBooking.id.startsWith('RouteX-BK-') && !localBooking.id.startsWith('BK-')) {
       return false;
     }
 
@@ -514,6 +515,18 @@ export class BookingService {
         ...booking,
         notification: 'Your order is placed. Waiting for captain/restaurant acceptance.'
       };
+    }
+
+    if (booking.status === 'created' && booking.serviceType !== 'food') {
+      if (this.minutesSince(booking.createdAt) >= BookingService.CAPTAIN_ACCEPT_TIMEOUT_MINUTES) {
+        this.notifications.push(`Ride ${booking.id} was auto-cancelled because no captain accepted within 20 minutes.`, 'warning');
+        return {
+          ...booking,
+          status: 'cancelled',
+          updatedAt: new Date().toISOString(),
+          notification: 'Ride auto-cancelled. No captain accepted within 20 minutes.'
+        };
+      }
     }
 
     if (!booking.otpVerified && booking.status === 'created') {

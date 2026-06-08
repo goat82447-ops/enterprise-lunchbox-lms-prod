@@ -1,4 +1,4 @@
-# Ekart Deployment Configuration Guide
+# RouteX Deployment Configuration Guide
 
 ## Quick Start
 
