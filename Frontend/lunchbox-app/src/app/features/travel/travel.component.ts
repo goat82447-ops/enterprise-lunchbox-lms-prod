@@ -579,14 +579,9 @@ const MODE_CONFIG: Record<TravelMode, { label: string; badge: string; badgeColor
 
   <!-- ═══════ MAP PICKER OVERLAY ═══════ -->
   <div class="tx-map-picker-overlay" *ngIf="showMapPicker">
-    <!-- Full screen OSM map iframe — user pans by scrolling/dragging -->
+    <!-- Leaflet interactive map — panning updates the address automatically -->
     <div class="tx-map-picker-map">
-      <iframe
-        *ngIf="mapPickerUrl"
-        [src]="mapPickerUrl"
-        width="100%" height="100%"
-        frameborder="0" loading="lazy"
-      ></iframe>
+      <div id="tx-map-picker-leaflet"></div>
       <!-- Fixed centre crosshair pin -->
       <div class="tx-map-picker-pin">
         <svg width="32" height="40" viewBox="0 0 32 40" fill="none">
@@ -1298,7 +1293,7 @@ const MODE_CONFIG: Record<TravelMode, { label: string; badge: string; badgeColor
 
     /* ── MAP PICKER OVERLAY ── */
     .tx-map-picker-overlay {
-      position: fixed; inset: 0; z-index: 100;
+      position: fixed; inset: 0; z-index: 1300;
       display: flex; flex-direction: column;
       background: #e8edf2;
     }
@@ -1306,6 +1301,7 @@ const MODE_CONFIG: Record<TravelMode, { label: string; badge: string; badgeColor
       flex: 1; position: relative; min-height: 0;
     }
     .tx-map-picker-map iframe { position: absolute; inset: 0; width: 100%; height: 100%; }
+    #tx-map-picker-leaflet { position: absolute; inset: 0; width: 100%; height: 100%; }
     .tx-map-picker-pin {
       position: absolute; top: 50%; left: 50%;
       transform: translate(-50%, -100%);
@@ -1780,7 +1776,10 @@ export class TravelComponent implements OnInit, OnDestroy {
       .subscribe(r => this.zone.run(() => this.dropSuggestions = r));
   }
 
-  ngOnDestroy(): void { this.destroy$.next(); this.destroy$.complete(); }
+  ngOnDestroy(): void {
+    this.destroy$.next(); this.destroy$.complete();
+    if (this.pickerMap) { this.pickerMap.remove(); this.pickerMap = null; }
+  }
 
   // ── GPS — uses watchPosition for accuracy then settles ──
   detectLiveLocation(): void {
@@ -1986,6 +1985,7 @@ export class TravelComponent implements OnInit, OnDestroy {
   // ── Map Picker ──
   showMapPicker = false;
   mapPickerUrl: SafeResourceUrl | null = null;
+  private pickerMap: any = null;
   mapPickerLat = 0;
   mapPickerLng = 0;
   mapPickerAddress = '';
@@ -2002,9 +2002,11 @@ export class TravelComponent implements OnInit, OnDestroy {
     this.mapPickerAddress = '';
     this.mapPickerQuery = '';
     this.mapPickerSuggestions = [];
-    this.updateMapPickerIframe(lat, lng);
     this.showMapPicker = true;
     this.resolveMapPickerAddress(lat, lng);
+
+    // Init Leaflet after the overlay DOM is rendered
+    setTimeout(() => this.initPickerLeaflet(lat, lng), 80);
 
     // Setup map picker search
     this.mapPickerSearch$
@@ -2012,11 +2014,55 @@ export class TravelComponent implements OnInit, OnDestroy {
       .subscribe(r => this.zone.run(() => this.mapPickerSuggestions = r));
   }
 
+  private async initPickerLeaflet(lat: number, lng: number): Promise<void> {
+    // Load Leaflet CSS + JS dynamically if not already present
+    if (!(window as any).L) {
+      if (!document.querySelector('link[href*="leaflet"]')) {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+        document.head.appendChild(link);
+      }
+      await new Promise<void>((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+        s.onload = () => resolve();
+        s.onerror = () => reject();
+        document.head.appendChild(s);
+      }).catch(() => null);
+    }
+
+    const L = (window as any).L;
+    if (!L) return;
+
+    const el = document.getElementById('tx-map-picker-leaflet');
+    if (!el) return;
+
+    if (this.pickerMap) { this.pickerMap.remove(); this.pickerMap = null; }
+
+    this.pickerMap = L.map(el, { zoomControl: true, attributionControl: false })
+      .setView([lat, lng], 16);
+
+    // CartoDB Voyager — modern, clean tile style
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19,
+      subdomains: 'abcd'
+    }).addTo(this.pickerMap);
+
+    // Update address whenever map center changes
+    this.pickerMap.on('moveend', () => {
+      const center = this.pickerMap.getCenter();
+      this.zone.run(() => {
+        this.mapPickerLat = center.lat;
+        this.mapPickerLng = center.lng;
+        this.resolveMapPickerAddress(center.lat, center.lng);
+      });
+    });
+  }
+
   private updateMapPickerIframe(lat: number, lng: number): void {
-    const d = 0.006;
-    const bbox = `${lng - d},${lat - d},${lng + d},${lat + d}`;
-    const url = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat},${lng}`;
-    this.mapPickerUrl = this.sanitizer.bypassSecurityTrustResourceUrl(url);
+    // Kept for compatibility — pans the Leaflet map if it exists
+    if (this.pickerMap) { this.pickerMap.setView([lat, lng], 16); }
   }
 
   private resolveMapPickerAddress(lat: number, lng: number): void {
@@ -2033,7 +2079,9 @@ export class TravelComponent implements OnInit, OnDestroy {
       pos => this.zone.run(() => {
         this.mapPickerLat = pos.coords.latitude;
         this.mapPickerLng = pos.coords.longitude;
-        this.updateMapPickerIframe(this.mapPickerLat, this.mapPickerLng);
+        if (this.pickerMap) {
+          this.pickerMap.setView([this.mapPickerLat, this.mapPickerLng], 16);
+        }
         this.resolveMapPickerAddress(this.mapPickerLat, this.mapPickerLng);
       }),
       () => {},
@@ -2049,7 +2097,9 @@ export class TravelComponent implements OnInit, OnDestroy {
     this.mapPickerAddress = s.display_name;
     this.mapPickerSuggestions = [];
     this.mapPickerQuery = '';
-    this.updateMapPickerIframe(this.mapPickerLat, this.mapPickerLng);
+    if (this.pickerMap) {
+      this.pickerMap.setView([this.mapPickerLat, this.mapPickerLng], 16);
+    }
   }
 
   confirmMapPickerDrop(): void {
@@ -2064,7 +2114,10 @@ export class TravelComponent implements OnInit, OnDestroy {
     this.step = 3;
   }
 
-  closeMapPicker(): void { this.showMapPicker = false; }
+  closeMapPicker(): void {
+    this.showMapPicker = false;
+    if (this.pickerMap) { this.pickerMap.remove(); this.pickerMap = null; }
+  }
 
   // ── Cancel Ride State ──
   showCancelConfirm = false;
