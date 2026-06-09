@@ -22,14 +22,31 @@ import { NotificationService } from '../../core/services/notification.service';
 
       <!-- ── Top Info Card ── -->
       <div class="profile-info-card">
+        <!-- Hidden file input for DP upload -->
+        <input
+          #dpInput
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          style="display:none"
+          (change)="onDpFileChange($event)"
+        />
+
         <!-- User row -->
-        <button class="profile-info-row" type="button">
+        <button class="profile-info-row" type="button" (click)="showAvatarPicker = true">
           <div class="profile-avatar-wrap">
-            <img class="profile-avatar" [src]="avatarUrl(user)" [alt]="user.displayName" />
+            <img class="profile-avatar" [src]="localAvatarPreview || avatarUrl(user)" [alt]="user.displayName" />
+            <div class="profile-avatar-camera" [class.uploading]="isUploadingDp">
+              <span *ngIf="!isUploadingDp">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+              </span>
+              <span *ngIf="isUploadingDp" class="dp-spinner"></span>
+            </div>
           </div>
           <div class="profile-info-text">
             <div class="profile-info-name">{{ user.displayName }}</div>
             <div class="profile-info-sub">{{ user.mobile || user.email || user.username }}</div>
+            <div class="profile-info-change-photo" *ngIf="!isUploadingDp">Tap to change photo</div>
+            <div class="profile-info-change-photo uploading" *ngIf="isUploadingDp">Uploading...</div>
           </div>
           <svg class="profile-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
         </button>
@@ -46,6 +63,34 @@ import { NotificationService } from '../../core/services/notification.service';
           </div>
           <svg class="profile-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
         </a>
+      </div>
+
+      <!-- ── Avatar Picker Sheet ── -->
+      <div class="av-overlay" *ngIf="showAvatarPicker" (click)="showAvatarPicker = false"></div>
+      <div class="av-sheet" [class.av-sheet-open]="showAvatarPicker">
+        <div class="av-handle"></div>
+        <div class="av-sheet-title">Choose your avatar</div>
+        <div class="av-sheet-sub">Select a preset or upload your photo</div>
+
+        <!-- Preset grid -->
+        <div class="av-grid">
+          <button
+            class="av-item"
+            type="button"
+            *ngFor="let av of presetAvatars"
+            [class.av-selected]="(localAvatarPreview || avatarUrl(user)) === av.url"
+            (click)="pickPresetAvatar(av.url)"
+          >
+            <img [src]="av.url" [alt]="av.label" class="av-img" />
+            <span class="av-label">{{ av.label }}</span>
+          </button>
+        </div>
+
+        <!-- Upload own photo -->
+        <button class="av-upload-btn" type="button" (click)="dpInput.click(); showAvatarPicker = false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          Upload from gallery
+        </button>
       </div>
 
       <!-- ── Menu List ── -->
@@ -310,7 +355,10 @@ import { NotificationService } from '../../core/services/notification.service';
     }
     .profile-info-row:hover { background: #fafafa; }
 
-    .profile-avatar-wrap { flex-shrink: 0; }
+    .profile-avatar-wrap {
+      flex-shrink: 0;
+      position: relative;
+    }
 
     .profile-avatar {
       width: 48px;
@@ -318,6 +366,50 @@ import { NotificationService } from '../../core/services/notification.service';
       border-radius: 50%;
       object-fit: cover;
       background: #e2e8f0;
+    }
+
+    .profile-avatar-camera {
+      position: absolute;
+      bottom: -2px;
+      right: -2px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #ef233c;
+      border: 2px solid #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+    }
+
+    .profile-avatar-camera.uploading {
+      background: #94a3b8;
+    }
+
+    .dp-spinner {
+      width: 9px;
+      height: 9px;
+      border: 1.5px solid rgba(255,255,255,0.4);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: dp-spin 0.7s linear infinite;
+      display: inline-block;
+    }
+
+    @keyframes dp-spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .profile-info-change-photo {
+      font-size: 0.72rem;
+      color: #ef233c;
+      margin-top: 2px;
+      font-weight: 600;
+    }
+
+    .profile-info-change-photo.uploading {
+      color: #94a3b8;
     }
 
     .profile-star-icon {
@@ -430,6 +522,129 @@ import { NotificationService } from '../../core/services/notification.service';
       padding: 1px 7px;
       min-width: 20px;
       text-align: center;
+    }
+
+    /* ────────────── Avatar Picker Sheet ────────────── */
+    .av-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      z-index: 500;
+    }
+
+    .av-sheet {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #fff;
+      border-radius: 22px 22px 0 0;
+      z-index: 501;
+      padding: 10px 20px 36px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      transform: translateY(100%);
+      transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+      box-shadow: 0 -6px 30px rgba(0,0,0,0.14);
+      max-width: 520px;
+      margin: 0 auto;
+    }
+
+    .av-sheet-open {
+      transform: translateY(0);
+    }
+
+    .av-handle {
+      width: 38px;
+      height: 4px;
+      background: #e2e8f0;
+      border-radius: 2px;
+      margin-bottom: 18px;
+    }
+
+    .av-sheet-title {
+      font-size: 1.05rem;
+      font-weight: 800;
+      color: #111;
+      margin-bottom: 4px;
+      align-self: flex-start;
+    }
+
+    .av-sheet-sub {
+      font-size: 0.8rem;
+      color: #888;
+      margin-bottom: 18px;
+      align-self: flex-start;
+    }
+
+    .av-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      width: 100%;
+      margin-bottom: 18px;
+    }
+
+    .av-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      background: none;
+      border: 2px solid #f0f0f0;
+      border-radius: 14px;
+      padding: 8px 4px;
+      cursor: pointer;
+      transition: border-color 0.14s, background 0.14s;
+    }
+
+    .av-item:hover {
+      border-color: #ef233c;
+      background: #fff5f6;
+    }
+
+    .av-item.av-selected {
+      border-color: #ef233c;
+      background: #fff5f6;
+    }
+
+    .av-img {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+
+    .av-label {
+      font-size: 0.68rem;
+      font-weight: 600;
+      color: #555;
+      text-align: center;
+      line-height: 1.2;
+    }
+
+    .av-upload-btn {
+      width: 100%;
+      height: 46px;
+      border: 1.5px dashed #cbd5e1;
+      border-radius: 12px;
+      background: #f8fafc;
+      color: #475569;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: border-color 0.15s, background 0.15s;
+    }
+
+    .av-upload-btn:hover {
+      border-color: #ef233c;
+      background: #fff5f6;
+      color: #ef233c;
     }
 
     /* ────────────── Notification Panel ────────────── */
@@ -609,6 +824,20 @@ export class AccountComponent implements OnInit, OnDestroy {
   pendingPayRides = 0;
   unreadCount = 0;
   showNotifPanel = false;
+  isUploadingDp = false;
+  localAvatarPreview: string | null = null;
+  showAvatarPicker = false;
+
+  readonly presetAvatars = [
+    { label: 'Rider',    url: 'https://ui-avatars.com/api/?name=R&background=ef233c&color=fff&size=128&bold=true&rounded=true' },
+    { label: 'Captain',  url: 'https://ui-avatars.com/api/?name=C&background=22c55e&color=fff&size=128&bold=true&rounded=true' },
+    { label: 'Explorer', url: 'https://ui-avatars.com/api/?name=E&background=6366f1&color=fff&size=128&bold=true&rounded=true' },
+    { label: 'Ninja',    url: 'https://ui-avatars.com/api/?name=N&background=0f172a&color=fff&size=128&bold=true&rounded=true' },
+    { label: 'Sunny',    url: 'https://ui-avatars.com/api/?name=S&background=f59e0b&color=fff&size=128&bold=true&rounded=true' },
+    { label: 'Ocean',    url: 'https://ui-avatars.com/api/?name=O&background=0ea5e9&color=fff&size=128&bold=true&rounded=true' },
+    { label: 'Blaze',    url: 'https://ui-avatars.com/api/?name=B&background=f97316&color=fff&size=128&bold=true&rounded=true' },
+    { label: 'Pro',      url: 'https://ui-avatars.com/api/?name=P&background=8b5cf6&color=fff&size=128&bold=true&rounded=true' },
+  ];
 
   get tierLabel(): string {
     if (this.totalRides >= 50) return 'Platinum';
@@ -670,6 +899,64 @@ export class AccountComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  pickPresetAvatar(url: string): void {
+    this.localAvatarPreview = url;
+    this.showAvatarPicker = false;
+    this.isUploadingDp = true;
+    this.auth.updateProfileImage(url).subscribe({
+      next: (res) => {
+        this.auth.applyProfileImage(res.profileImageUrl ?? url);
+        this.localAvatarPreview = res.profileImageUrl ?? url;
+        this.isUploadingDp = false;
+        this.notificationService.push('Avatar updated!', 'success');
+      },
+      error: () => {
+        this.auth.applyProfileImage(url);
+        this.isUploadingDp = false;
+        this.notificationService.push('Avatar saved locally.', 'info');
+      }
+    });
+  }
+
+  onDpFileChange(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    // Validate size (max 2 MB)
+    if (file.size > 2 * 1024 * 1024) {
+      this.notificationService.push('Image too large. Max size is 2 MB.', 'error');
+      input.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      // Show preview immediately
+      this.localAvatarPreview = dataUrl;
+      this.isUploadingDp = true;
+
+      this.auth.updateProfileImage(dataUrl).subscribe({
+        next: (res) => {
+          this.auth.applyProfileImage(res.profileImageUrl ?? dataUrl);
+          this.localAvatarPreview = res.profileImageUrl ?? dataUrl;
+          this.isUploadingDp = false;
+          this.notificationService.push('Profile photo updated!', 'success');
+        },
+        error: () => {
+          // Keep local preview even if server is offline
+          this.auth.applyProfileImage(dataUrl);
+          this.isUploadingDp = false;
+          this.notificationService.push('Photo saved locally.', 'info');
+        }
+      });
+    };
+    reader.readAsDataURL(file);
+    // Reset input so same file can be selected again
+    input.value = '';
   }
 
   openNotifications(): void {
