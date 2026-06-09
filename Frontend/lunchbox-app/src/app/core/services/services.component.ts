@@ -7,204 +7,170 @@ import { Router } from '@angular/router';
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="container py-4 services-page">
-      <h2 class="mb-1">Services</h2>
-      <p class="text-muted mb-3">Choose any mode quickly for easy customer use.</p>
-
-      <h6 class="section-title">Safety & Special Modes</h6>
-      <div class="service-grid">
-        <button class="service-card" type="button" (click)="openWomenSafetyMode()">
-          <div class="emoji">🛡️</div>
-          <div class="title">Women Safety Mode</div>
-          <div class="subtitle">Prioritize top-ranked captains</div>
-        </button>
-
-        <button class="service-card" type="button" (click)="openTeenageRideMode()">
-          <div class="emoji">🧒</div>
-          <div class="title">Teenage Ride Mode</div>
-          <div class="subtitle">Safer booking for teen rides</div>
-        </button>
-
-        <button class="service-card" type="button" (click)="openScheduledRideMode()">
-          <div class="emoji">⏰</div>
-          <div class="title">Scheduled Ride</div>
-          <div class="subtitle">Book now for later time</div>
-        </button>
-
-        <button class="service-card" type="button" (click)="openBookingForOthersMode()">
-          <div class="emoji">👨‍👩‍👧</div>
-          <div class="title">Book for Others</div>
-          <div class="subtitle">Family and friend ride booking</div>
-        </button>
+    <div class="svc-page">
+      <div class="svc-header">
+        <h2 class="svc-title">All Services</h2>
       </div>
 
-      <h6 class="section-title mt-4">Ride Modes</h6>
-      <div class="service-grid">
-        <button class="service-card" type="button" (click)="openVehicleRide('bike')">
-          <div class="emoji">🏍️</div>
-          <div class="title">Bike Ride</div>
-          <div class="subtitle">Fast and affordable</div>
-        </button>
-
-        <button class="service-card" type="button" (click)="openVehicleRide('auto')">
-          <div class="emoji">🛺</div>
-          <div class="title">Auto Ride</div>
-          <div class="subtitle">Quick city travel</div>
-        </button>
-
-        <button class="service-card" type="button" (click)="openVehicleRide('car')">
-          <div class="emoji">🚗</div>
-          <div class="title">Car Ride</div>
-          <div class="subtitle">Comfortable daily rides</div>
-        </button>
-
-        <button class="service-card" type="button" (click)="openActivity()">
-          <div class="emoji">🧾</div>
-          <div class="title">Track Activity</div>
-          <div class="subtitle">View active and past rides</div>
-        </button>
+      <div class="svc-section">
+        <div class="svc-section-label">Rides</div>
+        <div class="svc-grid">
+          <button class="svc-tile" type="button" (click)="openVehicleRide('bike')">
+            <div class="svc-icon-wrap">🏍️</div>
+            <div class="svc-name">Bike</div>
+          </button>
+          <button class="svc-tile" type="button" (click)="openVehicleRide('auto')">
+            <div class="svc-icon-wrap">🛺</div>
+            <div class="svc-name">Auto</div>
+          </button>
+          <button class="svc-tile" type="button" (click)="openVehicleRide('car')">
+            <div class="svc-icon-wrap">🚗</div>
+            <div class="svc-name">Cab Economy</div>
+          </button>
+          <button class="svc-tile" type="button" (click)="openVehicleRide('prime')">
+            <div class="svc-icon-wrap">🚙</div>
+            <div class="svc-name">Cab Prime</div>
+          </button>
+          <button class="svc-tile" type="button" (click)="openScheduledRideMode()">
+            <div class="svc-icon-wrap">⏰</div>
+            <div class="svc-name">Scheduled</div>
+          </button>
+          <button class="svc-tile" type="button" (click)="openBookingForOthersMode()">
+            <div class="svc-icon-wrap">👨‍👩‍👧</div>
+            <div class="svc-name">Book for Others</div>
+          </button>
+        </div>
       </div>
 
-      <h6 class="section-title mt-4">Delivery Services (Project Modes)</h6>
-      <div class="service-grid">
-        <button class="service-card" type="button" (click)="openPickupService()">
-          <div class="emoji">🛍️</div>
-          <div class="title">Pickup Service</div>
-          <div class="subtitle">Pickup item from shop to drop location</div>
-        </button>
+      <div class="svc-section">
+        <div class="svc-section-label">Safety Modes</div>
+        <div class="svc-grid">
+          <button class="svc-tile" type="button" (click)="openWomenSafetyMode()">
+            <div class="svc-icon-wrap">🛡️</div>
+            <div class="svc-name">Women Safety</div>
+          </button>
+          <button class="svc-tile" type="button" (click)="openTeenageRideMode()">
+            <div class="svc-icon-wrap">🧒</div>
+            <div class="svc-name">Teen Ride</div>
+          </button>
+        </div>
+      </div>
 
-        <button class="service-card" type="button" (click)="openBooking('food')">
-          <div class="emoji">🍱</div>
-          <div class="title">Food Delivery</div>
-          <div class="subtitle">Meals and restaurant delivery</div>
-        </button>
+      <div class="svc-section">
+        <div class="svc-section-label">Delivery</div>
+        <div class="svc-grid">
+          <button class="svc-tile" type="button" (click)="openPickupService()">
+            <div class="svc-icon-wrap">🛍️</div>
+            <div class="svc-name">Pickup</div>
+          </button>
+          <button class="svc-tile" type="button" (click)="openBooking('parcel')">
+            <div class="svc-icon-wrap">📦</div>
+            <div class="svc-name">Parcel</div>
+          </button>
+          <button class="svc-tile" type="button" (click)="openBooking('food')">
+            <div class="svc-icon-wrap">🍱</div>
+            <div class="svc-name">Food</div>
+          </button>
+          <button class="svc-tile" type="button" (click)="openBooking('grocery')">
+            <div class="svc-icon-wrap">🛒</div>
+            <div class="svc-name">Grocery</div>
+          </button>
+          <button class="svc-tile" type="button" (click)="openBooking('medicine')">
+            <div class="svc-icon-wrap">💊</div>
+            <div class="svc-name">Medicine</div>
+          </button>
+          <button class="svc-tile" type="button" (click)="openBooking('documents')">
+            <div class="svc-icon-wrap">📄</div>
+            <div class="svc-name">Documents</div>
+          </button>
+          <button class="svc-tile" type="button" (click)="openLunchBox()">
+            <div class="svc-icon-wrap">🎒</div>
+            <div class="svc-name">School Delivery</div>
+          </button>
+        </div>
+      </div>
 
-        <button class="service-card" type="button" (click)="openBooking('parcel')">
-          <div class="emoji">📦</div>
-          <div class="title">Parcel Delivery</div>
-          <div class="subtitle">Send packages safely</div>
-        </button>
-
-        <button class="service-card" type="button" (click)="openBooking('grocery')">
-          <div class="emoji">🛒</div>
-          <div class="title">Grocery Delivery</div>
-          <div class="subtitle">Daily needs to doorstep</div>
-        </button>
-
-        <button class="service-card" type="button" (click)="openBooking('medicine')">
-          <div class="emoji">💊</div>
-          <div class="title">Medicine Delivery</div>
-          <div class="subtitle">Fast pharmacy support</div>
-        </button>
-
-        <button class="service-card" type="button" (click)="openBooking('documents')">
-          <div class="emoji">📄</div>
-          <div class="title">Documents Delivery</div>
-          <div class="subtitle">Secure file transport</div>
-        </button>
-
-        <button class="service-card" type="button" (click)="openLunchBox()">
-          <div class="emoji">🎒</div>
-          <div class="title">RouteX School Delivery</div>
-          <div class="subtitle">School meal booking and history</div>
-        </button>
+      <div class="svc-section">
+        <div class="svc-section-label">More</div>
+        <div class="svc-grid">
+          <button class="svc-tile" type="button" (click)="openActivity()">
+            <div class="svc-icon-wrap">🧾</div>
+            <div class="svc-name">Activity</div>
+          </button>
+        </div>
       </div>
     </div>
   `,
-  styles: [
-    `
-      .service-grid {
-        display: grid;
-        gap: 12px;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        align-items: stretch;
-      }
+  styles: [`
+    .svc-page {
+      padding: 0 0 100px;
+      background: #fff;
+      min-height: 100vh;
+    }
 
-      .services-page {
-        padding-left: 10px;
-        padding-right: 10px;
-      }
+    .svc-header {
+      padding: 20px 16px 4px;
+    }
 
-      .section-title {
-        font-size: 0.9rem;
-        font-weight: 700;
-        letter-spacing: 0.02em;
-        text-transform: uppercase;
-        color: var(--text-secondary);
-        margin-bottom: 10px;
-      }
+    .svc-title {
+      font-size: 22px;
+      font-weight: 800;
+      color: #111;
+      margin: 0;
+    }
 
-      .service-card {
-        border: 1px solid var(--border-color);
-        background: var(--surface);
-        color: var(--text-primary);
-        border-radius: 14px;
-        padding: 14px;
-        text-align: left;
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
-        height: 100%;
-      }
+    .svc-section {
+      padding: 16px 16px 4px;
+    }
 
-      .service-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
-      }
+    .svc-section-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #999;
+      margin-bottom: 12px;
+    }
 
-      .emoji {
-        font-size: 1.6rem;
-        margin-bottom: 8px;
-      }
+    .svc-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
 
-      .title {
-        font-weight: 700;
-        margin-bottom: 4px;
-      }
+    .svc-tile {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      background: #f5f6f8;
+      border: none;
+      border-radius: 16px;
+      padding: 16px 8px 12px;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.12s;
+      min-height: 90px;
+    }
 
-      .subtitle {
-        font-size: 0.86rem;
-        color: var(--text-secondary);
-      }
+    .svc-tile:active {
+      transform: scale(0.96);
+      background: #eceef2;
+    }
 
-      @media (max-width: 575.98px) {
-        .services-page {
-          padding-left: 4px;
-          padding-right: 4px;
-        }
+    .svc-icon-wrap {
+      font-size: 32px;
+      line-height: 1;
+      margin-bottom: 8px;
+    }
 
-        .service-grid {
-          grid-template-columns: 1fr;
-        }
-
-        .service-card {
-          padding: 12px;
-        }
-
-        .title {
-          font-size: 0.98rem;
-        }
-
-        .subtitle {
-          font-size: 0.82rem;
-        }
-      }
-
-      @media (max-width: 390px) {
-        .section-title {
-          font-size: 0.82rem;
-        }
-
-        .emoji {
-          font-size: 1.45rem;
-        }
-      }
-
-      @media (min-width: 768px) and (max-width: 991.98px) {
-        .service-grid {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-      }
-    `
-  ]
+    .svc-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: #222;
+      text-align: center;
+      line-height: 1.3;
+    }
+  `]
 })
 export class ServicesComponent {
   constructor(private router: Router) {}
