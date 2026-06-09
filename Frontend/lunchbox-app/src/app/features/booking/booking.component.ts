@@ -209,7 +209,7 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
       </div>
 
       <h2 class="mb-3">{{ isLunchboxDeliveryPage ? 'RouteX LunchBox Booking' : (isSchoolBookingPage ? 'RouteX School Booking' : 'Book Delivery') }}</h2>
-      <p class="text-muted">Uber-style matching: pick from live nearby captains and confirm instantly.</p>
+      <p class="text-muted">RouteX-style matching: pick from live nearby captains and confirm instantly.</p>
 
       <div class="status-banner mb-3" *ngIf="focusedMode === 'all' || focusedMode === 'womenSafety'">
         <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
