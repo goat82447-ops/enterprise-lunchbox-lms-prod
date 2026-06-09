@@ -1,0 +1,57 @@
+name: Build RouteX APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: Frontend/lunchbox-app/package-lock.json
+
+      - name: Install deps
+        working-directory: Frontend/lunchbox-app
+        run: npm ci
+
+      - name: Build Angular
+        working-directory: Frontend/lunchbox-app
+        run: npm run build -- --configuration production
+
+      - name: Install Capacitor
+        working-directory: Frontend/lunchbox-app
+        run: npm install @capacitor/core @capacitor/cli @capacitor/android
+
+      - name: Write capacitor config
+        working-directory: Frontend/lunchbox-app
+        run: echo '{"appId":"com.routex.app","appName":"RouteX","webDir":"dist/lunchbox-app/browser","server":{"url":"https://enterprise-lunchbox-lms-prod.vercel.app"}}' > capacitor.config.json
+
+      - name: Add & sync Android
+        working-directory: Frontend/lunchbox-app
+        run: |
+          npx cap add android || true
+          npx cap sync android
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Build APK
+        working-directory: Frontend/lunchbox-app/android
+        run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RouteX-debug-apk
+          path: Frontend/lunchbox-app/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
