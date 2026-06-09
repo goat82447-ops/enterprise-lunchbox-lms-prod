@@ -363,44 +363,23 @@ import { SupportService } from './core/services/support.service';
       .fb-backdrop {
         position: fixed;
         inset: 0;
-        z-index: 1070;
-        background: rgba(2, 6, 23, 0.55);
-        backdrop-filter: blur(3px);
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        z-index: 1065;
+        background: rgba(2, 6, 23, 0.45);
+        display: grid;
+        place-items: center;
         padding: 16px;
-        animation: fb-fade-in 0.22s ease;
       }
 
-      @keyframes fb-fade-in {
-        from { opacity: 0; }
-        to   { opacity: 1; }
-      }
-
-      .fb-sheet {
-        width: min(440px, 100%);
+      .app-feedback-modal {
+        width: min(360px, calc(100vw - 24px));
+        border: 1px solid #dbeafe;
+        border-radius: 16px;
         background: #ffffff;
-        border-radius: 24px;
-        padding: 20px 24px 28px;
-        box-shadow: 0 20px 60px rgba(2, 6, 23, 0.22);
-        animation: fb-pop-in 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 0;
+        box-shadow: 0 16px 36px rgba(15, 23, 42, 0.26);
+        padding: 14px;
       }
 
-      @keyframes fb-pop-in {
-        from { opacity: 0; transform: scale(0.88); }
-        to   { opacity: 1; transform: scale(1); }
-      }
-
-      .fb-handle {
-        display: none;
-      }
-
-      .fb-brand {
+      .feedback-type-switch {
         display: flex;
         align-items: center;
         gap: 14px;

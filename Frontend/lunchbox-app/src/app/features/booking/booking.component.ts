@@ -305,7 +305,7 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         <div class="how-to-book-frame-wrap">
           <iframe
             class="how-to-book-frame"
-            src="https://www.youtube.com/embed/7ivUg7C61c4?rel=0&modestbranding=1&vq=hd1080"
+            src="https://www.youtube.com/watch?v=lu-Zu8nADOg"
             title="RouteX booking video guide"
             loading="lazy"
             referrerpolicy="strict-origin-when-cross-origin"
@@ -315,7 +315,7 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         </div>
         <small class="text-muted d-block mt-2">
           Video source: your uploaded YouTube guide.
-          <a href="https://www.youtube.com/shorts/7ivUg7C61c4" target="_blank" rel="noopener noreferrer">Open on YouTube (HD)</a>
+          <a href="https://www.youtube.com/watch?v=lu-Zu8nADOg" target="_blank" rel="noopener noreferrer"></a>
         </small>
       </div>
 
