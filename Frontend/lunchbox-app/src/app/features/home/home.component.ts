@@ -10,6 +10,7 @@ import {
 import { LanguageService } from '../../core/services/language.service';
 import { OffersService } from '../../core/services/offers.service';
 import { IntegrationHealthService } from '../../core/services/integration-health.service';
+import { AuthService } from '../../core/services/auth.service';
 
 @Component({
   selector: 'app-home',
@@ -64,17 +65,14 @@ import { IntegrationHealthService } from '../../core/services/integration-health
             [routerLink]="service.route"
             [queryParams]="service.queryParams || null"
           >
+            <div class="service-card-glow"></div>
             <div class="service-showcase-icon">{{ service.icon }}</div>
-            <div>
-              <h5 class="mb-1">{{ service.title }}</h5>
-              <p class="mb-0 text-muted small">{{ service.description }}</p>
-            </div>
-            <span class="service-showcase-arrow">></span>
+            <span class="service-showcase-label">{{ service.title }}</span>
           </a>
         </div>
       </section>
 
-      <section class="integration-panel mt-3">
+      <section class="integration-panel mt-3" *ngIf="isAdmin">
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
           <h3 class="mb-0">Integrations</h3>
           <small class="text-muted">Connected services and platform modules</small>
@@ -247,49 +245,78 @@ import { IntegrationHealthService } from '../../core/services/integration-health
 
       .service-showcase-grid {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 12px;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
       }
 
       .service-showcase-card {
         text-decoration: none;
         color: inherit;
-        border: 1px solid rgba(0, 0, 0, 0.08);
-        border-radius: 12px;
+        border: 1px solid rgba(0, 0, 0, 0.07);
+        border-radius: 18px;
         background: var(--surface);
-        padding: 12px;
-        display: grid;
-        grid-template-columns: 40px 1fr auto;
-        gap: 10px;
+        padding: 20px 10px 16px;
+        display: flex;
+        flex-direction: column;
         align-items: center;
-        transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+        text-align: center;
+        gap: 10px;
+        position: relative;
+        overflow: hidden;
+        transition: transform 0.24s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.24s ease, border-color 0.24s ease;
       }
 
-      .service-showcase-card h5,
-      .service-showcase-card p {
-        word-break: break-word;
+      .service-card-glow {
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(ellipse at 50% 0%, rgba(239, 35, 60, 0.1) 0%, transparent 65%);
+        opacity: 0;
+        transition: opacity 0.28s ease;
+        pointer-events: none;
+        border-radius: inherit;
       }
 
       .service-showcase-card:hover {
-        transform: translateY(-2px);
-        border-color: rgba(239, 35, 60, 0.35);
-        box-shadow: 0 8px 20px rgba(2, 6, 23, 0.08);
+        transform: translateY(-6px) scale(1.04);
+        border-color: rgba(239, 35, 60, 0.38);
+        box-shadow: 0 16px 32px rgba(2, 6, 23, 0.12), 0 0 0 1px rgba(239, 35, 60, 0.15);
+      }
+
+      .service-showcase-card:hover .service-card-glow {
+        opacity: 1;
+      }
+
+      .service-showcase-card:active {
+        transform: translateY(-2px) scale(1.01);
       }
 
       .service-showcase-icon {
-        width: 40px;
-        height: 40px;
-        border-radius: 10px;
-        background: #fff1f2;
+        width: 64px;
+        height: 64px;
+        border-radius: 18px;
+        background: linear-gradient(145deg, #fff1f2 0%, #ffe4e6 100%);
+        border: 1px solid rgba(239, 35, 60, 0.12);
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 18px;
+        font-size: 28px;
+        flex-shrink: 0;
+        transition: transform 0.24s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.24s ease;
       }
 
-      .service-showcase-arrow {
-        font-weight: 700;
-        color: #ef233c;
+      .service-showcase-card:hover .service-showcase-icon {
+        transform: scale(1.14) rotate(-5deg);
+        box-shadow: 0 8px 20px rgba(239, 35, 60, 0.22);
+      }
+
+      .service-showcase-label {
+        font-size: 11.5px;
+        font-weight: 600;
+        color: #1e293b;
+        line-height: 1.3;
+        text-align: center;
+        word-break: break-word;
+        letter-spacing: 0.01em;
       }
 
       .integration-panel {
@@ -454,23 +481,11 @@ import { IntegrationHealthService } from '../../core/services/integration-health
         font-weight: 700;
       }
 
-      @media (max-width: 576px) {
+      /* ── Mobile small (< 480px) ── */
+      @media (max-width: 479px) {
         .hero-card {
           padding: 18px 14px;
-        }
-
-        .hero-card .display-5 {
-          font-size: 1.94rem;
-          line-height: 1.2;
-        }
-
-        .hero-card .lead {
-          font-size: 0.95rem;
-          margin-bottom: 0.9rem !important;
-        }
-
-        .hero-card .btn {
-          width: 100%;
+          border-radius: 16px;
         }
 
         .hero-brand {
@@ -478,11 +493,38 @@ import { IntegrationHealthService } from '../../core/services/integration-health
         }
 
         .hero-logo {
-          max-width: 132px;
+          max-width: 96px;
+        }
+
+        .hero-card .display-5 {
+          font-size: 1.75rem;
+          line-height: 1.2;
+        }
+
+        .hero-card .lead {
+          font-size: 0.9rem;
+          margin-bottom: 0.8rem !important;
+        }
+
+        .hero-card .btn {
+          width: 100%;
         }
 
         .hero-metrics {
-          grid-template-columns: 1fr;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 8px;
+        }
+
+        .metric-card {
+          padding: 10px 8px;
+        }
+
+        .metric-value {
+          font-size: 18px;
+        }
+
+        .metric-label {
+          font-size: 11px;
         }
 
         .flash-banner {
@@ -494,7 +536,24 @@ import { IntegrationHealthService } from '../../core/services/integration-health
         }
 
         .service-showcase-grid {
-          grid-template-columns: 1fr;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+        }
+
+        .service-showcase-card {
+          padding: 16px 8px 14px;
+          border-radius: 16px;
+        }
+
+        .service-showcase-icon {
+          width: 52px;
+          height: 52px;
+          font-size: 22px;
+          border-radius: 14px;
+        }
+
+        .service-showcase-label {
+          font-size: 11px;
         }
 
         .integration-grid {
@@ -510,23 +569,44 @@ import { IntegrationHealthService } from '../../core/services/integration-health
         }
       }
 
-      @media (max-width: 390px) {
-        .hero-card {
-          border-radius: 16px;
+      /* ── Mobile medium (480px – 767px) ── */
+      @media (min-width: 480px) and (max-width: 767px) {
+        .service-showcase-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
         }
 
-        .metric-card {
-          padding: 10px;
+        .feature-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
         }
 
-        .metric-value {
-          font-size: 20px;
+        .flash-banner {
+          grid-template-columns: 120px 1fr;
         }
       }
 
-      @media (min-width: 768px) and (max-width: 991.98px) {
+      /* ── Tablet (768px – 1199px) ── */
+      @media (min-width: 768px) and (max-width: 1199px) {
+        .service-showcase-grid {
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+
         .feature-grid {
           grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      /* ── Desktop (≥ 1200px) ── */
+      @media (min-width: 1200px) {
+        .service-showcase-grid {
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+
+        .service-showcase-card {
+          min-height: 230px;
+        }
+
+        .feature-grid {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
         }
       }
     `
@@ -646,7 +726,8 @@ export class HomeComponent {
   constructor(
     private languageService: LanguageService,
     offersService: OffersService,
-    private integrationHealthService: IntegrationHealthService
+    private integrationHealthService: IntegrationHealthService,
+    private authService: AuthService
   ) {
     this.offers$ = offersService.feed$.pipe(map((feed) => feed.offers.slice(0, 4)));
     this.news$ = offersService.feed$.pipe(map((feed) => feed.news.slice(0, 4)));
@@ -695,6 +776,10 @@ export class HomeComponent {
           };
         });
       });
+  }
+
+  get isAdmin(): boolean {
+    return this.authService.isAdmin();
   }
 
   t(key: string): string {

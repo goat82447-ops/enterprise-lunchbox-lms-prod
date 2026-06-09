@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { BehaviorSubject, Observable, catchError, fromEvent, interval, map, of, switchMap } from 'rxjs';
+import { BehaviorSubject, Observable, catchError, distinctUntilChanged, fromEvent, interval, map, of, switchMap } from 'rxjs';
 import { Booking, BookingRequest, BookingStatus } from '../models/delivery.models';
 import { NotificationService } from './notification.service';
 import { AuthService } from './auth.service';
@@ -15,6 +15,8 @@ export class BookingService {
   private static readonly CAPTAIN_ACCEPT_TIMEOUT_MINUTES = 20;
   private readonly bookingsSubject = new BehaviorSubject<Booking[]>(this.loadBookings());
   readonly bookings$: Observable<Booking[]> = this.bookingsSubject.asObservable();
+  /** Track booking IDs that have already fired their one-time auto-cancel/confirm notification to prevent spam */
+  private readonly notifiedBookingIds = new Set<string>();
 
   constructor(
     private notifications: NotificationService,
@@ -34,7 +36,11 @@ export class BookingService {
       });
     }
 
-    this.auth.user$.subscribe((user) => {
+    // Only sync (and show the 'Live ride sync' popup) when the user logs in or out,
+    // not on every profile update that re-emits user$ with the same user ID.
+    this.auth.user$.pipe(
+      distinctUntilChanged((prev, curr) => (prev?.id ?? null) === (curr?.id ?? null))
+    ).subscribe((user) => {
       if (!user) {
         this.persist([]);
         return;
@@ -384,8 +390,20 @@ export class BookingService {
   }
 
   private tickBookings(): void {
-    const changed = this.bookingsSubject.value.map((booking) => this.progressBooking(booking));
+    const before = this.bookingsSubject.value;
+    const changed = before.map((booking) => this.progressBooking(booking));
     this.persist(changed, false);
+
+    // Sync any locally auto-cancelled bookings to the server so the server
+    // does not restore them on the next poll and trigger the notification loop.
+    changed.forEach((booking, index) => {
+      const previous = before[index];
+      if (booking.status === 'cancelled' && previous.status !== 'cancelled') {
+        this.http
+          .post<Booking>(`${BOOKINGS_API}/${booking.id}/cancel`, { role: 'system' }, { headers: this.getSessionHeaders() })
+          .subscribe({ next: (serverBooking) => this.upsertBooking(serverBooking), error: () => void 0 });
+      }
+    });
   }
 
   private syncBookingsFromServer(forceNotify: boolean = false): void {
@@ -445,7 +463,29 @@ export class BookingService {
 
   private mergeServerWithLocal(serverBookings: Booking[]): Booking[] {
     const local = this.bookingsSubject.value;
+    const localById = new Map(local.map((item) => [item.id, item]));
     const serverIds = new Set(serverBookings.map((item) => item.id));
+
+    // For bookings the server knows about, prefer the server version UNLESS the
+    // local version has a terminal status (cancelled/completed) that is newer than
+    // the server version — this prevents server-sync from undoing a local
+    // auto-cancellation and causing the 20-min popup to fire on every tick.
+    const merged = serverBookings.map((serverItem) => {
+      const localItem = localById.get(serverItem.id);
+      if (!localItem) {
+        return serverItem;
+      }
+
+      const localIsTerminal = localItem.status === 'cancelled' || localItem.status === 'completed';
+      const serverIsNonTerminal = serverItem.status !== 'cancelled' && serverItem.status !== 'completed';
+      const localIsNewer = new Date(localItem.updatedAt).getTime() > new Date(serverItem.updatedAt).getTime();
+
+      if (localIsTerminal && serverIsNonTerminal && localIsNewer) {
+        return localItem;
+      }
+
+      return serverItem;
+    });
 
     const keepLocal = local.filter((item) => {
       if (serverIds.has(item.id)) {
@@ -459,7 +499,7 @@ export class BookingService {
       return localTempId && active && recentMinutes <= 30;
     });
 
-    return [...serverBookings, ...keepLocal].sort(
+    return [...merged, ...keepLocal].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
   }
@@ -502,7 +542,10 @@ export class BookingService {
 
     if (booking.serviceType === 'food' && booking.status === 'created') {
       if (this.minutesSince(booking.createdAt) >= BookingService.FOOD_CONFIRMATION_DELAY_MINUTES) {
-        this.notifications.push(`Order ${booking.id} confirmed by captain/restaurant.`, 'success');
+        if (!this.notifiedBookingIds.has(`food-confirmed-${booking.id}`)) {
+          this.notifiedBookingIds.add(`food-confirmed-${booking.id}`);
+          this.notifications.push(`Order ${booking.id} confirmed by captain/restaurant.`, 'success');
+        }
         return {
           ...booking,
           status: 'assigned',
@@ -519,7 +562,10 @@ export class BookingService {
 
     if (booking.status === 'created' && booking.serviceType !== 'food') {
       if (this.minutesSince(booking.createdAt) >= BookingService.CAPTAIN_ACCEPT_TIMEOUT_MINUTES) {
-        this.notifications.push(`Ride ${booking.id} was auto-cancelled because no captain accepted within 20 minutes.`, 'warning');
+        if (!this.notifiedBookingIds.has(`auto-cancel-${booking.id}`)) {
+          this.notifiedBookingIds.add(`auto-cancel-${booking.id}`);
+          this.notifications.push(`Ride ${booking.id} was auto-cancelled because no captain accepted within 20 minutes.`, 'warning');
+        }
         return {
           ...booking,
           status: 'cancelled',
