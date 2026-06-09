@@ -922,6 +922,10 @@ export class TrackingComponent implements OnInit, OnDestroy {
   private nowTickMs = Date.now();
   private captainPaymentRedirectHandled = false;
   private statusRedirectHandled = false;
+  /** Tracks booking IDs for which recordUserAction('tracking_viewed') has already been sent */
+  private readonly trackingViewedIds = new Set<string>();
+  /** Tracks the booking ID for which setupLiveTracking was last called to avoid restarting on every poll */
+  private lastSetupTrackingBookingId = '';
 
   constructor(
     private route: ActivatedRoute,
@@ -939,37 +943,49 @@ export class TrackingComponent implements OnInit, OnDestroy {
     this.currentRole = this.authService.getCurrentUser()?.role;
     this.watchActivityBookings();
 
-    this.route.paramMap.pipe(takeUntil(this.destroy$)).subscribe(params => {
-      const bookingId = params.get('id');
-      if (!bookingId) {
-        this.tryAutoSelectBooking();
+    this.route.paramMap.pipe(
+      takeUntil(this.destroy$),
+      switchMap(params => {
+        const bookingId = params.get('id');
+        if (!bookingId) {
+          this.tryAutoSelectBooking();
+          return of(null);
+        }
+        return this.bookingService.getBookingById$(bookingId);
+      })
+    ).subscribe((booking) => {
+      this.booking = booking ?? undefined;
+      if (!booking) {
         return;
       }
 
-      this.bookingService
-        .getBookingById$(bookingId)
-        .subscribe((booking) => {
-          this.booking = booking;
-          if (booking) {
-            this.authService
-              .recordUserAction('tracking_viewed', { bookingId: booking.id, status: booking.status })
-              .subscribe({ error: () => void 0 });
-            this.googleMapUrl = this.buildMapUrl(booking.currentLocation.lat, booking.currentLocation.lng, booking.drop.lat, booking.drop.lng);
-            // Setup live location tracking
-            this.setupLiveTracking(booking);
-            this.payableAmount = this.calculatePayableAmount(booking);
-            this.syncAutoCloseTracking(booking);
-            this.handleCaptainPostPaymentRedirect(booking);
-            this.handleMainPageRedirectForTerminalStatus(booking);
-            if (!booking.feedbackSubmitted) {
-              this.rideRating = 5;
-              this.captainRating = 5;
-              this.lovedRide = false;
-              this.lovedCaptain = false;
-              this.feedbackText = '';
-            }
-          }
-        });
+      // One-time per booking: record tracking view action
+      if (!this.trackingViewedIds.has(booking.id)) {
+        this.trackingViewedIds.add(booking.id);
+        this.authService
+          .recordUserAction('tracking_viewed', { bookingId: booking.id, status: booking.status })
+          .subscribe({ error: () => void 0 });
+      }
+
+      this.googleMapUrl = this.buildMapUrl(booking.currentLocation.lat, booking.currentLocation.lng, booking.drop.lat, booking.drop.lng);
+
+      // Only (re)start live tracking when the booking ID changes or status transitions
+      if (this.lastSetupTrackingBookingId !== booking.id) {
+        this.lastSetupTrackingBookingId = booking.id;
+        this.setupLiveTracking(booking);
+      }
+
+      this.payableAmount = this.calculatePayableAmount(booking);
+      this.syncAutoCloseTracking(booking);
+      this.handleCaptainPostPaymentRedirect(booking);
+      this.handleMainPageRedirectForTerminalStatus(booking);
+      if (!booking.feedbackSubmitted) {
+        this.rideRating = 5;
+        this.captainRating = 5;
+        this.lovedRide = false;
+        this.lovedCaptain = false;
+        this.feedbackText = '';
+      }
     });
   }
 
@@ -1578,6 +1594,12 @@ export class TrackingComponent implements OnInit, OnDestroy {
   private syncAutoCloseTracking(booking: Booking): void {
     if (!this.isCustomer() || booking.status !== 'completed' || !booking.paymentDone || booking.trackingClosed || !booking.feedbackSubmitted) {
       this.clearAutoCloseTimer();
+      return;
+    }
+
+    // If the timer is already running (isAutoClosePending), do not tear it down and restart —
+    // that would reset the countdown on every booking poll update.
+    if (this.isAutoClosePending) {
       return;
     }
 
