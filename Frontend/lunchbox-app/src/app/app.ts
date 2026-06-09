@@ -367,8 +367,9 @@ import { SupportService } from './core/services/support.service';
         background: rgba(2, 6, 23, 0.55);
         backdrop-filter: blur(3px);
         display: flex;
-        align-items: flex-end;
+        align-items: center;
         justify-content: center;
+        padding: 16px;
         animation: fb-fade-in 0.22s ease;
       }
 
@@ -378,29 +379,25 @@ import { SupportService } from './core/services/support.service';
       }
 
       .fb-sheet {
-        width: min(480px, 100vw);
+        width: min(440px, 100%);
         background: #ffffff;
-        border-radius: 24px 24px 0 0;
-        padding: 12px 24px 36px;
-        box-shadow: 0 -8px 40px rgba(2, 6, 23, 0.18);
-        animation: fb-slide-up 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+        border-radius: 24px;
+        padding: 20px 24px 28px;
+        box-shadow: 0 20px 60px rgba(2, 6, 23, 0.22);
+        animation: fb-pop-in 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
         display: flex;
         flex-direction: column;
         align-items: center;
         gap: 0;
       }
 
-      @keyframes fb-slide-up {
-        from { transform: translateY(100%); }
-        to   { transform: translateY(0); }
+      @keyframes fb-pop-in {
+        from { opacity: 0; transform: scale(0.88); }
+        to   { opacity: 1; transform: scale(1); }
       }
 
       .fb-handle {
-        width: 40px;
-        height: 4px;
-        border-radius: 2px;
-        background: #e2e8f0;
-        margin-bottom: 20px;
+        display: none;
       }
 
       .fb-brand {

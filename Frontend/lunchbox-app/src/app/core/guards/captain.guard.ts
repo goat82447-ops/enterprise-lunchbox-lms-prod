@@ -6,7 +6,8 @@ export const captainGuard: CanActivateFn = () => {
   const auth = inject(AuthService);
   const router = inject(Router);
 
-  if (auth.isCaptain()) {
+  const user = auth.getCurrentUser();
+  if (user && (user.role === 'captain' || user.role === 'admin')) {
     return true;
   }
 

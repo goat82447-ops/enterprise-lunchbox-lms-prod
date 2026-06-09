@@ -96,12 +96,13 @@ import { NotificationService } from '../../core/services/notification.service';
       <!-- ── Menu List ── -->
       <div class="profile-menu-card">
 
-        <a class="profile-menu-row" routerLink="/activity">
+        <a class="profile-menu-row" routerLink="/payment">
           <span class="profile-menu-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M6 15h4"/></svg>
           </span>
           <div class="profile-menu-content">
             <div class="profile-menu-label">Payment</div>
+            <div class="profile-menu-sub">Wallet, UPI, Bank & more</div>
           </div>
           <svg class="profile-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
         </a>
@@ -121,19 +122,20 @@ import { NotificationService } from '../../core/services/notification.service';
 
         <div class="profile-row-divider"></div>
 
-        <button class="profile-menu-row" type="button" disabled>
+        <button class="profile-menu-row" type="button" (click)="router.navigate(['/booking'], { queryParams: { womenSafety: 1, service: 'parcel' } })">
           <span class="profile-menu-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
           </span>
           <div class="profile-menu-content">
             <div class="profile-menu-label">Safety</div>
+            <div class="profile-menu-sub">Women safety & trusted captains</div>
           </div>
           <svg class="profile-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
         </button>
 
         <div class="profile-row-divider"></div>
 
-        <button class="profile-menu-row" type="button">
+        <button class="profile-menu-row" type="button" (click)="referAndEarn()">
           <span class="profile-menu-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>
           </span>
@@ -146,7 +148,7 @@ import { NotificationService } from '../../core/services/notification.service';
 
         <div class="profile-row-divider"></div>
 
-        <button class="profile-menu-row" type="button">
+        <button class="profile-menu-row" type="button" (click)="router.navigate(['/activity'])">
           <span class="profile-menu-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/></svg>
           </span>
@@ -159,7 +161,7 @@ import { NotificationService } from '../../core/services/notification.service';
 
         <div class="profile-row-divider"></div>
 
-        <button class="profile-menu-row" type="button">
+        <button class="profile-menu-row" type="button" (click)="router.navigate(['/activity'])">
           <span class="profile-menu-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M12 12m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0"/><path d="M6 12h.01M18 12h.01"/></svg>
           </span>
@@ -172,7 +174,7 @@ import { NotificationService } from '../../core/services/notification.service';
 
         <div class="profile-row-divider"></div>
 
-        <button class="profile-menu-row" type="button">
+        <button class="profile-menu-row" type="button" (click)="router.navigate(['/activity'])">
           <span class="profile-menu-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="12" r="4"/><circle cx="16" cy="12" r="4"/></svg>
           </span>
@@ -610,10 +612,11 @@ import { NotificationService } from '../../core/services/notification.service';
     }
 
     .av-img {
-      width: 52px;
-      height: 52px;
+      width: 64px;
+      height: 64px;
       border-radius: 50%;
       object-fit: cover;
+      background: #f1f5f9;
     }
 
     .av-label {
@@ -829,14 +832,14 @@ export class AccountComponent implements OnInit, OnDestroy {
   showAvatarPicker = false;
 
   readonly presetAvatars = [
-    { label: 'Rider',    url: 'https://ui-avatars.com/api/?name=R&background=ef233c&color=fff&size=128&bold=true&rounded=true' },
-    { label: 'Captain',  url: 'https://ui-avatars.com/api/?name=C&background=22c55e&color=fff&size=128&bold=true&rounded=true' },
-    { label: 'Explorer', url: 'https://ui-avatars.com/api/?name=E&background=6366f1&color=fff&size=128&bold=true&rounded=true' },
-    { label: 'Ninja',    url: 'https://ui-avatars.com/api/?name=N&background=0f172a&color=fff&size=128&bold=true&rounded=true' },
-    { label: 'Sunny',    url: 'https://ui-avatars.com/api/?name=S&background=f59e0b&color=fff&size=128&bold=true&rounded=true' },
-    { label: 'Ocean',    url: 'https://ui-avatars.com/api/?name=O&background=0ea5e9&color=fff&size=128&bold=true&rounded=true' },
-    { label: 'Blaze',    url: 'https://ui-avatars.com/api/?name=B&background=f97316&color=fff&size=128&bold=true&rounded=true' },
-    { label: 'Pro',      url: 'https://ui-avatars.com/api/?name=P&background=8b5cf6&color=fff&size=128&bold=true&rounded=true' },
+    { label: 'Adventure', url: 'https://api.dicebear.com/9.x/adventurer/svg?seed=Alex&backgroundColor=b6e3f4' },
+    { label: 'Bitmoji',   url: 'https://api.dicebear.com/9.x/avataaars/svg?seed=Sam&backgroundColor=c0aede' },
+    { label: 'Smiley',    url: 'https://api.dicebear.com/9.x/big-smile/svg?seed=Jordan&backgroundColor=ffd5dc' },
+    { label: 'Artistic',  url: 'https://api.dicebear.com/9.x/lorelei/svg?seed=Morgan&backgroundColor=d1f4e0' },
+    { label: 'Pixel',     url: 'https://api.dicebear.com/9.x/pixel-art/svg?seed=Riley&backgroundColor=ffd5dc' },
+    { label: 'Emoji',     url: 'https://api.dicebear.com/9.x/fun-emoji/svg?seed=Casey&backgroundColor=b6e3f4' },
+    { label: 'Doodle',    url: 'https://api.dicebear.com/9.x/croodles/svg?seed=Taylor&backgroundColor=ffdfbf' },
+    { label: 'Cool',      url: 'https://api.dicebear.com/9.x/adventurer-neutral/svg?seed=Drew&backgroundColor=c0aede' },
   ];
 
   get tierLabel(): string {
@@ -850,7 +853,7 @@ export class AccountComponent implements OnInit, OnDestroy {
 
   constructor(
     private auth: AuthService,
-    private router: Router,
+    public router: Router,
     private bookingService: BookingService,
     private notificationService: NotificationService
   ) {
@@ -957,6 +960,17 @@ export class AccountComponent implements OnInit, OnDestroy {
     reader.readAsDataURL(file);
     // Reset input so same file can be selected again
     input.value = '';
+  }
+
+  referAndEarn(): void {
+    const link = `${window.location.origin}/register?ref=${this.auth.getCurrentUser()?.id ?? 'routex'}`;
+    if (navigator.share) {
+      navigator.share({ title: 'Join RouteX', text: 'Use my referral link and get ₹50 off your first ride!', url: link });
+    } else {
+      navigator.clipboard?.writeText(link).then(() => {
+        this.notificationService.push('Referral link copied! Share it to earn ₹50.', 'success');
+      });
+    }
   }
 
   openNotifications(): void {

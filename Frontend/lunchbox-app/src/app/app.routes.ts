@@ -11,6 +11,8 @@ import { CaptainProfileComponent } from './features/captain-profile/captain-prof
 import { AboutUsComponent } from './features/about-us/about-us.component';
 import { ContactComponent } from './features/contact/contact.component';
 import { ServicesComponent } from './core/services/services.component';
+import { TravelComponent } from './features/travel/travel.component';
+import { PaymentComponent } from './features/payment/payment.component';
 import { CartComponent } from './components/cart/cart.component';
 import { OrderComponent } from './components/order/order.component';
 import { TrackingComponent as OrderTrackingComponent } from './components/tracking/tracking.component';
@@ -25,8 +27,10 @@ export const routes: Routes = [
 	{ path: 'login', component: LoginComponent },
 	{ path: 'register', component: RegisterComponent },
 	{ path: 'services', component: ServicesComponent, canActivate: [authGuard, customerGuard] },
+	{ path: 'travel', component: TravelComponent, canActivate: [authGuard, customerGuard] },
 	{ path: 'activity', component: TrackingComponent, canActivate: [authGuard] },
 	{ path: 'account', component: AccountComponent, canActivate: [authGuard, customerGuard] },
+	{ path: 'payment', component: PaymentComponent, canActivate: [authGuard, customerGuard] },
 	{ path: 'about-us', component: AboutUsComponent },
 	{ path: 'contact', component: ContactComponent },
 	{ path: 'lunchbox-delivery', component: BookingComponent, canActivate: [authGuard, customerGuard] },
