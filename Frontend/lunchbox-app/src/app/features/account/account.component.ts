@@ -853,7 +853,7 @@ export class AccountComponent implements OnInit, OnDestroy {
 
   constructor(
     private auth: AuthService,
-    private router: Router,
+    public router: Router,
     private bookingService: BookingService,
     private notificationService: NotificationService
   ) {
