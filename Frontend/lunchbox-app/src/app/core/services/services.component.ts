@@ -223,19 +223,19 @@ export class ServicesComponent {
   }
 
   openWomenSafetyMode(): void {
-    this.router.navigate(['/booking'], { queryParams: { womenSafety: 1, service: 'parcel' } });
+    this.router.navigate(['/travel'], { queryParams: { mode: 'women' } });
   }
 
   openTeenageRideMode(): void {
-    this.router.navigate(['/booking'], { queryParams: { teenRide: 1, bookingFor: 'others', service: 'parcel' } });
+    this.router.navigate(['/travel'], { queryParams: { mode: 'teen' } });
   }
 
   openScheduledRideMode(): void {
-    this.router.navigate(['/booking'], { queryParams: { rideMode: 'later', service: 'parcel' } });
+    this.router.navigate(['/travel'], { queryParams: { mode: 'later' } });
   }
 
   openBookingForOthersMode(): void {
-    this.router.navigate(['/booking'], { queryParams: { bookingFor: 'others', service: 'parcel' } });
+    this.router.navigate(['/travel'], { queryParams: { mode: 'others' } });
   }
 
   openLunchBox(): void {
