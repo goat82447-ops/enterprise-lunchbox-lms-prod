@@ -170,7 +170,7 @@ import { SupportService } from './core/services/support.service';
                   <span class="pdr-val">{{ user.captainVehicle | titlecase }}</span>
                 </div>
                 <div class="profile-dropdown-divider"></div>
-                <button class="profile-dropdown-logout" (click)="logout(); handleNavLinkClick()">&#10148; Sign out</button>
+                <button class="profile-dropdown-logout" (click)="logout()">&#10148; Sign out</button>
               </div>
             </li>
           </ul>
@@ -291,57 +291,66 @@ import { SupportService } from './core/services/support.service';
     <!-- RouteX Assistant -->
     <app-chatbot></app-chatbot>
 
-    <div class="app-feedback-overlay" *ngIf="showAppFeedbackWidget" role="dialog" aria-modal="true" aria-label="Application feedback">
-      <div class="app-feedback-modal">
-        <div class="app-feedback-title">Rate This App</div>
-        <div class="app-feedback-subtitle">Please give your app experience rating.</div>
+    <!-- Professional Rating Sheet -->
+    <div class="fb-backdrop" *ngIf="showAppFeedbackWidget" role="dialog" aria-modal="true" aria-label="Rate RouteX" (click)="dismissAppFeedbackWidget()">
+      <div class="fb-sheet" (click)="$event.stopPropagation()">
+        <!-- Handle bar -->
+        <div class="fb-handle"></div>
 
-        <div class="feedback-type-switch" role="group" aria-label="Feedback context">
-          <button
-            type="button"
-            class="btn btn-sm"
-            [class.btn-primary]="selectedFeedbackType === 'open'"
-            [class.btn-outline-primary]="selectedFeedbackType !== 'open'"
-            (click)="selectedFeedbackType = 'open'"
-          >
-            App Open
-          </button>
-          <button
-            type="button"
-            class="btn btn-sm"
-            [class.btn-primary]="selectedFeedbackType === 'close'"
-            [class.btn-outline-primary]="selectedFeedbackType !== 'close'"
-            (click)="selectedFeedbackType = 'close'"
-          >
-            App Close
-          </button>
+        <!-- App icon + heading -->
+        <div class="fb-brand">
+          <div class="fb-app-icon">
+            <img src="assets/lunchbox-logo.svg" alt="RouteX" />
+          </div>
+          <div class="fb-brand-text">
+            <div class="fb-heading">Enjoying RouteX?</div>
+            <div class="fb-sub">Your feedback helps us improve</div>
+          </div>
         </div>
 
-        <div class="star-row" aria-label="5 star rating">
+        <!-- Stars -->
+        <div class="fb-stars" aria-label="5 star rating">
           <button
             type="button"
-            class="star-btn"
+            class="fb-star"
             *ngFor="let star of feedbackStars"
-            [class.active]="star <= appRating"
+            [class.lit]="star <= appRating"
+            [class.hover]="star <= hoveredStar"
+            (mouseenter)="hoveredStar = star"
+            (mouseleave)="hoveredStar = 0"
             (click)="setAppRating(star)"
             [attr.aria-label]="'Rate ' + star + ' stars'"
           >&#9733;</button>
         </div>
-        <div class="star-caption" *ngIf="appRating > 0">{{ appRating }}/5 selected</div>
 
-        <textarea
-          class="form-control form-control-sm mt-2"
-          rows="2"
-          maxlength="250"
-          placeholder="Optional feedback note"
-          [(ngModel)]="appFeedbackNote"
-        ></textarea>
+        <!-- Dynamic label -->
+        <div class="fb-label" [class.visible]="appRating > 0 || hoveredStar > 0">
+          {{ ratingLabel(appRating || hoveredStar) }}
+        </div>
 
-        <div class="app-feedback-actions">
-          <button type="button" class="btn btn-sm btn-success" [disabled]="appRating < 1 || isSubmittingAppFeedback" (click)="submitAppFeedback()">
-            {{ isSubmittingAppFeedback ? 'Submitting...' : 'Submit' }}
+        <!-- Note textarea (shows after selecting a star) -->
+        <div class="fb-note-wrap" *ngIf="appRating > 0">
+          <textarea
+            class="fb-note"
+            rows="2"
+            maxlength="200"
+            placeholder="Tell us more (optional)"
+            [(ngModel)]="appFeedbackNote"
+          ></textarea>
+        </div>
+
+        <!-- Actions -->
+        <div class="fb-actions">
+          <button type="button" class="fb-btn-later" (click)="dismissAppFeedbackWidget()">Not now</button>
+          <button
+            type="button"
+            class="fb-btn-submit"
+            [disabled]="appRating < 1 || isSubmittingAppFeedback"
+            (click)="submitAppFeedback()"
+          >
+            <span *ngIf="!isSubmittingAppFeedback">Submit Rating</span>
+            <span *ngIf="isSubmittingAppFeedback" class="fb-spinner"></span>
           </button>
-          <button type="button" class="btn btn-sm btn-outline-secondary" (click)="dismissAppFeedbackWidget()">Later</button>
         </div>
       </div>
     </div>
@@ -350,88 +359,215 @@ import { SupportService } from './core/services/support.service';
   `,
   styles: [
     `
-      .app-feedback-overlay {
+      /* ── Feedback sheet ── */
+      .fb-backdrop {
         position: fixed;
         inset: 0;
-        z-index: 1065;
-        background: rgba(2, 6, 23, 0.45);
-        display: grid;
-        place-items: center;
-        padding: 16px;
-      }
-
-      .app-feedback-modal {
-        width: min(360px, calc(100vw - 24px));
-        border: 1px solid #dbeafe;
-        border-radius: 16px;
-        background: #ffffff;
-        box-shadow: 0 16px 36px rgba(15, 23, 42, 0.26);
-        padding: 14px;
-      }
-
-      .feedback-type-switch {
+        z-index: 1070;
+        background: rgba(2, 6, 23, 0.55);
+        backdrop-filter: blur(3px);
         display: flex;
-        gap: 8px;
-        margin-top: 8px;
-      }
-
-      .star-row {
-        display: flex;
-        gap: 6px;
+        align-items: flex-end;
         justify-content: center;
-        margin-top: 10px;
+        animation: fb-fade-in 0.22s ease;
       }
 
-      .star-btn {
-        border: none;
-        background: transparent;
-        color: #cbd5e1;
-        font-size: 1.65rem;
-        line-height: 1;
-        padding: 0 2px;
-        cursor: pointer;
+      @keyframes fb-fade-in {
+        from { opacity: 0; }
+        to   { opacity: 1; }
       }
 
-      .star-btn.active {
-        color: #f59e0b;
+      .fb-sheet {
+        width: min(480px, 100vw);
+        background: #ffffff;
+        border-radius: 24px 24px 0 0;
+        padding: 12px 24px 36px;
+        box-shadow: 0 -8px 40px rgba(2, 6, 23, 0.18);
+        animation: fb-slide-up 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0;
       }
 
-      .star-caption {
-        text-align: center;
-        font-size: 0.82rem;
-        color: #334155;
-        margin-top: 4px;
+      @keyframes fb-slide-up {
+        from { transform: translateY(100%); }
+        to   { transform: translateY(0); }
       }
 
-      .app-feedback-widget {
-        position: fixed;
-        right: 14px;
-        bottom: 86px;
-        width: min(320px, calc(100vw - 28px));
-        z-index: 1060;
-        border: 1px solid #bbf7d0;
-        border-radius: 12px;
-        background: #f0fdf4;
-        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.15);
-        padding: 10px;
+      .fb-handle {
+        width: 40px;
+        height: 4px;
+        border-radius: 2px;
+        background: #e2e8f0;
+        margin-bottom: 20px;
       }
 
-      .app-feedback-title {
+      .fb-brand {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        width: 100%;
+        margin-bottom: 24px;
+      }
+
+      .fb-app-icon {
+        width: 56px;
+        height: 56px;
+        border-radius: 14px;
+        background: linear-gradient(135deg, #ef233c 0%, #c81d2e 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        box-shadow: 0 4px 12px rgba(239, 35, 60, 0.3);
+      }
+
+      .fb-app-icon img {
+        width: 34px;
+        height: 34px;
+        filter: brightness(0) invert(1);
+      }
+
+      .fb-heading {
+        font-size: 1.1rem;
         font-weight: 700;
-        color: #166534;
+        color: #0f172a;
+        line-height: 1.3;
       }
 
-      .app-feedback-subtitle {
+      .fb-sub {
         font-size: 0.82rem;
-        color: #3f3f46;
+        color: #64748b;
         margin-top: 2px;
       }
 
-      .app-feedback-actions {
+      .fb-stars {
         display: flex;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+
+      .fb-star {
+        border: none;
+        background: transparent;
+        font-size: 2.4rem;
+        line-height: 1;
+        color: #e2e8f0;
+        cursor: pointer;
+        padding: 0;
+        transition: color 0.14s ease, transform 0.14s ease;
+      }
+
+      .fb-star.lit,
+      .fb-star.hover {
+        color: #f59e0b;
+        transform: scale(1.15);
+      }
+
+      .fb-label {
+        height: 22px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: #ef233c;
+        opacity: 0;
+        transition: opacity 0.18s ease;
+        margin-bottom: 14px;
+      }
+
+      .fb-label.visible {
+        opacity: 1;
+      }
+
+      .fb-note-wrap {
+        width: 100%;
+        margin-bottom: 20px;
+        animation: fb-fade-in 0.2s ease;
+      }
+
+      .fb-note {
+        width: 100%;
+        border: 1.5px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 0.88rem;
+        resize: none;
+        outline: none;
+        color: #1e293b;
+        background: #f8fafc;
+        transition: border-color 0.18s;
+      }
+
+      .fb-note:focus {
+        border-color: #ef233c;
+        background: #fff;
+      }
+
+      .fb-actions {
+        display: flex;
+        gap: 10px;
+        width: 100%;
+        margin-top: 4px;
+      }
+
+      .fb-btn-later {
+        flex: 1;
+        height: 46px;
+        border: 1.5px solid #e2e8f0;
+        border-radius: 12px;
+        background: transparent;
+        color: #64748b;
+        font-size: 0.92rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.16s;
+      }
+
+      .fb-btn-later:hover {
+        background: #f1f5f9;
+      }
+
+      .fb-btn-submit {
+        flex: 2;
+        height: 46px;
+        border: none;
+        border-radius: 12px;
+        background: linear-gradient(135deg, #ef233c 0%, #c81d2e 100%);
+        color: #fff;
+        font-size: 0.95rem;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
         gap: 6px;
-        margin-top: 8px;
-        flex-wrap: wrap;
+        transition: opacity 0.16s, transform 0.14s;
+        box-shadow: 0 4px 14px rgba(239, 35, 60, 0.35);
+      }
+
+      .fb-btn-submit:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+        box-shadow: none;
+      }
+
+      .fb-btn-submit:not(:disabled):hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 20px rgba(239, 35, 60, 0.4);
+      }
+
+      .fb-spinner {
+        width: 18px;
+        height: 18px;
+        border: 2.5px solid rgba(255,255,255,0.4);
+        border-top-color: #fff;
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+        display: inline-block;
+      }
+
+      @keyframes spin {
+        to { transform: rotate(360deg); }
       }
     `
   ]
@@ -464,6 +600,7 @@ export class AppComponent {
   showAppFeedbackWidget = this.shouldShowAppFeedbackWidget();
   selectedFeedbackType: 'open' | 'close' = 'open';
   appRating = 0;
+  hoveredStar = 0;
   appFeedbackNote = '';
   isSubmittingAppFeedback = false;
   readonly feedbackStars = [1, 2, 3, 4, 5];
@@ -608,10 +745,22 @@ export class AppComponent {
 
   dismissAppFeedbackWidget(): void {
     this.showAppFeedbackWidget = false;
+    this.markAppFeedbackSubmitted();
   }
 
   setAppRating(value: number): void {
     this.appRating = value;
+  }
+
+  ratingLabel(star: number): string {
+    const labels: Record<number, string> = {
+      1: 'Terrible 😞',
+      2: 'Not great 😕',
+      3: 'It\'s okay 😐',
+      4: 'Pretty good 😊',
+      5: 'Love it! 🎉'
+    };
+    return labels[star] ?? '';
   }
 
   submitAppFeedback(): void {
@@ -619,8 +768,8 @@ export class AppComponent {
       return;
     }
 
-    const type = this.selectedFeedbackType;
-    const eventLabel = type === 'open' ? 'App Open Feedback' : 'App Close Feedback';
+    const type = 'open' as const;
+    const eventLabel = 'App Feedback';
     const payload = {
       feedbackType: type,
       feedbackLabel: eventLabel,
