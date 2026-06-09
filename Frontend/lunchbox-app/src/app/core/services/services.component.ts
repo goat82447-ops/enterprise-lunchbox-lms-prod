@@ -11,237 +11,196 @@ import { Router } from '@angular/router';
       <h2 class="mb-1">Services</h2>
       <p class="text-muted mb-3">Choose any mode quickly for easy customer use.</p>
 
-      <h6 class="section-title">Safety &amp; Special Modes</h6>
+      <h6 class="section-title">Safety & Special Modes</h6>
       <div class="service-grid">
         <button class="service-card" type="button" (click)="openWomenSafetyMode()">
-          <div class="svc-icon">🛡️</div>
-          <div class="svc-body">
-            <div class="svc-title">Women Safety Mode</div>
-            <div class="svc-subtitle">Prioritize top-ranked captains</div>
-          </div>
+          <div class="emoji">🛡️</div>
+          <div class="title">Women Safety Mode</div>
+          <div class="subtitle">Prioritize top-ranked captains</div>
         </button>
 
         <button class="service-card" type="button" (click)="openTeenageRideMode()">
-          <div class="svc-icon">🧒</div>
-          <div class="svc-body">
-            <div class="svc-title">Teenage Ride Mode</div>
-            <div class="svc-subtitle">Safer booking for teen rides</div>
-          </div>
+          <div class="emoji">🧒</div>
+          <div class="title">Teenage Ride Mode</div>
+          <div class="subtitle">Safer booking for teen rides</div>
         </button>
 
         <button class="service-card" type="button" (click)="openScheduledRideMode()">
-          <div class="svc-icon">⏰</div>
-          <div class="svc-body">
-            <div class="svc-title">Scheduled Ride</div>
-            <div class="svc-subtitle">Book now for later time</div>
-          </div>
+          <div class="emoji">⏰</div>
+          <div class="title">Scheduled Ride</div>
+          <div class="subtitle">Book now for later time</div>
         </button>
 
         <button class="service-card" type="button" (click)="openBookingForOthersMode()">
-          <div class="svc-icon">👨‍👩‍👧</div>
-          <div class="svc-body">
-            <div class="svc-title">Book for Others</div>
-            <div class="svc-subtitle">Family and friend ride booking</div>
-          </div>
+          <div class="emoji">👨‍👩‍👧</div>
+          <div class="title">Book for Others</div>
+          <div class="subtitle">Family and friend ride booking</div>
         </button>
       </div>
 
       <h6 class="section-title mt-4">Ride Modes</h6>
       <div class="service-grid">
         <button class="service-card" type="button" (click)="openVehicleRide('bike')">
-          <div class="svc-icon">🏍️</div>
-          <div class="svc-body">
-            <div class="svc-title">Bike Ride</div>
-            <div class="svc-subtitle">Fast and affordable</div>
-          </div>
+          <div class="emoji">🏍️</div>
+          <div class="title">Bike Ride</div>
+          <div class="subtitle">Fast and affordable</div>
         </button>
 
         <button class="service-card" type="button" (click)="openVehicleRide('auto')">
-          <div class="svc-icon">🛺</div>
-          <div class="svc-body">
-            <div class="svc-title">Auto Ride</div>
-            <div class="svc-subtitle">Quick city travel</div>
-          </div>
+          <div class="emoji">🛺</div>
+          <div class="title">Auto Ride</div>
+          <div class="subtitle">Quick city travel</div>
         </button>
 
         <button class="service-card" type="button" (click)="openVehicleRide('car')">
-          <div class="svc-icon">🚗</div>
-          <div class="svc-body">
-            <div class="svc-title">Car Ride</div>
-            <div class="svc-subtitle">Comfortable daily rides</div>
-          </div>
+          <div class="emoji">🚗</div>
+          <div class="title">Car Ride</div>
+          <div class="subtitle">Comfortable daily rides</div>
         </button>
 
         <button class="service-card" type="button" (click)="openActivity()">
-          <div class="svc-icon">🧾</div>
-          <div class="svc-body">
-            <div class="svc-title">Track Activity</div>
-            <div class="svc-subtitle">View active and past rides</div>
-          </div>
+          <div class="emoji">🧾</div>
+          <div class="title">Track Activity</div>
+          <div class="subtitle">View active and past rides</div>
         </button>
       </div>
 
-      <h6 class="section-title mt-4">Delivery Services</h6>
+      <h6 class="section-title mt-4">Delivery Services (Project Modes)</h6>
       <div class="service-grid">
         <button class="service-card" type="button" (click)="openPickupService()">
-          <div class="svc-icon">🛍️</div>
-          <div class="svc-body">
-            <div class="svc-title">Pickup Service</div>
-            <div class="svc-subtitle">Pickup item from shop to drop location</div>
-          </div>
+          <div class="emoji">🛍️</div>
+          <div class="title">Pickup Service</div>
+          <div class="subtitle">Pickup item from shop to drop location</div>
         </button>
 
         <button class="service-card" type="button" (click)="openBooking('food')">
-          <div class="svc-icon">🍱</div>
-          <div class="svc-body">
-            <div class="svc-title">Food Delivery</div>
-            <div class="svc-subtitle">Meals and restaurant delivery</div>
-          </div>
+          <div class="emoji">🍱</div>
+          <div class="title">Food Delivery</div>
+          <div class="subtitle">Meals and restaurant delivery</div>
         </button>
 
         <button class="service-card" type="button" (click)="openBooking('parcel')">
-          <div class="svc-icon">📦</div>
-          <div class="svc-body">
-            <div class="svc-title">Parcel Delivery</div>
-            <div class="svc-subtitle">Send packages safely</div>
-          </div>
+          <div class="emoji">📦</div>
+          <div class="title">Parcel Delivery</div>
+          <div class="subtitle">Send packages safely</div>
         </button>
 
         <button class="service-card" type="button" (click)="openBooking('grocery')">
-          <div class="svc-icon">🛒</div>
-          <div class="svc-body">
-            <div class="svc-title">Grocery Delivery</div>
-            <div class="svc-subtitle">Daily needs to doorstep</div>
-          </div>
+          <div class="emoji">🛒</div>
+          <div class="title">Grocery Delivery</div>
+          <div class="subtitle">Daily needs to doorstep</div>
         </button>
 
         <button class="service-card" type="button" (click)="openBooking('medicine')">
-          <div class="svc-icon">💊</div>
-          <div class="svc-body">
-            <div class="svc-title">Medicine Delivery</div>
-            <div class="svc-subtitle">Fast pharmacy support</div>
-          </div>
+          <div class="emoji">💊</div>
+          <div class="title">Medicine Delivery</div>
+          <div class="subtitle">Fast pharmacy support</div>
         </button>
 
         <button class="service-card" type="button" (click)="openBooking('documents')">
-          <div class="svc-icon">📄</div>
-          <div class="svc-body">
-            <div class="svc-title">Documents Delivery</div>
-            <div class="svc-subtitle">Secure file transport</div>
-          </div>
+          <div class="emoji">📄</div>
+          <div class="title">Documents Delivery</div>
+          <div class="subtitle">Secure file transport</div>
         </button>
 
         <button class="service-card" type="button" (click)="openLunchBox()">
-          <div class="svc-icon">🎒</div>
-          <div class="svc-body">
-            <div class="svc-title">RouteX School Delivery</div>
-            <div class="svc-subtitle">School meal booking and history</div>
-          </div>
+          <div class="emoji">🎒</div>
+          <div class="title">RouteX School Delivery</div>
+          <div class="subtitle">School meal booking and history</div>
         </button>
       </div>
     </div>
   `,
   styles: [
     `
+      .service-grid {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: stretch;
+      }
+
       .services-page {
         padding-left: 10px;
         padding-right: 10px;
       }
 
       .section-title {
-        font-size: 0.85rem;
+        font-size: 0.9rem;
         font-weight: 700;
-        letter-spacing: 0.04em;
+        letter-spacing: 0.02em;
         text-transform: uppercase;
-        color: var(--text-secondary, #64748b);
+        color: var(--text-secondary);
         margin-bottom: 10px;
       }
 
-      /* ── Grid: matches Popular Services on home ── */
-      .service-grid {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 12px;
-      }
-
-      /* ── Card: identical to service-showcase-card on home ── */
       .service-card {
-        display: flex;
-        align-items: flex-start;
-        gap: 12px;
-        border: 1px solid rgba(0, 0, 0, 0.08);
-        border-radius: 12px;
-        background: var(--surface, #fff);
-        color: var(--text-primary, #1e293b);
+        border: 1px solid var(--border-color);
+        background: var(--surface);
+        color: var(--text-primary);
+        border-radius: 14px;
         padding: 14px;
         text-align: left;
-        width: 100%;
-        transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        height: 100%;
       }
 
       .service-card:hover {
         transform: translateY(-2px);
-        border-color: rgba(239, 35, 60, 0.3);
-        box-shadow: 0 4px 16px rgba(2, 6, 23, 0.08);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
       }
 
-      .service-card:active {
-        transform: translateY(0);
+      .emoji {
+        font-size: 1.6rem;
+        margin-bottom: 8px;
       }
 
-      /* ── Icon box: matches service-showcase-icon on home ── */
-      .svc-icon {
-        width: 34px;
-        height: 34px;
-        border-radius: 10px;
-        background: #fff1f2;
-        border: 1px solid rgba(239, 35, 60, 0.12);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 16px;
-        flex-shrink: 0;
-      }
-
-      .svc-body {
-        flex: 1;
-        min-width: 0;
-      }
-
-      .svc-title {
-        font-size: 0.9rem;
+      .title {
         font-weight: 700;
-        margin-bottom: 3px;
-        line-height: 1.3;
+        margin-bottom: 4px;
       }
 
-      .svc-subtitle {
-        font-size: 0.78rem;
-        color: var(--text-secondary, #64748b);
-        line-height: 1.4;
+      .subtitle {
+        font-size: 0.86rem;
+        color: var(--text-secondary);
       }
 
-      /* ── Responsive ── */
-      @media (max-width: 479px) {
+      @media (max-width: 575.98px) {
         .services-page {
           padding-left: 4px;
           padding-right: 4px;
         }
 
         .service-grid {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
+          grid-template-columns: 1fr;
+        }
+
+        .service-card {
+          padding: 12px;
+        }
+
+        .title {
+          font-size: 0.98rem;
+        }
+
+        .subtitle {
+          font-size: 0.82rem;
         }
       }
 
-      @media (min-width: 480px) and (max-width: 767px) {
-        .service-grid {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
+      @media (max-width: 390px) {
+        .section-title {
+          font-size: 0.82rem;
+        }
+
+        .emoji {
+          font-size: 1.45rem;
         }
       }
 
-      @media (min-width: 768px) {
+      @media (min-width: 768px) and (max-width: 991.98px) {
         .service-grid {
-          grid-template-columns: repeat(4, minmax(0, 1fr));
+          grid-template-columns: repeat(2, minmax(0, 1fr));
         }
       }
     `
@@ -260,7 +219,7 @@ export class ServicesComponent {
   }
 
   openVehicleRide(vehicleType: string): void {
-    this.router.navigate(['/booking'], { queryParams: { vehicle: vehicleType } });
+    this.router.navigate(['/travel']);
   }
 
   openWomenSafetyMode(): void {
