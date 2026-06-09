@@ -170,7 +170,7 @@ import { SupportService } from './core/services/support.service';
                   <span class="pdr-val">{{ user.captainVehicle | titlecase }}</span>
                 </div>
                 <div class="profile-dropdown-divider"></div>
-                <button class="profile-dropdown-logout" (click)="logout()">&#10148; Sign out</button>
+                <button class="profile-dropdown-logout" (click)="logout(); handleNavLinkClick()">&#10148; Sign out</button>
               </div>
             </li>
           </ul>
@@ -477,9 +477,8 @@ export class AppComponent {
   }
 
   handleNavLinkClick(): void {
-    if (typeof window !== 'undefined' && window.innerWidth < 992) {
-      this.isNavOpen = false;
-    }
+    this.isNavOpen = false;
+    this.showProfileMenu = false;
   }
 
   changeLanguage(lang: LanguageCode): void {

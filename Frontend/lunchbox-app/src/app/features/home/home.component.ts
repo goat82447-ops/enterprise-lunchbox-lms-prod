@@ -383,20 +383,26 @@ import { AuthService } from '../../core/services/auth.service';
       .feature-card {
         border: 1px solid rgba(0, 0, 0, 0.08);
         border-radius: 12px;
-        padding: 14px;
+        padding: 20px 14px;
         background: var(--surface);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        min-height: 160px;
       }
 
       .feature-icon {
-        width: 34px;
-        height: 34px;
-        border-radius: 10px;
+        width: 48px;
+        height: 48px;
+        border-radius: 14px;
         background: #e8f3ff;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 16px;
-        margin-bottom: 8px;
+        font-size: 22px;
+        margin-bottom: 12px;
+        flex-shrink: 0;
       }
 
       .flash-banner {
