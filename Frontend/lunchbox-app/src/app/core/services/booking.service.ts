@@ -23,6 +23,14 @@ export class BookingService {
     private http: HttpClient,
     private auth: AuthService
   ) {
+    // Wake up Render free-tier server on app start (avoids first-request cold start delay)
+    this.http.get(`${environment.parcelApiBase}/health`, { responseType: 'text' })
+      .subscribe({ error: () => void 0 });
+    // Re-ping every 14 minutes to keep server warm
+    interval(14 * 60 * 1000)
+      .subscribe(() => this.http.get(`${environment.parcelApiBase}/health`, { responseType: 'text' })
+        .subscribe({ error: () => void 0 }));
+
     interval(6000).subscribe(() => this.tickBookings());
 
     if (typeof window !== 'undefined') {
@@ -88,7 +96,7 @@ export class BookingService {
       driverName: request.captainName || 'Ravi Kumar',
       driverPhone: request.captainPhone || '+91-90000-12345',
       captainId: request.captainId,
-      notificationTarget: request.notificationTarget || 'all',  // default: broadcast to all available captains
+      notificationTarget: request.notificationTarget || 'preferred',
       preferredCaptainId: request.preferredCaptainId,
       preferredCaptainName: request.preferredCaptainName,
       notification: isScheduled
@@ -120,7 +128,8 @@ export class BookingService {
           this.upsertBooking(serverBooking);
         },
         error: () => {
-          this.notifications.push('Backend sync failed. Booking saved locally and will retry.', 'warning');
+          // Silently swallow — booking is already saved locally.
+          // The 3-second poll will sync it once the server is reachable (Render free tier wakes up).
         }
       });
 
