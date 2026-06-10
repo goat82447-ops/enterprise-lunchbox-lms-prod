@@ -65,14 +65,22 @@ type RidePhase = 'waiting' | 'otp' | 'live' | 'arrived' | 'completed';
         <div class="rl-captain-name">{{ booking?.driverName || 'Ravi Kumar' }}</div>
         <div class="rl-captain-sub">{{ vehicleLabel }} • ⭐ 4.8</div>
       </div>
-      <div class="rl-captain-actions">
-        <a class="rl-action-btn rl-call" [href]="'tel:' + (booking?.driverPhone || '+919000012345')">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13.5a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 2.8h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 10.4a16 16 0 0 0 5.56 5.59l1.68-1.68a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-        </a>
-        <a class="rl-action-btn rl-whatsapp" [href]="'https://wa.me/' + normalizePhone(booking?.driverPhone || '')" target="_blank">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
-        </a>
-      </div>
+    </div>
+
+    <!-- Captain action buttons row -->
+    <div class="rl-captain-btn-row">
+      <a class="rl-captain-btn rl-btn-call" [href]="'tel:' + normalizePhone(booking?.driverPhone || '+919000012345')">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13.5a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 2.8h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 10.4a16 16 0 0 0 5.56 5.59l1.68-1.68a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+        Call Captain
+      </a>
+      <a class="rl-captain-btn rl-btn-chat" [href]="buildWhatsAppChatUrl(booking?.driverPhone || '', '')" target="_blank">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+        Chat
+      </a>
+      <button class="rl-captain-btn rl-btn-loc" (click)="shareLiveLocationWithCaptain()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        Share Location
+      </button>
     </div>
 
     <div class="rl-status-row">
@@ -159,23 +167,22 @@ type RidePhase = 'waiting' | 'otp' | 'live' | 'arrived' | 'completed';
   <div class="rl-panel rl-panel-live" *ngIf="phase === 'live'">
     <div class="rl-handle"></div>
 
-    <!-- Live stats bar -->
-    <div class="rl-live-stats">
-      <div class="rl-live-stat">
+    <!-- ① LIVE header row: badge + ETA + dist -->
+    <div class="rl-live-header">
+      <div class="rl-live-badge-pill">
+        <span class="rl-live-dot-anim"></span> LIVE
+      </div>
+      <div class="rl-live-header-stat">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#e53935" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        <span>{{ etaMinutes }} min</span>
+        <strong>{{ etaMinutes }} min</strong> to drop
       </div>
-      <div class="rl-live-stat-divider"></div>
-      <div class="rl-live-stat">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#e53935" stroke-width="2.2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/></svg>
-        <span>{{ distKm }} km left</span>
-      </div>
-      <div class="rl-live-stat-divider"></div>
-      <div class="rl-live-stat">
-        <span class="rl-live-badge">● LIVE</span>
+      <div class="rl-live-header-stat">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2.2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/></svg>
+        <strong>{{ distKm }} km</strong> left
       </div>
     </div>
 
+    <!-- ② Progress stepper -->
     <div class="rl-live-status-row">
       <div class="rl-status-step rl-step-done">
         <div class="rl-step-dot rl-dot-green"></div>
@@ -198,23 +205,68 @@ type RidePhase = 'waiting' | 'otp' | 'live' | 'arrived' | 'completed';
       </div>
     </div>
 
-    <div class="rl-captain-strip">
-      <span class="rl-captain-strip-emoji">{{ vehicleEmoji }}</span>
-      <span class="rl-captain-strip-name">{{ booking?.driverName || 'Ravi Kumar' }}</span>
-      <div class="rl-captain-strip-actions">
-        <a class="rl-strip-btn rl-call" [href]="'tel:' + normalizePhone(booking?.driverPhone || '')">📞 Call</a>
-        <a class="rl-strip-btn rl-wp" [href]="'https://wa.me/' + normalizePhone(booking?.driverPhone || '')" target="_blank">💬 Chat</a>
+    <!-- ③ Captain card -->
+    <div class="rl-captain-live-card">
+      <div class="rl-captain-live-avatar">{{ vehicleEmoji }}</div>
+      <div class="rl-captain-live-info">
+        <div class="rl-captain-live-name">{{ booking?.driverName || 'Ravi Kumar' }}</div>
+        <div class="rl-captain-live-sub">{{ vehicleLabel }} · ⭐ 4.8 · {{ booking?.driverPhone || '' }}</div>
       </div>
     </div>
 
-    <div class="rl-share-row">
-      <button class="rl-share-btn" (click)="shareTrip()">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-        Share Live Location
+    <!-- ④ Action buttons: Call / Chat / Share Location / SOS -->
+    <div class="rl-live-action-grid">
+      <a class="rl-live-action-btn rl-lac-call"
+         [href]="'tel:' + normalizePhone(booking?.driverPhone || '')">
+        <div class="rl-lac-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13.5a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 2.8h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 10.4a16 16 0 0 0 5.56 5.59l1.68-1.68a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+        </div>
+        <span>Call</span>
+      </a>
+      <a class="rl-live-action-btn rl-lac-chat"
+         [href]="buildWhatsAppChatUrl(booking?.driverPhone || '', 'Hi, I am your RouteX passenger. Booking: ' + bookingId)"
+         target="_blank">
+        <div class="rl-lac-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+        </div>
+        <span>Chat</span>
+      </a>
+      <button class="rl-live-action-btn rl-lac-loc" (click)="shareLiveLocationWithCaptain()">
+        <div class="rl-lac-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        </div>
+        <span>Location</span>
       </button>
-      <button class="rl-share-btn" (click)="completeRide()">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2e7d32" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-        <span style="color:#2e7d32">Ride Complete</span>
+      <button class="rl-live-action-btn rl-lac-sos" (click)="openSosSheet()">
+        <div class="rl-lac-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </div>
+        <span>SOS</span>
+      </button>
+    </div>
+
+    <!-- ⑤ Route summary -->
+    <div class="rl-live-route">
+      <div class="rl-live-route-pt">
+        <div class="rl-route-dot rl-dot-green"></div>
+        <span class="rl-live-route-label">{{ shortAddr(booking?.pickup?.address) }}</span>
+      </div>
+      <div class="rl-live-route-line"></div>
+      <div class="rl-live-route-pt">
+        <div class="rl-route-dot rl-dot-orange"></div>
+        <span class="rl-live-route-label">{{ shortAddr(booking?.drop?.address) }}</span>
+      </div>
+    </div>
+
+    <!-- ⑥ Bottom row: share trip + complete -->
+    <div class="rl-live-bottom-row">
+      <button class="rl-live-share-btn" (click)="shareTrip()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+        Share Ride
+      </button>
+      <button class="rl-live-complete-btn" (click)="completeRide()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+        Ride Complete
       </button>
     </div>
   </div>
@@ -367,7 +419,7 @@ type RidePhase = 'waiting' | 'otp' | 'live' | 'arrived' | 'completed';
       overflow-y: auto;
     }
     .rl-panel-otp { max-height: 60%; }
-    .rl-panel-live { max-height: 50%; }
+    .rl-panel-live { max-height: 68%; }
     .rl-panel-done { max-height: 55%; text-align: center; }
     .rl-handle {
       width: 36px; height: 4px; background: #e0e0e0;
@@ -478,7 +530,7 @@ type RidePhase = 'waiting' | 'otp' | 'live' | 'arrived' | 'completed';
       display: inline-block; animation: spin .6s linear infinite;
     }
 
-    /* ── LIVE STATS ── */
+    /* ── LIVE STATS (legacy, kept for safety) ── */
     .rl-live-stats {
       display: flex; align-items: center; gap: 10px;
       padding: 6px 0 12px; border-bottom: 1px solid #f0f0f0; margin-bottom: 12px;
@@ -487,7 +539,123 @@ type RidePhase = 'waiting' | 'otp' | 'live' | 'arrived' | 'completed';
     .rl-live-stat-divider { width: 1px; height: 16px; background: #eee; flex-shrink: 0; }
     .rl-live-badge { color: #e53935; font-size: 12px; font-weight: 900; animation: pulse 1s ease-in-out infinite; }
 
-    /* ── CAPTAIN STRIP ── */
+    /* ── LIVE HEADER ── */
+    .rl-live-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 2px 0 12px; border-bottom: 1px solid #f0f0f0; margin-bottom: 12px;
+    }
+    .rl-live-badge-pill {
+      display: flex; align-items: center; gap: 5px;
+      background: #fdeaea; color: #c62828;
+      border-radius: 20px; padding: 4px 10px;
+      font-size: 11px; font-weight: 900; letter-spacing: .5px; flex-shrink: 0;
+    }
+    .rl-live-dot-anim {
+      width: 7px; height: 7px; border-radius: 50%; background: #e53935;
+      animation: pulse .8s ease-in-out infinite; flex-shrink: 0;
+    }
+    .rl-live-header-stat {
+      display: flex; align-items: center; gap: 5px;
+      font-size: 12px; font-weight: 600; color: #444; flex: 1;
+    }
+    .rl-live-header-stat strong { color: #111; }
+
+    /* ── CAPTAIN LIVE CARD ── */
+    .rl-captain-live-card {
+      display: flex; align-items: center; gap: 12px;
+      padding: 11px 13px; background: #f7f7f7;
+      border-radius: 16px; margin-bottom: 14px;
+      border: 1px solid #eee;
+    }
+    .rl-captain-live-avatar {
+      width: 46px; height: 46px; border-radius: 50%;
+      background: #fff; display: flex; align-items: center;
+      justify-content: center; font-size: 22px; flex-shrink: 0;
+      box-shadow: 0 2px 8px rgba(0,0,0,.1);
+    }
+    .rl-captain-live-info { flex: 1; }
+    .rl-captain-live-name { font-size: 14px; font-weight: 800; color: #111; }
+    .rl-captain-live-sub { font-size: 11px; color: #888; margin-top: 2px; }
+
+    /* ── 4-BUTTON ACTION GRID ── */
+    .rl-live-action-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 8px; margin-bottom: 14px;
+    }
+    .rl-live-action-btn {
+      display: flex; flex-direction: column; align-items: center;
+      gap: 6px; padding: 12px 6px; border-radius: 16px;
+      font-size: 11px; font-weight: 700; text-decoration: none;
+      border: none; cursor: pointer; transition: transform .12s, opacity .12s;
+    }
+    .rl-live-action-btn:active { transform: scale(.94); opacity: .8; }
+    .rl-lac-icon {
+      width: 38px; height: 38px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .rl-lac-call { background: #f0faf0; color: #2e7d32; }
+    .rl-lac-call .rl-lac-icon { background: #c8e6c9; }
+    .rl-lac-chat { background: #f0faf0; color: #1b5e20; }
+    .rl-lac-chat .rl-lac-icon { background: #a5d6a7; }
+    .rl-lac-loc  { background: #e3f2fd; color: #0d47a1; }
+    .rl-lac-loc  .rl-lac-icon { background: #bbdefb; }
+    .rl-lac-sos  { background: #fdeaea; color: #b71c1c; }
+    .rl-lac-sos  .rl-lac-icon { background: #ef9a9a; animation: sos-pulse 2s ease-in-out infinite; }
+
+    /* ── LIVE ROUTE SUMMARY ── */
+    .rl-live-route {
+      background: #fafafa; border-radius: 14px;
+      padding: 10px 14px; margin-bottom: 12px;
+      border: 1px solid #f0f0f0;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .rl-live-route-pt { display: flex; align-items: center; gap: 8px; }
+    .rl-live-route-label { font-size: 12px; font-weight: 600; color: #444; }
+    .rl-live-route-line {
+      width: 1.5px; height: 14px; background: #ddd; margin-left: 4px;
+    }
+
+    /* ── LIVE BOTTOM ROW ── */
+    .rl-live-bottom-row { display: flex; gap: 10px; }
+    .rl-live-share-btn {
+      flex: 1; display: flex; align-items: center; justify-content: center;
+      gap: 7px; border: 1.5px solid #e0e0e0; background: #fafafa;
+      border-radius: 14px; padding: 11px 10px;
+      font-size: 12px; font-weight: 700; color: #444; cursor: pointer;
+    }
+    .rl-live-complete-btn {
+      flex: 1; display: flex; align-items: center; justify-content: center;
+      gap: 7px; border: 1.5px solid #c8e6c9; background: #f1f8e9;
+      border-radius: 14px; padding: 11px 10px;
+      font-size: 12px; font-weight: 700; color: #2e7d32; cursor: pointer;
+    }
+
+    /* ── CAPTAIN ACTION BUTTONS (waiting phase) ── */
+    .rl-captain-btn-row {
+      display: grid; grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px; margin-bottom: 14px;
+    }
+    .rl-captain-btn {
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 11px 8px; border-radius: 14px; font-size: 12px; font-weight: 700;
+      text-decoration: none; border: none; cursor: pointer;
+      transition: opacity .15s;
+    }
+    .rl-captain-btn:active { opacity: .7; }
+    .rl-btn-call { background: #e8f5e9; color: #2e7d32; }
+    .rl-btn-chat { background: #e8f5e9; color: #1b5e20; }
+    .rl-btn-loc  { background: #e3f2fd; color: #0d47a1; }
+
+    /* Live location share button */
+    .rl-live-loc-btn {
+      width: 100%; display: flex; align-items: center; justify-content: center;
+      gap: 8px; padding: 11px; border-radius: 14px; font-size: 13px; font-weight: 700;
+      color: #0d47a1; background: #e3f2fd; border: 1.5px solid #bbdefb;
+      cursor: pointer; margin-bottom: 10px; transition: opacity .15s;
+    }
+    .rl-live-loc-btn:active { opacity: .7; }
+
+    /* ── CAPTAIN STRIP (waiting phase) ── */
     .rl-captain-strip {
       display: flex; align-items: center; gap: 10px;
       padding: 10px 12px; background: #f9f9f9; border-radius: 12px; margin-bottom: 10px;
@@ -496,7 +664,8 @@ type RidePhase = 'waiting' | 'otp' | 'live' | 'arrived' | 'completed';
     .rl-captain-strip-name { font-size: 13px; font-weight: 700; color: #111; flex: 1; }
     .rl-captain-strip-actions { display: flex; gap: 8px; }
     .rl-strip-btn {
-      padding: 6px 12px; border-radius: 20px; font-size: 12px;
+      display: flex; align-items: center; gap: 5px;
+      padding: 7px 13px; border-radius: 20px; font-size: 12px;
       font-weight: 700; text-decoration: none; cursor: pointer;
     }
     .rl-strip-btn.rl-call { background: #e8f5e9; color: #2e7d32; }
@@ -807,6 +976,54 @@ export class RideLiveComponent implements OnInit, OnDestroy {
       : 4.2;
     this.phase = 'completed';
     this.notifications.push('Ride completed! Thank you for riding with RouteX.', 'success');
+  }
+
+  shareLiveLocationWithCaptain(): void {
+    const captainPhone = this.normalizePhone(this.booking?.driverPhone || '');
+    const mapsLink = this.myLat && this.myLng
+      ? `https://maps.google.com/?q=${this.myLat.toFixed(6)},${this.myLng.toFixed(6)}`
+      : null;
+
+    if (!mapsLink) {
+      this.notifications.push('Getting your location… try again in a moment.', 'info' as any);
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(pos => {
+          this.zone.run(() => {
+            this.myLat = pos.coords.latitude;
+            this.myLng = pos.coords.longitude;
+            this.notifications.push('Location acquired — tap Share Location again.', 'success');
+          });
+        });
+      }
+      return;
+    }
+
+    const msg = encodeURIComponent(
+      `Hi, I'm your RouteX passenger. My exact location:\n📍 ${mapsLink}\nBooking ID: ${this.bookingId}`
+    );
+
+    if (captainPhone) {
+      window.open(`https://wa.me/${captainPhone}?text=${msg}`, '_blank');
+    } else if (navigator.share) {
+      navigator.share({
+        title: 'My Location',
+        text: `My exact location for booking ${this.bookingId}`,
+        url: mapsLink
+      }).catch(() => {});
+    } else {
+      navigator.clipboard?.writeText(
+        `My location: ${mapsLink} | Booking: ${this.bookingId}`
+      );
+      this.notifications.push('📍 Location link copied! Share it with your captain.', 'success');
+    }
+  }
+
+  buildWhatsAppChatUrl(phone: string, message: string): string {
+    const cleaned = this.normalizePhone(phone);
+    const text = message ? encodeURIComponent(message) : '';
+    return cleaned
+      ? `https://wa.me/${cleaned}${text ? '?text=' + text : ''}`
+      : '#';
   }
 
   normalizePhone(phone: string): string {

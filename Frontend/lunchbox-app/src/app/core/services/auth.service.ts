@@ -119,6 +119,12 @@ export class AuthService {
     this.userSubject.next(null);
   }
 
+  deleteAccount(): Observable<{ message: string }> {
+    return this.http.delete<{ message: string }>(`${this.authApi}/account`, {
+      headers: this.getSessionHeaders()
+    });
+  }
+
   getCurrentUser(): AppUser | null {
     return this.userSubject.value;
   }

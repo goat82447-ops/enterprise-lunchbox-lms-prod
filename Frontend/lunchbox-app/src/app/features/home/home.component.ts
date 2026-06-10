@@ -97,19 +97,7 @@ import { AuthService } from '../../core/services/auth.service';
         <small class="text-muted d-block mt-2">Checked: {{ integrationCheckedAt | date: 'mediumTime' }}</small>
       </section>
 
-      <section class="feature-panel mt-3">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-          <h3 class="mb-0">Features You Can Use Instantly</h3>
-          <small class="text-muted">Designed for customers, captains, and admins</small>
-        </div>
-        <div class="feature-grid">
-          <div class="feature-card" *ngFor="let feature of featureCards">
-            <div class="feature-icon">{{ feature.icon }}</div>
-            <h5 class="mb-1">{{ feature.title }}</h5>
-            <p class="mb-0 text-muted">{{ feature.description }}</p>
-          </div>
-        </div>
-      </section>
+      <!-- ─ Features panel hidden (available but not shown on home) ─ -->
 
       <section class="flash-banner mt-3">
         <img src="assets/rider-dummy.svg" alt="Rider promo" class="flash-photo" />
@@ -121,19 +109,50 @@ import { AuthService } from '../../core/services/auth.service';
         </div>
       </section>
 
-      <div class="row g-3 mt-3" *ngIf="offers$ | async as offers">
-        <div class="col-12 d-flex justify-content-between align-items-center flex-wrap gap-2">
-          <h3 class="mb-0">Latest Offers</h3>
-          <small class="text-muted">Updated: {{ updatedAt$ | async | date: 'mediumTime' }}</small>
+      <!-- ── OFFERS STRIP ── -->
+      <div class="offers-section mt-3" *ngIf="offers$ | async as offers">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="offers-section-title">
+            <span class="offers-fire">🔥</span> Hot &amp; New Offers
+          </div>
+          <small class="text-muted">Live · {{ updatedAt$ | async | date: 'shortTime' }}</small>
         </div>
-        <div class="col-12 col-md-6 col-xl-3" *ngFor="let offer of offers">
-          <div class="offer-card h-100">
-            <div class="badge-chip">{{ offer.badge }}</div>
-            <div class="discount-pill">{{ offer.discountPercent }}% OFF</div>
-            <h5 class="mb-1">{{ offer.title }}</h5>
-            <p class="text-muted small mb-3">{{ offer.subtitle }}</p>
-            <div class="small mb-1"><strong>Code:</strong> {{ offer.promoCode }}</div>
-            <div class="small text-muted">Ends: {{ offer.expiresAt | date: 'short' }}</div>
+
+        <div class="offers-scroll-track">
+          <div class="offer-pill-card" *ngFor="let offer of offers"
+               [style.--offer-color]="offer.color">
+
+            <!-- label badge -->
+            <div class="offer-label" [ngClass]="'offer-label-' + offer.labelType">
+              <span *ngIf="offer.labelType === 'hot'">🔥 HOT</span>
+              <span *ngIf="offer.labelType === 'new'">✨ NEW</span>
+              <span *ngIf="offer.labelType === 'flash'">⚡ FLASH</span>
+              <span *ngIf="offer.labelType === 'limited'">⏳ LIMITED</span>
+              <span *ngIf="offer.labelType === 'top'">🏆 TOP PICK</span>
+            </div>
+
+            <!-- emoji + discount -->
+            <div class="offer-pill-emoji">{{ offer.emoji }}</div>
+            <div class="offer-discount-big">{{ offer.discountPercent }}%<span class="offer-off">OFF</span></div>
+
+            <!-- title + subtitle -->
+            <div class="offer-pill-title">{{ offer.title }}</div>
+            <div class="offer-pill-sub">{{ offer.subtitle }}</div>
+
+            <!-- promo code row -->
+            <div class="offer-code-row">
+              <span class="offer-code-chip">{{ offer.promoCode }}</span>
+              <button class="offer-copy-btn"
+                      (click)="copyCode(offer.promoCode)"
+                      [class.offer-copied]="copiedCode === offer.promoCode">
+                {{ copiedCode === offer.promoCode ? '✓ Copied' : 'Copy' }}
+              </button>
+            </div>
+
+            <!-- expires -->
+            <div class="offer-expires">
+              Expires {{ offer.expiresAt | date: 'shortTime' }}
+            </div>
           </div>
         </div>
       </div>
@@ -487,6 +506,80 @@ import { AuthService } from '../../core/services/auth.service';
         font-weight: 700;
       }
 
+      /* ── OFFERS STRIP ── */
+      .offers-section-title {
+        font-size: 17px; font-weight: 800; color: var(--text-primary, #111);
+        display: flex; align-items: center; gap: 6px;
+      }
+      .offers-fire { font-size: 18px; }
+
+      .offers-scroll-track {
+        display: flex; gap: 12px;
+        overflow-x: auto; padding-bottom: 8px;
+        scroll-snap-type: x mandatory;
+        -webkit-overflow-scrolling: touch;
+      }
+      .offers-scroll-track::-webkit-scrollbar { height: 4px; }
+      .offers-scroll-track::-webkit-scrollbar-thumb { background: #ddd; border-radius: 4px; }
+
+      .offer-pill-card {
+        flex-shrink: 0; width: 190px;
+        background: #fff;
+        border: 1.5px solid rgba(0,0,0,.07);
+        border-radius: 20px; padding: 14px 14px 12px;
+        scroll-snap-align: start;
+        position: relative; overflow: hidden;
+        box-shadow: 0 2px 12px rgba(0,0,0,.07);
+        transition: transform .15s, box-shadow .15s;
+        border-top: 4px solid var(--offer-color, #e53935);
+      }
+      .offer-pill-card:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(0,0,0,.12); }
+
+      /* label badge */
+      .offer-label {
+        display: inline-flex; align-items: center;
+        font-size: 10px; font-weight: 800; border-radius: 999px;
+        padding: 3px 8px; margin-bottom: 8px; letter-spacing: .3px;
+      }
+      .offer-label-hot     { background: #fff3e0; color: #e65100; }
+      .offer-label-new     { background: #ede7f6; color: #5e35b1; }
+      .offer-label-flash   { background: #fdeaea; color: #c62828; }
+      .offer-label-limited { background: #fce4ec; color: #880e4f; }
+      .offer-label-top     { background: #e8f5e9; color: #1b5e20; }
+
+      /* emoji + big discount */
+      .offer-pill-emoji { font-size: 28px; margin-bottom: 4px; line-height: 1; }
+      .offer-discount-big {
+        font-size: 32px; font-weight: 900;
+        color: var(--offer-color, #e53935);
+        line-height: 1; margin-bottom: 6px;
+      }
+      .offer-off { font-size: 14px; font-weight: 700; margin-left: 2px; vertical-align: middle; }
+
+      /* title / sub */
+      .offer-pill-title { font-size: 13px; font-weight: 800; color: #111; margin-bottom: 3px; line-height: 1.3; }
+      .offer-pill-sub   { font-size: 11px; color: #888; margin-bottom: 10px; line-height: 1.4; }
+
+      /* promo code row */
+      .offer-code-row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+      .offer-code-chip {
+        flex: 1; background: #f5f5f5; border: 1.5px dashed #ccc;
+        border-radius: 8px; padding: 4px 8px;
+        font-size: 12px; font-weight: 800; color: #333; letter-spacing: .5px;
+        text-align: center;
+      }
+      .offer-copy-btn {
+        flex-shrink: 0; padding: 5px 10px; border-radius: 8px;
+        background: var(--offer-color, #e53935); color: #fff;
+        border: none; font-size: 11px; font-weight: 700; cursor: pointer;
+        transition: opacity .15s;
+      }
+      .offer-copy-btn:active, .offer-copy-btn.offer-copied { opacity: .75; }
+      .offer-copy-btn.offer-copied { background: #2e7d32; }
+
+      /* expires */
+      .offer-expires { font-size: 10px; color: #aaa; }
+
       /* ── Mobile small (< 480px) ── */
       @media (max-width: 479px) {
         .hero-card {
@@ -728,6 +821,7 @@ export class HomeComponent {
   readonly offers$: Observable<DynamicOffer[]>;
   readonly news$: Observable<DynamicNewsItem[]>;
   readonly updatedAt$: Observable<string>;
+  copiedCode = '';
 
   constructor(
     private languageService: LanguageService,
@@ -735,7 +829,7 @@ export class HomeComponent {
     private integrationHealthService: IntegrationHealthService,
     private authService: AuthService
   ) {
-    this.offers$ = offersService.feed$.pipe(map((feed) => feed.offers.slice(0, 4)));
+    this.offers$ = offersService.feed$.pipe(map((feed) => feed.offers));  // show all offers
     this.news$ = offersService.feed$.pipe(map((feed) => feed.news.slice(0, 4)));
     this.updatedAt$ = offersService.feed$.pipe(map((feed) => feed.updatedAt));
 
@@ -790,6 +884,12 @@ export class HomeComponent {
 
   t(key: string): string {
     return this.languageService.t(key);
+  }
+
+  copyCode(code: string): void {
+    navigator.clipboard?.writeText(code).catch(() => {});
+    this.copiedCode = code;
+    setTimeout(() => { this.copiedCode = ''; }, 2000);
   }
 
   onHomeLogoError(event: Event): void {

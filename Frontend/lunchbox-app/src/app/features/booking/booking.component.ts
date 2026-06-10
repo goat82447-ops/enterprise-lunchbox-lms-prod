@@ -209,7 +209,7 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
       </div>
 
       <h2 class="mb-3">{{ isLunchboxDeliveryPage ? 'RouteX LunchBox Booking' : (isSchoolBookingPage ? 'RouteX School Booking' : 'Book Delivery') }}</h2>
-      <p class="text-muted">RouteX-style matching: pick from live nearby captains and confirm instantly.</p>
+      <p class="text-muted">Uber-style matching: pick from live nearby captains and confirm instantly.</p>
 
       <div class="status-banner mb-3" *ngIf="focusedMode === 'all' || focusedMode === 'womenSafety'">
         <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
@@ -322,19 +322,17 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
       <div class="row g-4">
         <div class="col-12" [class.col-lg-8]="showGeneralBookingSections" [class.col-lg-12]="!showGeneralBookingSections">
           <div class="card p-4">
-            <h5 class="mb-3" *ngIf="focusedMode === 'all'">Service Type</h5>
-            <div class="d-flex flex-wrap gap-3 mb-4" *ngIf="focusedMode === 'all'">
-              <label class="form-check-label" *ngFor="let option of serviceTypes">
-                <input
-                  type="radio"
-                  class="form-check-input me-2"
-                  name="serviceType"
-                  [value]="option"
-                  [(ngModel)]="serviceType"
-                  (ngModelChange)="onServiceTypeChange($event)"
-                />
-                {{ option }}
-              </label>
+            <!-- Service Type visual card picker -->
+            <h5 class="mb-3" *ngIf="focusedMode === 'all'">What do you want to send?</h5>
+            <div class="svc-type-grid mb-4" *ngIf="focusedMode === 'all'">
+              <button *ngFor="let svc of svcOptions" type="button"
+                class="svc-type-card"
+                [class.svc-type-active]="serviceType === svc.value"
+                (click)="onServiceTypeChange(svc.value)">
+                <span class="svc-type-icon">{{ svc.icon }}</span>
+                <span class="svc-type-label">{{ svc.label }}</span>
+                <span class="svc-type-hint">{{ svc.hint }}</span>
+              </button>
             </div>
 
             <div class="food-suggestion-box mb-4" id="food-booking-mode-box" *ngIf="serviceType === 'food'">
@@ -758,37 +756,203 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
               Notifications with sound will be sent to all captains.
             </div>
 
+            <!-- ═══ SERVICE-SPECIFIC DETAIL CARDS ═══ -->
+
+            <!-- PARCEL -->
+            <div class="svc-detail-card mb-4" *ngIf="serviceType === 'parcel'">
+              <div class="svc-detail-header">
+                <span class="svc-detail-icon">📦</span>
+                <div>
+                  <div class="svc-detail-title">Parcel Details</div>
+                  <div class="svc-detail-sub">Tell us about what you are sending</div>
+                </div>
+              </div>
+              <div class="row g-3 mt-1">
+                <div class="col-12">
+                  <label class="svc-label">Sender Name <span class="req">*</span></label>
+                  <input class="form-control" placeholder="Your name or business name" [(ngModel)]="parcelSenderName" />
+                </div>
+                <div class="col-md-6">
+                  <label class="svc-label">Recipient Name <span class="req">*</span></label>
+                  <input class="form-control" placeholder="Who will receive?" [(ngModel)]="parcelRecipientName" />
+                </div>
+                <div class="col-md-6">
+                  <label class="svc-label">Recipient Phone <span class="req">*</span></label>
+                  <input class="form-control" type="tel" placeholder="+91XXXXXXXXXX" [(ngModel)]="parcelRecipientPhone" />
+                </div>
+                <div class="col-md-6">
+                  <label class="svc-label">Parcel Weight</label>
+                  <select class="form-select" [(ngModel)]="parcelWeight">
+                    <option value="">Select weight</option>
+                    <option value="&lt;1kg">Under 1 kg</option>
+                    <option value="1-3kg">1 – 3 kg</option>
+                    <option value="3-5kg">3 – 5 kg</option>
+                    <option value="5-10kg">5 – 10 kg</option>
+                    <option value="10kg+">10 kg+</option>
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <label class="svc-label">Parcel Type</label>
+                  <select class="form-select" [(ngModel)]="parcelType">
+                    <option value="normal">Normal Package</option>
+                    <option value="fragile">Fragile</option>
+                    <option value="documents">Documents</option>
+                    <option value="electronics">Electronics</option>
+                    <option value="clothing">Clothing</option>
+                    <option value="food">Food Item</option>
+                  </select>
+                </div>
+                <div class="col-12">
+                  <label class="svc-label">Description (optional)</label>
+                  <input class="form-control" placeholder="Brief description of parcel contents" [(ngModel)]="parcelDescription" />
+                </div>
+              </div>
+            </div>
+
+            <!-- GROCERY -->
+            <div class="svc-detail-card mb-4" *ngIf="serviceType === 'grocery'">
+              <div class="svc-detail-header">
+                <span class="svc-detail-icon">🛒</span>
+                <div>
+                  <div class="svc-detail-title">Grocery Details</div>
+                  <div class="svc-detail-sub">Captain will pick up from the shop you specify</div>
+                </div>
+              </div>
+              <div class="row g-3 mt-1">
+                <div class="col-12">
+                  <label class="svc-label">Shop / Store Name <span class="req">*</span></label>
+                  <input class="form-control" placeholder="e.g. DMart, Reliance Fresh, local kirana" [(ngModel)]="groceryShopName" />
+                </div>
+                <div class="col-12">
+                  <label class="svc-label">Grocery List <span class="req">*</span></label>
+                  <textarea class="form-control" rows="4"
+                    placeholder="List each item on a new line&#10;e.g.&#10;Milk 1L x 2&#10;Bread x 1&#10;Eggs 6 pack"
+                    [(ngModel)]="groceryList"></textarea>
+                </div>
+                <div class="col-md-6">
+                  <label class="svc-label">Estimated Budget</label>
+                  <input class="form-control" type="number" placeholder="₹ amount" [(ngModel)]="groceryBudget" />
+                </div>
+                <div class="col-md-6">
+                  <label class="svc-label">Payment to Shop</label>
+                  <select class="form-select" [(ngModel)]="groceryShopPaymentBy">
+                    <option value="captain">Captain pays, reimburse on delivery</option>
+                    <option value="online">I will pay online to shop</option>
+                    <option value="card">Swipe card on delivery</option>
+                  </select>
+                </div>
+                <div class="col-12">
+                  <label class="svc-label">Special Instructions</label>
+                  <input class="form-control" placeholder="e.g. No plastic bags, call before billing" [(ngModel)]="groceryInstructions" />
+                </div>
+              </div>
+            </div>
+
+            <!-- DOCUMENTS -->
+            <div class="svc-detail-card mb-4" *ngIf="serviceType === 'documents'">
+              <div class="svc-detail-header">
+                <span class="svc-detail-icon">📄</span>
+                <div>
+                  <div class="svc-detail-title">Document Delivery Details</div>
+                  <div class="svc-detail-sub">Confidential handling guaranteed</div>
+                </div>
+              </div>
+              <div class="row g-3 mt-1">
+                <div class="col-md-6">
+                  <label class="svc-label">Document Type <span class="req">*</span></label>
+                  <select class="form-select" [(ngModel)]="documentType">
+                    <option value="">Select type</option>
+                    <option value="legal">Legal Document</option>
+                    <option value="academic">Academic Certificate</option>
+                    <option value="medical">Medical Report</option>
+                    <option value="government">Government ID / Form</option>
+                    <option value="business">Business Contract</option>
+                    <option value="financial">Financial Document</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <label class="svc-label">Number of Copies</label>
+                  <input class="form-control" type="number" min="1" placeholder="1" [(ngModel)]="documentCopies" />
+                </div>
+                <div class="col-md-6">
+                  <label class="svc-label">Recipient Name <span class="req">*</span></label>
+                  <input class="form-control" placeholder="Full name" [(ngModel)]="documentRecipientName" />
+                </div>
+                <div class="col-md-6">
+                  <label class="svc-label">Recipient Phone <span class="req">*</span></label>
+                  <input class="form-control" type="tel" placeholder="+91XXXXXXXXXX" [(ngModel)]="documentRecipientPhone" />
+                </div>
+                <div class="col-12">
+                  <label class="svc-label">Sender / Organisation</label>
+                  <input class="form-control" placeholder="Your name or organisation" [(ngModel)]="documentSenderName" />
+                </div>
+                <div class="col-12">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="docConfidential" [(ngModel)]="documentConfidential" />
+                    <label class="form-check-label small" for="docConfidential">Mark as Confidential – Captain will not open package</label>
+                  </div>
+                </div>
+                <div class="col-12">
+                  <label class="svc-label">Delivery Instructions</label>
+                  <input class="form-control" placeholder="e.g. Hand over to person only, get signature" [(ngModel)]="documentInstructions" />
+                </div>
+              </div>
+            </div>
+
+            <!-- MEDICINE (enhanced) -->
+            <div class="svc-detail-card svc-medicine mb-4" *ngIf="serviceType === 'medicine'">
+              <div class="svc-detail-header">
+                <span class="svc-detail-icon">💊</span>
+                <div>
+                  <div class="svc-detail-title">Medicine Order</div>
+                  <div class="svc-detail-sub">Prescription required for scheduled drugs</div>
+                </div>
+              </div>
+              <div class="row g-3 mt-1">
+                <div class="col-12">
+                  <label class="svc-label">Pharmacy / Medical Shop Name <span class="req">*</span></label>
+                  <input class="form-control" placeholder="e.g. Apollo Pharmacy, local medical shop" [(ngModel)]="medicineShopName" />
+                </div>
+                <div class="col-12">
+                  <label class="svc-label">Medicine Names <span class="req">*</span></label>
+                  <textarea class="form-control" rows="3"
+                    placeholder="List each medicine on a new line&#10;e.g.&#10;Paracetamol 650mg x 10&#10;Azithromycin 500mg x 5"
+                    [(ngModel)]="medicineNames"></textarea>
+                </div>
+                <div class="col-12">
+                  <label class="svc-label">Patient Name</label>
+                  <input class="form-control" placeholder="Patient's full name" [(ngModel)]="medicinePatientName" />
+                </div>
+                <div class="col-12">
+                  <label class="svc-label">Doctor Prescription <span class="req">*</span></label>
+                  <div class="medicine-upload-box">
+                    <input type="file" class="form-control form-control-sm"
+                      accept="image/*,.pdf,application/pdf"
+                      (change)="onMedicinePrescriptionFileSelected($event)" />
+                    <div class="small text-muted mt-1" *ngIf="medicinePrescriptionFileName">
+                      📎 {{ medicinePrescriptionFileName }}
+                    </div>
+                  </div>
+                  <div class="alert py-2 px-3 mt-2 mb-0" [ngClass]="medicinePrescriptionStatusClass">
+                    {{ medicinePrescriptionStatusMessage }}
+                  </div>
+                </div>
+                <div class="col-12">
+                  <label class="svc-label">Delivery Instructions</label>
+                  <input class="form-control" placeholder="e.g. Urgent, do not substitute brand" [(ngModel)]="medicineInstructions" />
+                </div>
+              </div>
+            </div>
+
+            <!-- PICKUP SERVICE -->
+            <div class="svc-detail-card mb-4" *ngIf="serviceType === 'parcel' && pickupServiceMode">
+              <!-- already handled via pickupShopName above -->
+            </div>
+
             <h5 class="mb-2">Ride Notes (optional)</h5>
             <input class="form-control mb-3" placeholder="Ex: Ring doorbell, fragile package, call on arrival" [(ngModel)]="rideNotes" />
 
-            <div class="medicine-verification-card mb-4" *ngIf="serviceType === 'medicine'">
-              <h5 class="mb-2">Medicine Order Verification</h5>
-              <div class="small text-muted mb-2">Please add medicine names and upload doctor prescription. Booking will unlock only after verification.</div>
-
-              <label class="form-label small mb-1">Medicine Names</label>
-              <textarea
-                class="form-control mb-2"
-                rows="3"
-                placeholder="Example: Paracetamol 650mg, Azithromycin 500mg"
-                [(ngModel)]="medicineNames"
-              ></textarea>
-
-              <label class="form-label small mb-1">Doctor Prescription (Required)</label>
-              <input
-                type="file"
-                class="form-control form-control-sm mb-2"
-                accept="image/*,.pdf,application/pdf"
-                (change)="onMedicinePrescriptionFileSelected($event)"
-              />
-
-              <div class="small text-muted mb-1" *ngIf="medicinePrescriptionFileName">
-                Uploaded: {{ medicinePrescriptionFileName }}
-              </div>
-
-              <div class="alert py-2 px-3 mb-0" [ngClass]="medicinePrescriptionStatusClass" *ngIf="serviceType === 'medicine'">
-                {{ medicinePrescriptionStatusMessage }}
-              </div>
-            </div>
 
             <div class="fare-box mb-4">
               <div><strong>Estimated Fare:</strong> ₹{{ totalEstimatedFare }}</div>
@@ -1086,6 +1250,52 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         border-radius: 10px;
         padding: 10px;
         background: #f8f9fa;
+      }
+
+      /* ── Service Type Card Grid ── */
+      .svc-type-grid {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 10px;
+      }
+      @media (max-width: 640px) {
+        .svc-type-grid { grid-template-columns: repeat(3, 1fr); }
+      }
+      .svc-type-card {
+        display: flex; flex-direction: column; align-items: center;
+        gap: 4px; padding: 12px 6px 10px;
+        border: 1.5px solid #e0e0e0; border-radius: 16px;
+        background: #fafafa; cursor: pointer;
+        transition: all .15s;
+      }
+      .svc-type-card:hover { border-color: #e53935; background: #fff5f5; }
+      .svc-type-active { border-color: #e53935 !important; background: #fdeaea !important; }
+      .svc-type-icon { font-size: 26px; }
+      .svc-type-label { font-size: 12px; font-weight: 800; color: #111; }
+      .svc-type-hint { font-size: 10px; color: #999; text-align: center; }
+
+      /* ── Service Detail Cards ── */
+      .svc-detail-card {
+        background: #fff;
+        border: 1.5px solid #e8e8e8;
+        border-radius: 16px;
+        padding: 16px 16px 18px;
+      }
+      .svc-detail-card.svc-medicine { border-color: #bbdefb; background: #f8fbff; }
+      .svc-detail-header {
+        display: flex; align-items: center; gap: 12px; margin-bottom: 4px;
+      }
+      .svc-detail-icon { font-size: 28px; flex-shrink: 0; }
+      .svc-detail-title { font-size: 15px; font-weight: 800; color: #111; }
+      .svc-detail-sub { font-size: 12px; color: #888; margin-top: 2px; }
+      .svc-label {
+        font-size: 13px; font-weight: 600; color: #444;
+        display: block; margin-bottom: 4px;
+      }
+      .req { color: #e53935; }
+      .medicine-upload-box {
+        background: #f0f4ff; border: 1.5px dashed #90a4ae;
+        border-radius: 10px; padding: 10px 12px;
       }
 
       .medicine-verification-card {
@@ -1496,6 +1706,14 @@ export class BookingComponent implements OnDestroy {
   howToBookVideoSrc = '/assets/how-to-book.mp4';
   howToBookPosterSrc = '/assets/login-banner.svg';
   serviceTypes: ServiceType[] = ['food', 'parcel', 'grocery', 'medicine', 'documents'];
+
+  svcOptions: Array<{ value: ServiceType; label: string; icon: string; hint: string }> = [
+    { value: 'parcel',    label: 'Parcel',    icon: '📦', hint: 'Send a package' },
+    { value: 'grocery',   label: 'Grocery',   icon: '🛒', hint: 'Shop pickup & deliver' },
+    { value: 'medicine',  label: 'Medicine',  icon: '💊', hint: 'Pharmacy delivery' },
+    { value: 'documents', label: 'Document',  icon: '📄', hint: 'Secure doc delivery' },
+    { value: 'food',      label: 'Food',      icon: '🍔', hint: 'Order from restaurants' },
+  ];
   paymentMethods: PaymentMethod[] = ['cash', 'card', 'upi', 'wallet'];
   upiAppOptions: Array<{ id: 'phonepe' | 'gpay' | 'amazonpay'; label: string; packageHint: string }> = [
     { id: 'phonepe', label: 'PhonePe', packageHint: 'com.phonepe.app' },
@@ -1556,6 +1774,35 @@ export class BookingComponent implements OnDestroy {
   defaultHotelImageUrl = 'https://images.unsplash.com/photo-1559339352-11d035aa65de?auto=format&fit=crop&w=900&q=80';
   defaultFoodItemImageUrl = 'https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?auto=format&fit=crop&w=900&q=80';
   rideNotes = '';
+
+  // Parcel service fields
+  parcelSenderName = '';
+  parcelRecipientName = '';
+  parcelRecipientPhone = '';
+  parcelWeight = '';
+  parcelType = 'normal';
+  parcelDescription = '';
+
+  // Grocery service fields
+  groceryShopName = '';
+  groceryList = '';
+  groceryBudget: number | null = null;
+  groceryShopPaymentBy = 'captain';
+  groceryInstructions = '';
+
+  // Document service fields
+  documentType = '';
+  documentCopies = 1;
+  documentRecipientName = '';
+  documentRecipientPhone = '';
+  documentSenderName = '';
+  documentConfidential = false;
+  documentInstructions = '';
+
+  // Medicine service extra fields
+  medicineShopName = '';
+  medicinePatientName = '';
+  medicineInstructions = '';
   medicineNames = '';
   medicinePrescriptionFileName = '';
   medicinePrescriptionPayload = '';
