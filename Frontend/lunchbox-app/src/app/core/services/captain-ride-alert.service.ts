@@ -146,7 +146,7 @@ export class CaptainRideAlertService implements OnDestroy {
     this.countdownPctSubject.next(100);
 
     this.playAlertSound();
-    this.soundInterval = setInterval(() => this.playAlertSound(), 2000);
+    this.soundInterval = setInterval(() => this.playAlertSound(), 1200); // repeat every 1.2s for urgency
 
     this.alertTimer = setInterval(() => {
       const next = this.countdownSubject.value - 1;
@@ -175,26 +175,49 @@ export class CaptainRideAlertService implements OnDestroy {
 
     const ctx = new AudioCtx();
     const doPlay = () => {
+      // DynamicsCompressor acts as a hardware limiter/maximizer — pushes perceived loudness to max
+      const compressor = ctx.createDynamicsCompressor();
+      compressor.threshold.setValueAtTime(-6, ctx.currentTime);
+      compressor.knee.setValueAtTime(0, ctx.currentTime);
+      compressor.ratio.setValueAtTime(20, ctx.currentTime);
+      compressor.attack.setValueAtTime(0.001, ctx.currentTime);
+      compressor.release.setValueAtTime(0.1, ctx.currentTime);
+      compressor.connect(ctx.destination);
+
+      // Master gain at full volume
+      const masterGain = ctx.createGain();
+      masterGain.gain.setValueAtTime(1.0, ctx.currentTime);
+      masterGain.connect(compressor);
+
+      // 4 beeps: escalating frequency for urgency (like emergency alarm)
       const beeps = [
-        { freq: 1400, start: 0,    dur: 0.1  },
-        { freq: 1600, start: 0.13, dur: 0.1  },
-        { freq: 1800, start: 0.26, dur: 0.18 }
+        { freq: 1200, start: 0,    dur: 0.14 },
+        { freq: 1500, start: 0.17, dur: 0.14 },
+        { freq: 1800, start: 0.34, dur: 0.14 },
+        { freq: 2100, start: 0.51, dur: 0.20 },
       ];
+
       beeps.forEach(b => {
-        const osc  = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'square';
-        osc.frequency.value = b.freq;
-        gain.gain.setValueAtTime(0.0001, ctx.currentTime + b.start);
-        gain.gain.exponentialRampToValueAtTime(0.5,  ctx.currentTime + b.start + 0.01);
-        gain.gain.exponentialRampToValueAtTime(0.4,  ctx.currentTime + b.start + b.dur * 0.6);
-        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + b.start + b.dur);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(ctx.currentTime + b.start);
-        osc.stop(ctx.currentTime + b.start + b.dur + 0.01);
+        // Stack 3 oscillators per beep (slightly detuned) = much richer/louder sound
+        [-4, 0, 4].forEach(detune => {
+          const osc  = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'square';
+          osc.frequency.value = b.freq;
+          osc.detune.value = detune;
+          // Sharp attack, full sustain, sharp cutoff
+          gain.gain.setValueAtTime(0.0001, ctx.currentTime + b.start);
+          gain.gain.exponentialRampToValueAtTime(1.0, ctx.currentTime + b.start + 0.008);
+          gain.gain.setValueAtTime(1.0, ctx.currentTime + b.start + b.dur - 0.01);
+          gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + b.start + b.dur);
+          osc.connect(gain);
+          gain.connect(masterGain);
+          osc.start(ctx.currentTime + b.start);
+          osc.stop(ctx.currentTime + b.start + b.dur + 0.01);
+        });
       });
-      setTimeout(() => ctx.close().catch(() => void 0), 700);
+
+      setTimeout(() => ctx.close().catch(() => void 0), 900);
     };
 
     if (ctx.state === 'suspended') {
