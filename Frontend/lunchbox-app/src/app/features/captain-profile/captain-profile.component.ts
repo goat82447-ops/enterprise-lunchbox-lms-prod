@@ -108,6 +108,7 @@ const CAPTAIN_KYC_STORAGE_KEY = 'delivery_captain_kyc_state';
                   {{ isCurrentlyBusy ? '🔴 On a Ride' : '🟢 Available' }}
                 </span>
                 <button class="btn btn-sm btn-outline-secondary" type="button" (click)="refreshActiveRides()">Refresh</button>
+                <button class="btn btn-sm btn-outline-danger" type="button" (click)="triggerTestRideAlert()" title="Simulate incoming ride alert with sound">🧪 Test Alert</button>
               </div>
             </div>
 
@@ -482,12 +483,10 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
   private notifiedRideIds = new Set<string>();
   private notifiedPaymentRideIds = new Set<string>();
 
-  // ── Incoming ride alert ──
-  incomingRide: Booking | null = null;
-  alertCountdown = 25;
-  alertCountdownPct = 100;
-  private alertTimer: ReturnType<typeof setInterval> | null = null;
-  private soundInterval: ReturnType<typeof setInterval> | null = null;
+  // ── Incoming ride alert (delegated to CaptainRideAlertService) ──
+  get incomingRide(): Booking | null { return this.captainRideAlert.incomingRide; }
+  get alertCountdown(): number { return (this.captainRideAlert as any).countdownSubject?.value ?? 25; }
+  get alertCountdownPct(): number { return (this.captainRideAlert as any).countdownPctSubject?.value ?? 100; }
 
   get isCurrentlyBusy(): boolean {
     return this.activeRides.some(r =>
@@ -571,10 +570,7 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
       this.refreshCaptainLocation();
       this.ensureBrowserNotificationPermission();
 
-      // When captain identity loads, immediately check for pending rides
-      if (user) {
-        this.notifyForIncomingRides();
-      }
+      // Alert service handles incoming ride detection automatically
     });
 
     this.route.queryParamMap.pipe(takeUntil(this.destroy$)).subscribe((params) => {
@@ -589,20 +585,13 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
     });
 
     this.bookingService.bookings$.pipe(takeUntil(this.destroy$)).subscribe(() => {
-      // Refresh rides first, THEN check for notifications
       this.refreshActiveRides();
-
-      // Small delay ensures activeRides is populated before notification check
-      setTimeout(() => {
-        if (this.captain) this.notifyForIncomingRides();
-      }, 100);
     });
   }
 
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
-    this.clearAlertTimer();
   }
 
   onDpFileSelected(event: Event): void {
@@ -866,121 +855,18 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
     );
   }
 
-  private notifyForIncomingRides(): void {
-    if (!this.captain) return;
-
-    // ── Auto-dismiss if incomingRide was accepted by another captain ──
-    if (this.incomingRide) {
-      const currentState = this.bookingService
-        .getAllBookingsSnapshot()
-        .find(b => b.id === this.incomingRide!.id);
-      if (currentState && currentState.status !== 'created') {
-        this.clearAlertTimer();
-        this.incomingRide = null;
-        this.notifications.push('Ride was accepted by another captain.', 'info');
-        return;
-      }
-    }
-
-    // ── Query ALL 'created' bookings broadcast to all captains ──
-    const allBookings = this.bookingService.getAllBookingsSnapshot();
-    const pendingRides = allBookings.filter(b =>
-      b.status === 'created' &&
-      b.notificationTarget === 'all'
-    );
-
-    // ── Skip alert if this captain is already on an active ride ──
-    const captainIsBusy = this.activeRides.some(r =>
-      r.status === 'assigned' ||
-      r.status === 'pickup_in_progress' ||
-      r.status === 'in_transit' ||
-      r.status === 'arriving'
-    );
-
-    for (const ride of pendingRides) {
-      if (this.notifiedRideIds.has(ride.id)) {
-        continue;
-      }
-
-      this.notifiedRideIds.add(ride.id);
-
-      if (captainIsBusy) {
-        continue; // Captain is busy — mark as seen but don't alert
-      }
-
-      // Show full-screen alert + sound
-      this.showIncomingRideAlert(ride);
-
-      const message = `🏍️ New ${ride.serviceType} ride: ${this.shortAddr(ride.pickup.address)} → ${this.shortAddr(ride.drop.address)} · ₹${ride.estimatedFare || '—'}`;
-
-      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-        new Notification('🚨 New Ride Request!', {
-          body: message,
-          tag: `ride-${ride.id}`,
-          icon: '/assets/lunchbox-logo.svg',
-          requireInteraction: true
-        });
-      }
-    }
-
-    this.notifyForPaymentUpdates();
-  }
-
-  private shortAddr(addr: string): string {
-    if (!addr) return '';
-    return addr.split(',').slice(0, 2).join(',').trim();
-  }
-
-  private showIncomingRideAlert(ride: Booking): void {
-    // Clear any existing alert
-    this.clearAlertTimer();
-    this.incomingRide = ride;
-    this.alertCountdown = 25;
-    this.alertCountdownPct = 100;
-
-    // Play loud repeated alert sound every 2s
-    this.playAlertSound();
-    this.soundInterval = setInterval(() => this.playAlertSound(), 2000);
-
-    // Countdown timer
-    this.alertTimer = setInterval(() => {
-      this.alertCountdown--;
-      this.alertCountdownPct = (this.alertCountdown / 25) * 100;
-      if (this.alertCountdown <= 0) {
-        this.declineRide();
-      }
-    }, 1000);
-  }
-
   acceptRide(): void {
-    if (!this.incomingRide) return;
-    const rideId = this.incomingRide.id;
-    this.clearAlertTimer();
-    this.incomingRide = null;
-
-    const result = this.bookingService.approveByCaptain(rideId);
-    if (result.success) {
-      this.notifications.push(`✅ Ride ${rideId} accepted! Head to pickup location.`, 'success');
+    const rideId = this.captainRideAlert.incomingRide?.id;
+    this.captainRideAlert.acceptRide();
+    if (rideId) {
       this.notifications.playSound('success');
       const accepted = this.activeRides.find(r => r.id === rideId);
       this.openRideTracking(accepted || null);
-    } else {
-      // Booking was already taken by another captain
-      this.notifications.push('Ride was already accepted by another captain.', 'warning');
-      this.notifications.playSound('info');
     }
   }
 
   declineRide(): void {
-    if (!this.incomingRide) return;
-    this.clearAlertTimer();
-    this.notifications.push(`Ride ${this.incomingRide.id} declined.`, 'warning');
-    this.incomingRide = null;
-  }
-
-  private clearAlertTimer(): void {
-    if (this.alertTimer) { clearInterval(this.alertTimer); this.alertTimer = null; }
-    if (this.soundInterval) { clearInterval(this.soundInterval); this.soundInterval = null; }
+    this.captainRideAlert.declineRide();
   }
 
   private notifyForPaymentUpdates(): void {
@@ -1037,43 +923,6 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
       Notification.requestPermission().catch(() => void 0);
     }
   }
-
-  private playAlertSound(): void {
-    const AudioCtx = (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext
-      || (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!AudioCtx) return;
-
-    const ctx = new AudioCtx();
-
-    // Uber/Ola style: 3 rapid high-pitched beeps (1400→1600→1800 Hz)
-    // then a pause then repeat — very attention-grabbing
-    const beeps = [
-      { freq: 1400, start: 0,    dur: 0.1  },
-      { freq: 1600, start: 0.13, dur: 0.1  },
-      { freq: 1800, start: 0.26, dur: 0.18 },
-    ];
-
-    beeps.forEach(b => {
-      const osc  = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'square'; // square wave = more piercing than sine
-      osc.frequency.value = b.freq;
-      // High gain for Uber-level alert
-      gain.gain.setValueAtTime(0.0001, ctx.currentTime + b.start);
-      gain.gain.exponentialRampToValueAtTime(0.5, ctx.currentTime + b.start + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.4, ctx.currentTime + b.start + b.dur * 0.6);
-      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + b.start + b.dur);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(ctx.currentTime + b.start);
-      osc.stop(ctx.currentTime + b.start + b.dur + 0.01);
-    });
-
-    setTimeout(() => ctx.close().catch(() => void 0), 700);
-  }
-
-  // Keep old method name for backward compatibility
-  private playIncomingRideSound(): void { this.playAlertSound(); }
 
   statusBadge(status: Booking['status']): string {
     if (status === 'assigned' || status === 'pickup_in_progress' || status === 'in_transit' || status === 'arriving') {
