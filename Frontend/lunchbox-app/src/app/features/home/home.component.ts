@@ -31,7 +31,7 @@ import { AuthService } from '../../core/services/auth.service';
             <h1 class="display-5 fw-bold mb-2 mt-2 hero-headline">One App. Every Journey 🚀</h1>
             <p class="lead mb-4">Book food, parcel, pickup service, women safety rides, and more with live captain tracking.</p>
             <div class="d-grid d-md-flex gap-2 flex-wrap">
-              <a routerLink="/booking" class="btn btn-danger btn-lg">{{ t('bookDelivery') }}</a>
+              <a routerLink="/travel" class="btn btn-danger btn-lg">{{ t('bookDelivery') }}</a>
               <a routerLink="/services" class="btn btn-outline-light btn-lg fw-semibold">Explore Services</a>
             </div>
           </div>
@@ -721,28 +721,28 @@ export class HomeComponent {
       icon: '🍔',
       title: 'Food Delivery',
       description: 'Nearby restaurants with live prep and captain ETA.',
-      route: '/booking/food/hotels'
+      route: '/food'
     },
     {
       icon: '🛍️',
       title: 'Pickup Service',
       description: 'Pickup item from any shop to your destination.',
-      route: '/booking',
-      queryParams: { service: 'parcel', pickupService: 1 }
+      route: '/travel',
+      queryParams: { mode: 'pickup' }
     },
     {
       icon: '🛡️',
       title: 'Women Safety Mode',
       description: 'Top-ranked trusted captains prioritized first.',
-      route: '/booking',
-      queryParams: { womenSafety: 1, service: 'parcel' }
+      route: '/travel',
+      queryParams: { mode: 'women' }
     },
     {
-      icon: '🎒',
-      title: 'School and Teen Rides',
-      description: 'RouteX school delivery and teen-safe assisted ride options.',
-      route: '/lunchbox-delivery',
-      queryParams: { lunchBox: 1, service: 'food' }
+      icon: '🧒',
+      title: 'Teen & School Rides',
+      description: 'Safe assisted rides for teens with parent contact.',
+      route: '/travel',
+      queryParams: { mode: 'teen' }
     }
   ];
 
