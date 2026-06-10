@@ -89,16 +89,6 @@ import { Router } from '@angular/router';
           </button>
         </div>
       </div>
-
-      <div class="svc-section">
-        <div class="svc-section-label">More</div>
-        <div class="svc-grid">
-          <button class="svc-tile" type="button" (click)="openActivity()">
-            <div class="svc-icon-wrap">🧾</div>
-            <div class="svc-name">Activity</div>
-          </button>
-        </div>
-      </div>
     </div>
   `,
   styles: [`
@@ -177,11 +167,10 @@ export class ServicesComponent {
 
   openBooking(serviceType: string): void {
     if (serviceType === 'food') {
-      this.router.navigate(['/booking/food/hotels']);
+      this.router.navigate(['/food']);
       return;
     }
-
-    this.router.navigate(['/booking'], { queryParams: { service: serviceType } });
+    this.router.navigate(['/travel'], { queryParams: { mode: serviceType } });
   }
 
   openVehicleRide(vehicleType: string): void {
@@ -205,11 +194,11 @@ export class ServicesComponent {
   }
 
   openLunchBox(): void {
-    this.router.navigate(['/lunchbox-delivery'], { queryParams: { lunchBox: 1, service: 'food' } });
+    this.router.navigate(['/travel'], { queryParams: { mode: 'teen' } });
   }
 
   openPickupService(): void {
-    this.router.navigate(['/booking'], { queryParams: { service: 'parcel', pickupService: 1 } });
+    this.router.navigate(['/travel'], { queryParams: { mode: 'pickup' } });
   }
 
   openActivity(): void {
