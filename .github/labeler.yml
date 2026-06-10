@@ -1,0 +1,24 @@
+bug:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'Frontend/lunchbox-app/src/app/features/**'
+      - 'Frontend/lunchbox-app/src/app/core/**'
+      - 'Frontend/lunchbox-app/src/app/shared/**'
+
+enhancement:
+  - all:
+    - changed-files:
+      - any-glob-to-any-file:
+        - added-files: 'Frontend/lunchbox-app/src/app/features/**/*.ts'
+
+documentation:
+  - changed-files:
+    - any-glob-to-any-file:
+      - '**/*.md'
+
+chore:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'Frontend/lunchbox-app/package.json'
+      - 'Frontend/lunchbox-app/angular.json'
+      - '.github/**'
