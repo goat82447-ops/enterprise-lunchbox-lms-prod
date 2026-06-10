@@ -22,6 +22,7 @@ export class CaptainRideAlertService implements OnDestroy {
   private alertTimer: ReturnType<typeof setInterval> | null = null;
   private soundInterval: ReturnType<typeof setInterval> | null = null;
   private bookingsSub: Subscription | null = null;
+  private audioUnlocked = false;
 
   // Emits when the captain accepts or declines so captain-profile can react
   readonly rideAccepted$ = new Subject<string>();
@@ -32,6 +33,35 @@ export class CaptainRideAlertService implements OnDestroy {
     private bookingService: BookingService,
     private notifications: NotificationService
   ) {
+    // Unlock audio on first user gesture (browsers block audio before interaction)
+    if (typeof window !== 'undefined') {
+      const unlock = () => {
+        if (this.audioUnlocked) return;
+        this.audioUnlocked = true;
+        // Create a silent context to prime the audio system
+        const AudioCtx = this.getAudioCtx();
+        if (AudioCtx) {
+          const ctx = new AudioCtx();
+          ctx.resume().then(() => ctx.close()).catch(() => void 0);
+        }
+        window.removeEventListener('click', unlock, true);
+        window.removeEventListener('touchstart', unlock, true);
+        window.removeEventListener('keydown', unlock, true);
+      };
+      window.addEventListener('click', unlock, true);
+      window.addEventListener('touchstart', unlock, true);
+      window.addEventListener('keydown', unlock, true);
+    }
+
+    // Request browser notification permission as soon as a captain logs in
+    this.auth.user$.subscribe(user => {
+      if (user?.role === 'captain') {
+        if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+          Notification.requestPermission().catch(() => void 0);
+        }
+      }
+    });
+
     this.bookingsSub = this.bookingService.bookings$.subscribe(() => {
       if (this.auth.isCaptain()) {
         this.checkForIncomingRides();
@@ -59,9 +89,11 @@ export class CaptainRideAlertService implements OnDestroy {
     const result = this.bookingService.approveByCaptain(rideId);
     if (result.success) {
       this.notifications.push(`✅ Ride ${rideId} accepted! Head to pickup location.`, 'success');
+      this.notifications.playSound('success');
       this.rideAccepted$.next(rideId);
     } else {
       this.notifications.push('Ride was already accepted by another captain.', 'warning');
+      this.notifications.playSound('info');
     }
   }
 
@@ -71,6 +103,7 @@ export class CaptainRideAlertService implements OnDestroy {
 
     this.clearTimers();
     this.notifications.push(`Ride ${ride.id} declined.`, 'warning');
+    this.notifications.playSound('info');
     this.rideDeclined$.next(ride.id);
     this.incomingRideSubject.next(null);
   }
@@ -137,40 +170,46 @@ export class CaptainRideAlertService implements OnDestroy {
     if (this.soundInterval) { clearInterval(this.soundInterval); this.soundInterval = null; }
   }
 
+  private getAudioCtx(): typeof AudioContext | null {
+    return (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext
+      || (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+      || null;
+  }
+
   private playAlertSound(): void {
-    const AudioCtx = (window as unknown as {
-      AudioContext?: typeof AudioContext;
-      webkitAudioContext?: typeof AudioContext;
-    }).AudioContext || (window as unknown as {
-      AudioContext?: typeof AudioContext;
-      webkitAudioContext?: typeof AudioContext;
-    }).webkitAudioContext;
+    const AudioCtx = this.getAudioCtx();
     if (!AudioCtx) return;
 
     const ctx = new AudioCtx();
-    // Uber/Ola-style: 3 rapid high-pitched beeps
-    const beeps = [
-      { freq: 1400, start: 0,    dur: 0.1  },
-      { freq: 1600, start: 0.13, dur: 0.1  },
-      { freq: 1800, start: 0.26, dur: 0.18 }
-    ];
+    // Resume suspended context (browser autoplay policy) then play
+    const doPlay = () => {
+      const beeps = [
+        { freq: 1400, start: 0,    dur: 0.1  },
+        { freq: 1600, start: 0.13, dur: 0.1  },
+        { freq: 1800, start: 0.26, dur: 0.18 }
+      ];
+      beeps.forEach(b => {
+        const osc  = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.value = b.freq;
+        gain.gain.setValueAtTime(0.0001, ctx.currentTime + b.start);
+        gain.gain.exponentialRampToValueAtTime(0.5,  ctx.currentTime + b.start + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.4,  ctx.currentTime + b.start + b.dur * 0.6);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + b.start + b.dur);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(ctx.currentTime + b.start);
+        osc.stop(ctx.currentTime + b.start + b.dur + 0.01);
+      });
+      setTimeout(() => ctx.close().catch(() => void 0), 700);
+    };
 
-    beeps.forEach(b => {
-      const osc  = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'square';
-      osc.frequency.value = b.freq;
-      gain.gain.setValueAtTime(0.0001, ctx.currentTime + b.start);
-      gain.gain.exponentialRampToValueAtTime(0.5, ctx.currentTime + b.start + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.4, ctx.currentTime + b.start + b.dur * 0.6);
-      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + b.start + b.dur);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(ctx.currentTime + b.start);
-      osc.stop(ctx.currentTime + b.start + b.dur + 0.01);
-    });
-
-    setTimeout(() => ctx.close().catch(() => void 0), 700);
+    if (ctx.state === 'suspended') {
+      ctx.resume().then(doPlay).catch(() => void 0);
+    } else {
+      doPlay();
+    }
   }
 
   private shortAddr(addr: string): string {
