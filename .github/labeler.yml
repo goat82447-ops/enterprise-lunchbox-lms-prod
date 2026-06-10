@@ -23,3 +23,12 @@ chore:
       - 'Frontend/lunchbox-app/angular.json'
       - '.github/**'
       - '**/*.yml'
+
+prod:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'Frontend/lunchbox-app/src/environments/environment.prod.ts'
+      - 'Frontend/lunchbox-app/vercel.json'
+      - 'ZIPTen/nodejs-monorepo/.env*'
+      - 'render.yaml'
+      - 'Frontend/lunchbox-app/angular.json'
