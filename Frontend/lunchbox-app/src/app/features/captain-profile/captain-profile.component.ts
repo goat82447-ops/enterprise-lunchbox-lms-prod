@@ -7,6 +7,7 @@ import { Subject, takeUntil } from 'rxjs';
 import { AppUser, Booking, CaptainFeedbackComment, KycStatus } from '../../core/models/delivery.models';
 import { AuthService } from '../../core/services/auth.service';
 import { BookingService } from '../../core/services/booking.service';
+import { CaptainRideAlertService } from '../../core/services/captain-ride-alert.service';
 import { NotificationService } from '../../core/services/notification.service';
 import { SafeResourceUrlPipe } from '../../shared/pipes/safe-resource-url.pipe';
 
