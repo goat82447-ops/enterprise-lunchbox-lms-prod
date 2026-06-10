@@ -88,7 +88,7 @@ export class BookingService {
       driverName: request.captainName || 'Ravi Kumar',
       driverPhone: request.captainPhone || '+91-90000-12345',
       captainId: request.captainId,
-      notificationTarget: request.notificationTarget || 'preferred',
+      notificationTarget: request.notificationTarget || 'all',  // default: broadcast to all available captains
       preferredCaptainId: request.preferredCaptainId,
       preferredCaptainName: request.preferredCaptainName,
       notification: isScheduled

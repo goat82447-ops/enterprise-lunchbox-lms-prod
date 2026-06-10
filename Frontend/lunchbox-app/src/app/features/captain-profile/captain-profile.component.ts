@@ -27,187 +27,186 @@ const CAPTAIN_KYC_STORAGE_KEY = 'delivery_captain_kyc_state';
   standalone: true,
   imports: [CommonModule, FormsModule, SafeResourceUrlPipe],
   template: `
-    <div class="container py-4" *ngIf="captain as c">
-      <h2 class="mb-3">Captain Profile</h2>
+    <div class="cp-page" *ngIf="captain as c">
 
-      <div class="row g-4">
-        <div class="col-lg-4">
-          <div class="card p-3 h-100">
-            <div class="text-center">
-              <img class="dp-image mb-3" [src]="dpPreview || defaultDp" alt="Captain DP" />
-              <h5 class="mb-0">{{ c.displayName }}</h5>
-              <div class="text-muted small">{{ c.username }} • {{ c.captainVehicle || 'captain' }}</div>
-              <div class="mt-2">
-                <span class="verified-driver-badge" [ngClass]="kycBadgeClass(kycStatus)">
-                  {{ kycStatus === 'verified' ? 'Verified Driver Badge' : 'KYC ' + kycStatusLabel(kycStatus) }}
-                </span>
-              </div>
+      <!-- ══ HEADER HERO ══ -->
+      <div class="cp-hero">
+        <div class="cp-hero-inner">
+          <div class="cp-hero-avatar-wrap">
+            <img class="cp-hero-avatar" [src]="dpPreview || defaultDp" alt="Captain DP" />
+            <span class="cp-hero-status-dot" [class.busy]="isCurrentlyBusy"></span>
+          </div>
+          <div class="cp-hero-info">
+            <h2 class="cp-hero-name">{{ c.displayName }}</h2>
+            <div class="cp-hero-meta">@{{ c.username }}
+              <span class="cp-hero-veh">
+                <span class="cp-veh-icon">{{ vehicleEmoji(c.captainVehicle) }}</span>
+                {{ c.captainVehicle || 'Captain' | titlecase }}
+              </span>
             </div>
+            <div class="cp-hero-badges">
+              <span class="cp-kyc-badge" [ngClass]="kycBadgeClass(kycStatus)">
+                {{ kycStatus === 'verified' ? '✅ Verified Driver' : '⚠️ KYC ' + kycStatusLabel(kycStatus) }}
+              </span>
+              <span class="cp-avail-chip" [class.busy]="isCurrentlyBusy">
+                {{ isCurrentlyBusy ? '🔴 On a Ride' : '🟢 Available' }}
+              </span>
+            </div>
+          </div>
+          <div class="cp-hero-actions">
+            <label class="cp-dp-btn" title="Change profile photo">
+              📷
+              <input type="file" accept="image/*" hidden (change)="onDpFileSelected($event)" />
+            </label>
+            <button class="cp-save-dp-btn" *ngIf="dpPreview" (click)="saveDp()" [disabled]="savingDp">
+              {{ savingDp ? '...' : '💾' }}
+            </button>
+          </div>
+        </div>
+      </div>
 
-            <hr />
+      <!-- ══ NOTIFICATION PERMISSION BANNER ══ -->
+      <div class="cp-notif-banner" *ngIf="notifPermission !== 'granted'">
+        <span>🔔 Enable notifications to receive ride alerts with sound</span>
+        <button (click)="requestNotificationPermission()">Enable Now</button>
+      </div>
 
-            <label class="form-label">Update DP (profile photo)</label>
-            <input type="file" class="form-control form-control-sm mb-2" accept="image/*" (change)="onDpFileSelected($event)" />
-            <button class="btn btn-sm btn-primary" type="button" (click)="saveDp()" [disabled]="!dpPreview || savingDp">Save DP</button>
+      <div class="cp-grid">
+
+        <!-- ══ LEFT COLUMN ══ -->
+        <div class="cp-col-left">
+
+          <!-- VEHICLE DETAILS -->
+          <div class="cp-card">
+            <div class="cp-card-title">🚗 Vehicle Details</div>
+            <div class="cp-veh-big-icon">{{ vehicleEmoji(c.captainVehicle) }}</div>
+            <div class="cp-info-row"><span class="cp-info-label">Vehicle Type</span><span class="cp-info-val">{{ c.captainVehicle || 'Not set' | titlecase }}</span></div>
+            <div class="cp-info-row"><span class="cp-info-label">Captain ID</span><span class="cp-info-val cp-mono">{{ c.id | slice:0:12 }}…</span></div>
+            <div class="cp-info-row"><span class="cp-info-label">Username</span><span class="cp-info-val">{{ c.username }}</span></div>
+            <div class="cp-info-row" *ngIf="c.email"><span class="cp-info-label">Email</span><span class="cp-info-val">{{ c.email }}</span></div>
+            <div class="cp-info-row" *ngIf="c.mobile"><span class="cp-info-label">Mobile</span><span class="cp-info-val">{{ c.mobile }}</span></div>
           </div>
 
-          <div class="card p-3 mt-3">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <h5 class="mb-0">Captain KYC Verification</h5>
-              <span class="badge" [ngClass]="kycBadgeClass(kycStatus)">{{ kycStatusLabel(kycStatus) }}</span>
+          <!-- KYC VERIFICATION -->
+          <div class="cp-card cp-kyc-card">
+            <div class="cp-card-header-row">
+              <div class="cp-card-title">🪪 KYC Verification</div>
+              <span class="cp-kyc-status-badge" [ngClass]="kycBadgeClass(kycStatus)">{{ kycStatusLabel(kycStatus) }}</span>
             </div>
-            <div class="small text-muted mb-2">Keep your KYC updated to show the Verified Driver Badge to riders.</div>
-            <div class="small mb-2" *ngIf="kycReferenceId"><strong>Reference:</strong> {{ kycReferenceId }}</div>
-            <div class="small mb-3" *ngIf="kycUpdatedAt"><strong>Last Updated:</strong> {{ kycUpdatedAt | date:'medium' }}</div>
+            <div class="cp-kyc-hint">Keep your KYC updated to show Verified Driver Badge to riders.</div>
+            <div class="cp-info-row" *ngIf="kycReferenceId"><span class="cp-info-label">Reference</span><span class="cp-info-val cp-mono">{{ kycReferenceId }}</span></div>
+            <div class="cp-info-row" *ngIf="kycUpdatedAt"><span class="cp-info-label">Updated</span><span class="cp-info-val">{{ kycUpdatedAt | date:'mediumDate' }}</span></div>
 
-            <label class="form-label small mb-1">Document Type</label>
-            <select class="form-select form-select-sm mb-2" [(ngModel)]="kycDocumentType">
+            <label class="cp-form-label mt-2">Document Type</label>
+            <select class="cp-select" [(ngModel)]="kycDocumentType">
               <option value="Driving License">Driving License</option>
               <option value="Aadhaar">Aadhaar</option>
               <option value="PAN">PAN</option>
               <option value="Voter ID">Voter ID</option>
             </select>
 
-            <label class="form-label small mb-1">Document Number</label>
-            <input class="form-control form-control-sm mb-2" placeholder="Enter document number" [(ngModel)]="kycDocumentNumber" />
-            <div class="small text-muted mb-3" *ngIf="kycDocumentNumber">Masked: {{ maskedDocumentNumber }}</div>
+            <label class="cp-form-label">Document Number</label>
+            <input class="cp-input" placeholder="Enter document number" [(ngModel)]="kycDocumentNumber" />
+            <div class="cp-masked" *ngIf="kycDocumentNumber">Masked: {{ maskedDocumentNumber }}</div>
 
-            <div class="d-flex gap-2 flex-wrap">
-              <button class="btn btn-sm btn-primary" type="button" (click)="submitKyc()" [disabled]="!canSubmitKyc">Submit KYC</button>
-              <button class="btn btn-sm btn-success" type="button" (click)="markKycVerified()" [disabled]="kycStatus !== 'pending'">Mark Verified</button>
-              <button class="btn btn-sm btn-outline-danger" type="button" (click)="markKycRejected()" [disabled]="kycStatus !== 'pending'">Mark Rejected</button>
+            <div class="cp-kyc-btns">
+              <button class="cp-btn cp-btn-primary" (click)="submitKyc()" [disabled]="!canSubmitKyc">Submit KYC</button>
+              <button class="cp-btn cp-btn-success" (click)="markKycVerified()" [disabled]="kycStatus !== 'pending'">✅ Verify</button>
+              <button class="cp-btn cp-btn-danger" (click)="markKycRejected()" [disabled]="kycStatus !== 'pending'">❌ Reject</button>
             </div>
           </div>
+
+          <!-- PERFORMANCE STATS -->
+          <div class="cp-card">
+            <div class="cp-card-title">📊 Performance</div>
+            <div class="cp-stats-grid">
+              <div class="cp-stat"><div class="cp-stat-val">{{ avgCaptainRating | number:'1.1-1' }}</div><div class="cp-stat-label">Captain Rating</div></div>
+              <div class="cp-stat"><div class="cp-stat-val">{{ avgRideRating | number:'1.1-1' }}</div><div class="cp-stat-label">Ride Rating</div></div>
+              <div class="cp-stat"><div class="cp-stat-val">{{ totalHearts }}</div><div class="cp-stat-label">❤️ Hearts</div></div>
+              <div class="cp-stat"><div class="cp-stat-val">{{ feedbackCount }}</div><div class="cp-stat-label">Reviews</div></div>
+            </div>
+          </div>
+
         </div>
 
-        <div class="col-lg-8">
-          <div class="card p-3 mb-3">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <h5 class="mb-0">Captain Live Location</h5>
-              <button class="btn btn-sm btn-outline-primary" type="button" (click)="refreshCaptainLocation()">Refresh Location</button>
+        <!-- ══ RIGHT COLUMN ══ -->
+        <div class="cp-col-right">
+
+          <!-- LIVE LOCATION MAP -->
+          <div class="cp-card cp-map-card">
+            <div class="cp-card-header-row">
+              <div class="cp-card-title">📍 Live Location</div>
+              <button class="cp-btn cp-btn-outline" (click)="refreshCaptainLocation()">🔄 Refresh</button>
             </div>
-            <div class="small text-muted mb-2">Current: {{ captainLocationLabel }}</div>
-            <div class="small text-danger mb-2" *ngIf="locationError">{{ locationError }}</div>
+            <div class="cp-location-label">{{ captainLocationLabel }}</div>
+            <div class="cp-location-error" *ngIf="locationError">⚠️ {{ locationError }}</div>
             <iframe
               [src]="captainMapUrl | safeResourceUrl"
-              width="100%"
-              height="220"
-              frameborder="0"
-              style="border: 1px solid #dee2e6; border-radius: 10px"
-              loading="lazy"
+              width="100%" height="260" frameborder="0"
+              class="cp-map-frame" loading="lazy"
               referrerpolicy="no-referrer-when-downgrade"
             ></iframe>
           </div>
 
-          <div class="card p-3 mb-3">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-              <h5 class="mb-0">Captain Active Rides</h5>
-              <div class="d-flex gap-2 align-items-center">
-                <!-- Availability status indicator -->
-                <span class="cp-avail-badge" [class.cp-avail-busy]="isCurrentlyBusy" [class.cp-avail-free]="!isCurrentlyBusy">
-                  {{ isCurrentlyBusy ? '🔴 On a Ride' : '🟢 Available' }}
-                </span>
-                <button class="btn btn-sm btn-outline-secondary" type="button" (click)="refreshActiveRides()">Refresh</button>
-                <button class="btn btn-sm btn-outline-danger" type="button" (click)="triggerTestRideAlert()" title="Simulate incoming ride alert with sound">🧪 Test Alert</button>
+          <!-- ACTIVE RIDES -->
+          <div class="cp-card">
+            <div class="cp-card-header-row">
+              <div class="cp-card-title">🏍️ Active Rides</div>
+              <div class="cp-ride-header-actions">
+                <button class="cp-btn cp-btn-outline" (click)="refreshActiveRides()">🔄 Refresh</button>
+                <button class="cp-btn cp-btn-test" (click)="triggerTestRideAlert()" title="Test ride alert with sound">🧪 Test Sound</button>
               </div>
             </div>
-
-            <!-- Notification permission warning -->
-            <div *ngIf="notifPermission !== 'granted'" class="alert alert-warning py-2 mb-2 small">
-              <strong>⚠️ Enable notifications</strong> to receive incoming ride alerts with sound.
-              <button class="btn btn-sm btn-warning ms-2" (click)="requestNotificationPermission()">Enable Now</button>
-            </div>
-
-            <div *ngIf="readyForPickupMessage" class="alert alert-success py-2 mb-2">
-              {{ readyForPickupMessage }}
-            </div>
-
-            <div *ngIf="activeRides.length === 0" class="text-muted small">
-              No active rides available now.
-            </div>
-
-            <div class="ride-card" *ngFor="let ride of activeRides">
-              <div class="d-flex justify-content-between align-items-start gap-2">
-                <div>
-                  <div class="fw-semibold">{{ ride.id }}</div>
-                  <div class="small text-muted">{{ ride.pickup.address }} → {{ ride.drop.address }}</div>
-                  <div class="small text-muted">Customer: {{ ride.userName }} • OTP: {{ ride.otp }}</div>
+            <div class="cp-no-rides" *ngIf="activeRides.length === 0">No active rides right now</div>
+            <div class="cp-ride-card" *ngFor="let ride of activeRides">
+              <div class="cp-ride-row">
+                <div class="cp-ride-info">
+                  <div class="cp-ride-id">{{ ride.id }}</div>
+                  <div class="cp-ride-route">📍 {{ ride.pickup.address | slice:0:30 }} → {{ ride.drop.address | slice:0:30 }}</div>
+                  <div class="cp-ride-customer">👤 {{ ride.userName }} &nbsp;•&nbsp; OTP: <strong>{{ ride.otp }}</strong></div>
                 </div>
-                <span class="badge" [ngClass]="statusBadge(ride.status)">{{ ride.status }}</span>
+                <span class="cp-ride-badge" [ngClass]="statusBadge(ride.status)">{{ ride.status }}</span>
               </div>
-
-              <div class="d-flex gap-2 mt-2">
-                <button class="btn btn-sm btn-primary" type="button" (click)="openRideTracking(ride)">Open Tracking</button>
-              </div>
+              <button class="cp-btn cp-btn-primary mt-2" (click)="openRideTracking(ride)">Open Tracking →</button>
             </div>
+            <div class="cp-ready-msg" *ngIf="readyForPickupMessage">✅ {{ readyForPickupMessage }}</div>
           </div>
 
-          <div class="card p-3 mb-3" id="deliveries-section">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-              <h5 class="mb-0">Jobs and Deliveries</h5>
-              <span class="badge text-bg-dark">{{ completedRides.length }}</span>
+          <!-- JOBS & DELIVERIES -->
+          <div class="cp-card" id="deliveries-section">
+            <div class="cp-card-header-row">
+              <div class="cp-card-title">📦 Jobs & Deliveries</div>
+              <span class="cp-count-badge">{{ completedRides.length }}</span>
             </div>
-
-            <div *ngIf="completedRides.length === 0" class="text-muted small">
-              No completed or cancelled rides yet.
-            </div>
-
-            <div
-              class="delivery-card"
-              [class.highlight]="highlightedDeliveryBookingId === ride.id"
-              *ngFor="let ride of completedRides"
-            >
-              <div class="d-flex justify-content-between align-items-start gap-2">
-                <div>
-                  <div class="fw-semibold">{{ ride.id }}</div>
-                  <div class="small text-muted">{{ ride.pickup.address }} → {{ ride.drop.address }}</div>
-                  <div class="small text-muted">Status: {{ ride.status }}</div>
+            <div class="cp-no-rides" *ngIf="completedRides.length === 0">No completed rides yet</div>
+            <div class="cp-delivery-card" *ngFor="let ride of completedRides" [class.highlight]="highlightedDeliveryBookingId === ride.id">
+              <div class="cp-ride-row">
+                <div class="cp-ride-info">
+                  <div class="cp-ride-id">{{ ride.id }}</div>
+                  <div class="cp-ride-route">{{ ride.pickup.address | slice:0:25 }} → {{ ride.drop.address | slice:0:25 }}</div>
+                  <div class="cp-ride-status">Status: {{ ride.status }}</div>
                 </div>
-                <div class="text-end">
-                  <span class="badge" [ngClass]="ride.paymentDone ? 'text-bg-success' : 'text-bg-secondary'">
-                    {{ ride.paymentDone ? 'Paid' : 'Pending Payment' }}
-                  </span>
-                  <div class="small mt-1" *ngIf="ride.finalAmount">₹{{ ride.finalAmount | number: '1.0-0' }}</div>
+                <div class="cp-delivery-right">
+                  <span class="cp-pay-badge" [class.paid]="ride.paymentDone">{{ ride.paymentDone ? '✅ Paid' : 'Pending' }}</span>
+                  <div class="cp-fare-amt" *ngIf="ride.finalAmount">₹{{ ride.finalAmount | number:'1.0-0' }}</div>
                 </div>
               </div>
             </div>
           </div>
 
-          <div class="card p-3 mb-3">
-            <h5 class="mb-3">Captain Performance</h5>
-            <div class="stats-grid">
-              <div class="stat-card">
-                <div class="label">Average Captain Rating</div>
-                <div class="value">{{ avgCaptainRating }}</div>
+          <!-- RECENT COMMENTS -->
+          <div class="cp-card" *ngIf="recentComments.length > 0">
+            <div class="cp-card-title">💬 Customer Reviews</div>
+            <div class="cp-comment-card" *ngFor="let item of recentComments">
+              <div class="cp-comment-header">{{ item.userName }} <span class="cp-comment-id">• {{ item.bookingId }}</span></div>
+              <div class="cp-comment-stars">
+                ⭐ Ride {{ item.rideRating || '-' }}/5 &nbsp; 👤 Captain {{ item.captainRating || '-' }}/5
+                <span *ngIf="item.lovedCaptain"> ❤️</span>
               </div>
-              <div class="stat-card">
-                <div class="label">Average Ride Rating</div>
-                <div class="value">{{ avgRideRating }}</div>
-              </div>
-              <div class="stat-card">
-                <div class="label">Hearts Received</div>
-                <div class="value">{{ totalHearts }}</div>
-              </div>
-              <div class="stat-card">
-                <div class="label">Feedback Count</div>
-                <div class="value">{{ feedbackCount }}</div>
-              </div>
+              <div class="cp-comment-text">{{ item.feedbackText || 'No written comment.' }}</div>
             </div>
           </div>
 
-          <div class="card p-3">
-            <h5 class="mb-3">Recent Customer Comments</h5>
-            <div *ngIf="recentComments.length === 0" class="text-muted">No customer comments yet.</div>
-            <div *ngFor="let item of recentComments" class="comment-card">
-              <div class="fw-semibold">{{ item.userName }} • {{ item.bookingId }}</div>
-              <div class="small text-muted mb-1">
-                Ride {{ item.rideRating || '-' }}/5 • Captain {{ item.captainRating || '-' }}/5
-                <span *ngIf="item.lovedCaptain"> • Captain ❤️</span>
-                <span *ngIf="item.lovedRide"> • Ride ❤️</span>
-              </div>
-              <div>{{ item.feedbackText || 'No written comment.' }}</div>
-            </div>
-          </div>
         </div>
       </div>
     </div>
@@ -215,56 +214,26 @@ const CAPTAIN_KYC_STORAGE_KEY = 'delivery_captain_kyc_state';
   <!-- ══════ INCOMING RIDE ALERT OVERLAY ══════ -->
   <div class="cp-alert-overlay" *ngIf="incomingRide" (click)="$event.stopPropagation()">
     <div class="cp-alert-sheet">
-      <!-- Pulse ring -->
       <div class="cp-alert-pulse-wrap">
         <div class="cp-alert-pulse-ring"></div>
         <div class="cp-alert-pulse-ring cp-ring2"></div>
         <div class="cp-alert-icon">🏍️</div>
       </div>
-
       <div class="cp-alert-badge">NEW RIDE REQUEST</div>
       <h2 class="cp-alert-title">Incoming Ride!</h2>
-
-      <!-- Route -->
       <div class="cp-alert-route">
-        <div class="cp-alert-point">
-          <div class="cp-point-dot cp-dot-green"></div>
-          <div class="cp-point-addr">{{ incomingRide.pickup.address | slice:0:40 }}</div>
-        </div>
+        <div class="cp-alert-point"><div class="cp-point-dot cp-dot-green"></div><div class="cp-point-addr">{{ incomingRide.pickup.address | slice:0:40 }}</div></div>
         <div class="cp-alert-line"></div>
-        <div class="cp-alert-point">
-          <div class="cp-point-dot cp-dot-orange"></div>
-          <div class="cp-point-addr">{{ incomingRide.drop.address | slice:0:40 }}</div>
-        </div>
+        <div class="cp-alert-point"><div class="cp-point-dot cp-dot-orange"></div><div class="cp-point-addr">{{ incomingRide.drop.address | slice:0:40 }}</div></div>
       </div>
-
-      <!-- Details row -->
       <div class="cp-alert-meta">
-        <div class="cp-alert-meta-item">
-          <div class="cp-meta-label">Service</div>
-          <div class="cp-meta-val">{{ incomingRide.serviceType | titlecase }}</div>
-        </div>
-        <div class="cp-alert-meta-item">
-          <div class="cp-meta-label">Customer</div>
-          <div class="cp-meta-val">{{ incomingRide.userName }}</div>
-        </div>
-        <div class="cp-alert-meta-item">
-          <div class="cp-meta-label">Fare</div>
-          <div class="cp-meta-val cp-fare">₹{{ incomingRide.estimatedFare || '—' }}</div>
-        </div>
-        <div class="cp-alert-meta-item">
-          <div class="cp-meta-label">Payment</div>
-          <div class="cp-meta-val">{{ incomingRide.paymentMethod | titlecase }}</div>
-        </div>
+        <div class="cp-alert-meta-item"><div class="cp-meta-label">Service</div><div class="cp-meta-val">{{ incomingRide.serviceType | titlecase }}</div></div>
+        <div class="cp-alert-meta-item"><div class="cp-meta-label">Customer</div><div class="cp-meta-val">{{ incomingRide.userName }}</div></div>
+        <div class="cp-alert-meta-item"><div class="cp-meta-label">Fare</div><div class="cp-meta-val cp-fare">₹{{ incomingRide.estimatedFare || '—' }}</div></div>
+        <div class="cp-alert-meta-item"><div class="cp-meta-label">Payment</div><div class="cp-meta-val">{{ incomingRide.paymentMethod | titlecase }}</div></div>
       </div>
-
-      <!-- Countdown bar -->
-      <div class="cp-alert-countdown-wrap">
-        <div class="cp-alert-countdown-bar" [style.width.%]="alertCountdownPct"></div>
-      </div>
+      <div class="cp-alert-countdown-wrap"><div class="cp-alert-countdown-bar" [style.width.%]="alertCountdownPct"></div></div>
       <div class="cp-alert-countdown-label">{{ alertCountdown }}s to auto-decline</div>
-
-      <!-- Accept / Decline -->
       <div class="cp-alert-actions">
         <button class="cp-decline-btn" (click)="declineRide()">✕ Decline</button>
         <button class="cp-accept-btn" (click)="acceptRide()">
@@ -275,194 +244,226 @@ const CAPTAIN_KYC_STORAGE_KEY = 'delivery_captain_kyc_state';
     </div>
   </div>
   `,
-  styles: [
-    `
-      .dp-image {
-        width: 128px;
-        height: 128px;
-        border-radius: 50%;
-        object-fit: cover;
-        border: 3px solid #dee2e6;
-        background: #f8f9fa;
-      }
+  styles: [`
+    /* ══ PAGE LAYOUT ══ */
+    .cp-page { padding: 16px; max-width: 1200px; margin: 0 auto; }
 
-      .stats-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        gap: 10px;
-      }
+    .cp-grid {
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      gap: 16px;
+      margin-top: 16px;
+    }
+    @media (max-width: 768px) {
+      .cp-grid { grid-template-columns: 1fr; }
+    }
 
-      .stat-card {
-        border: 1px solid #dee2e6;
-        border-radius: 10px;
-        padding: 10px;
-      }
+    /* ══ HERO ══ */
+    .cp-hero {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 60%, #0f3460 100%);
+      border-radius: 20px; padding: 24px; color: #fff; margin-bottom: 4px;
+    }
+    .cp-hero-inner { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .cp-hero-avatar-wrap { position: relative; flex-shrink: 0; }
+    .cp-hero-avatar {
+      width: 88px; height: 88px; border-radius: 50%;
+      object-fit: cover; border: 3px solid rgba(255,255,255,0.3);
+    }
+    .cp-hero-status-dot {
+      position: absolute; bottom: 4px; right: 4px;
+      width: 18px; height: 18px; border-radius: 50%;
+      background: #4caf50; border: 3px solid #1a1a2e;
+    }
+    .cp-hero-status-dot.busy { background: #ef5350; }
+    .cp-hero-info { flex: 1; min-width: 160px; }
+    .cp-hero-name { font-size: 22px; font-weight: 800; margin: 0 0 4px; }
+    .cp-hero-meta { font-size: 13px; color: rgba(255,255,255,0.65); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .cp-hero-veh { background: rgba(255,255,255,0.12); border-radius: 20px; padding: 2px 10px; font-size: 12px; }
+    .cp-veh-icon { margin-right: 4px; }
+    .cp-hero-badges { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+    .cp-kyc-badge {
+      font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; border: 1px solid transparent;
+    }
+    .cp-kyc-badge.kyc-verified { background: #dcfce7; color: #166534; border-color: #86efac; }
+    .cp-kyc-badge.kyc-pending  { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+    .cp-kyc-badge.kyc-rejected, .cp-kyc-badge.kyc-not-started { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+    .cp-avail-chip { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; background: rgba(76,175,80,0.2); color: #a5f3a5; }
+    .cp-avail-chip.busy { background: rgba(239,83,80,0.2); color: #fca5a5; }
+    .cp-hero-actions { display: flex; gap: 8px; margin-left: auto; }
+    .cp-dp-btn {
+      width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,0.15);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; font-size: 18px; border: none; transition: background .15s;
+    }
+    .cp-dp-btn:hover { background: rgba(255,255,255,0.25); }
+    .cp-save-dp-btn {
+      width: 40px; height: 40px; border-radius: 50%; background: #4caf50;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; font-size: 16px; border: none;
+    }
 
-      .stat-card .label {
-        font-size: 12px;
-        color: #6c757d;
-      }
+    /* ══ NOTIFICATION BANNER ══ */
+    .cp-notif-banner {
+      background: #fff8e1; border: 1px solid #fcd34d; border-radius: 12px;
+      padding: 10px 16px; display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; font-size: 13px; font-weight: 600; color: #92400e; margin-top: 12px;
+    }
+    .cp-notif-banner button {
+      background: #f59e0b; color: #fff; border: none; border-radius: 8px;
+      padding: 5px 14px; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap;
+    }
 
-      .stat-card .value {
-        font-size: 22px;
-        font-weight: 700;
-      }
+    /* ══ CARDS ══ */
+    .cp-card {
+      background: #fff; border-radius: 16px;
+      border: 1px solid #f0f0f5; padding: 18px;
+      margin-bottom: 14px; box-shadow: 0 2px 12px rgba(0,0,0,.04);
+    }
+    .cp-card-title { font-size: 14px; font-weight: 800; color: #1a1a2e; margin-bottom: 14px; letter-spacing: 0.3px; }
+    .cp-card-header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 8px; flex-wrap: wrap; }
+    .cp-card-header-row .cp-card-title { margin-bottom: 0; }
 
-      .comment-card {
-        border: 1px solid #e9ecef;
-        border-radius: 10px;
-        padding: 10px;
-        margin-bottom: 8px;
-      }
+    /* ══ VEHICLE BIG ICON ══ */
+    .cp-veh-big-icon { font-size: 48px; text-align: center; margin-bottom: 14px; }
 
-      .ride-card {
-        border: 1px solid #e9ecef;
-        border-radius: 10px;
-        padding: 10px;
-        margin-bottom: 8px;
-        background: #fff;
-      }
+    /* ══ INFO ROWS ══ */
+    .cp-info-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 7px 0; border-bottom: 1px solid #f5f5f8; font-size: 13px;
+    }
+    .cp-info-row:last-child { border-bottom: none; }
+    .cp-info-label { color: #999; font-weight: 500; }
+    .cp-info-val { font-weight: 700; color: #222; text-align: right; max-width: 60%; word-break: break-all; }
+    .cp-mono { font-family: monospace; font-size: 12px; }
 
-      .delivery-card {
-        border: 1px solid #e9ecef;
-        border-radius: 10px;
-        padding: 10px;
-        margin-bottom: 8px;
-        background: #fff;
-      }
+    /* ══ KYC CARD ══ */
+    .cp-kyc-card { }
+    .cp-kyc-hint { font-size: 12px; color: #888; margin-bottom: 12px; }
+    .cp-kyc-status-badge {
+      font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; border: 1px solid transparent;
+    }
+    .cp-kyc-status-badge.kyc-verified { background: #dcfce7; color: #166534; border-color: #86efac; }
+    .cp-kyc-status-badge.kyc-pending  { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+    .cp-kyc-status-badge.kyc-rejected, .cp-kyc-status-badge.kyc-not-started { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+    .cp-form-label { font-size: 12px; font-weight: 600; color: #666; display: block; margin-bottom: 4px; margin-top: 10px; }
+    .cp-select, .cp-input {
+      width: 100%; border: 1.5px solid #e5e7eb; border-radius: 8px;
+      padding: 7px 10px; font-size: 13px; outline: none; background: #fafafa;
+    }
+    .cp-select:focus, .cp-input:focus { border-color: #6366f1; background: #fff; }
+    .cp-masked { font-size: 11px; color: #999; margin-top: 4px; font-family: monospace; }
+    .cp-kyc-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
 
-      .delivery-card.highlight {
-        border-color: #0d6efd;
-        box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.15);
-      }
+    /* ══ BUTTONS ══ */
+    .cp-btn {
+      padding: 7px 14px; border-radius: 8px; font-size: 12px; font-weight: 700;
+      border: none; cursor: pointer; transition: all .15s; white-space: nowrap;
+    }
+    .cp-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .cp-btn-primary   { background: #4f46e5; color: #fff; }
+    .cp-btn-primary:hover:not(:disabled) { background: #4338ca; }
+    .cp-btn-success   { background: #16a34a; color: #fff; }
+    .cp-btn-success:hover:not(:disabled) { background: #15803d; }
+    .cp-btn-danger    { background: #dc2626; color: #fff; }
+    .cp-btn-danger:hover:not(:disabled)  { background: #b91c1c; }
+    .cp-btn-outline   { background: transparent; border: 1.5px solid #d1d5db; color: #555; }
+    .cp-btn-outline:hover { background: #f3f4f6; }
+    .cp-btn-test      { background: #fef3c7; border: 1.5px solid #fbbf24; color: #92400e; }
+    .cp-btn-test:hover { background: #fde68a; }
+    .mt-2 { margin-top: 8px; }
 
-      .cp-avail-badge {
-        display: inline-flex; align-items: center;
-        padding: 3px 10px; border-radius: 20px;
-        font-size: 12px; font-weight: 700;
-      }
-      .cp-avail-free { background: #dcfce7; color: #166534; }
-      .cp-avail-busy { background: #fee2e2; color: #991b1b; }
+    /* ══ MAP ══ */
+    .cp-map-card { }
+    .cp-map-frame { border-radius: 12px; border: 1px solid #e5e7eb; display: block; }
+    .cp-location-label { font-size: 12px; color: #888; margin-bottom: 8px; }
+    .cp-location-error { font-size: 12px; color: #dc2626; margin-bottom: 8px; }
 
-      /* ══ INCOMING RIDE ALERT OVERLAY ══ */
-      .cp-alert-overlay {
-        position: fixed; inset: 0; z-index: 9999;
-        background: rgba(0,0,0,.7);
-        display: flex; align-items: flex-end; justify-content: center;
-        animation: fadeIn .2s ease;
-      }
-      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    /* ══ STATS ══ */
+    .cp-stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .cp-stat { background: #f8f9ff; border-radius: 12px; padding: 12px; text-align: center; }
+    .cp-stat-val { font-size: 24px; font-weight: 800; color: #1a1a2e; }
+    .cp-stat-label { font-size: 11px; color: #888; margin-top: 2px; }
 
-      .cp-alert-sheet {
-        width: 100%; max-width: 480px;
-        background: #fff; border-radius: 28px 28px 0 0;
-        padding: 24px 20px 36px;
-        animation: slideUp .28s ease;
-        text-align: center;
-      }
-      @keyframes slideUp { from { transform: translateY(50px); opacity: .4; } to { transform: translateY(0); opacity: 1; } }
+    /* ══ RIDE CARDS ══ */
+    .cp-ride-header-actions { display: flex; gap: 8px; align-items: center; }
+    .cp-no-rides { font-size: 13px; color: #aaa; text-align: center; padding: 16px 0; }
+    .cp-ride-card {
+      border: 1.5px solid #e5e7eb; border-radius: 12px; padding: 12px; margin-bottom: 10px; background: #fff;
+    }
+    .cp-ride-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+    .cp-ride-info { flex: 1; }
+    .cp-ride-id { font-size: 13px; font-weight: 800; color: #1a1a2e; }
+    .cp-ride-route { font-size: 12px; color: #666; margin-top: 2px; }
+    .cp-ride-customer { font-size: 12px; color: #888; margin-top: 2px; }
+    .cp-ride-badge { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
+    .text-bg-primary { background: #dbeafe; color: #1d4ed8; }
+    .text-bg-warning { background: #fef3c7; color: #92400e; }
+    .text-bg-success { background: #dcfce7; color: #166534; }
+    .text-bg-secondary { background: #f3f4f6; color: #6b7280; }
+    .cp-ready-msg { font-size: 12px; color: #16a34a; background: #f0fdf4; border-radius: 8px; padding: 8px 12px; margin-top: 8px; }
 
-      .cp-alert-pulse-wrap {
-        position: relative; width: 90px; height: 90px;
-        margin: 0 auto 14px; display: flex; align-items: center; justify-content: center;
-      }
-      .cp-alert-pulse-ring {
-        position: absolute; inset: 0; border-radius: 50%;
-        border: 3px solid #e53935; opacity: .5;
-        animation: ringGrow 1.4s ease-out infinite;
-      }
-      .cp-ring2 { animation-delay: .7s; }
-      @keyframes ringGrow { 0% { transform: scale(.8); opacity: .6; } 100% { transform: scale(1.7); opacity: 0; } }
-      .cp-alert-icon { font-size: 40px; z-index: 1; }
+    /* ══ DELIVERY CARDS ══ */
+    .cp-delivery-card {
+      border: 1.5px solid #e5e7eb; border-radius: 12px; padding: 12px; margin-bottom: 10px;
+    }
+    .cp-delivery-card.highlight { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.1); }
+    .cp-delivery-right { text-align: right; flex-shrink: 0; }
+    .cp-pay-badge { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; background: #f3f4f6; color: #6b7280; }
+    .cp-pay-badge.paid { background: #dcfce7; color: #166534; }
+    .cp-fare-amt { font-size: 15px; font-weight: 800; color: #1a1a2e; margin-top: 4px; }
+    .cp-ride-status { font-size: 11px; color: #aaa; margin-top: 2px; }
+    .cp-count-badge { background: #1a1a2e; color: #fff; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; }
 
-      .cp-alert-badge {
-        display: inline-block; background: #e53935; color: #fff;
-        font-size: 11px; font-weight: 800; letter-spacing: .8px;
-        padding: 4px 12px; border-radius: 20px; margin-bottom: 8px;
-        animation: alertPulse 1s ease-in-out infinite;
-      }
-      @keyframes alertPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(229,57,53,.4); } 50% { box-shadow: 0 0 0 8px rgba(229,57,53,0); } }
+    /* ══ COMMENTS ══ */
+    .cp-comment-card { border: 1px solid #f0f0f5; border-radius: 10px; padding: 10px; margin-bottom: 8px; }
+    .cp-comment-header { font-size: 13px; font-weight: 700; color: #1a1a2e; }
+    .cp-comment-id { font-weight: 400; color: #999; font-size: 11px; }
+    .cp-comment-stars { font-size: 12px; color: #888; margin: 3px 0; }
+    .cp-comment-text { font-size: 13px; color: #444; }
 
-      .cp-alert-title { font-size: 24px; font-weight: 900; color: #111; margin: 0 0 16px; }
-
-      .cp-alert-route {
-        background: #f8f9fa; border-radius: 14px;
-        padding: 12px 16px; margin-bottom: 14px; text-align: left;
-      }
-      .cp-alert-point { display: flex; align-items: center; gap: 10px; }
-      .cp-alert-line { width: 1.5px; height: 14px; background: #ddd; margin-left: 7px; }
-      .cp-point-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
-      .cp-dot-green { background: #4caf50; }
-      .cp-dot-orange { background: #f4511e; }
-      .cp-point-addr { font-size: 13px; font-weight: 600; color: #333; }
-
-      .cp-alert-meta {
-        display: grid; grid-template-columns: 1fr 1fr;
-        gap: 10px; margin-bottom: 16px; text-align: left;
-      }
-      .cp-alert-meta-item { background: #f8f9fa; border-radius: 10px; padding: 10px 12px; }
-      .cp-meta-label { font-size: 10px; font-weight: 700; color: #aaa; text-transform: uppercase; margin-bottom: 3px; }
-      .cp-meta-val { font-size: 14px; font-weight: 800; color: #111; }
-      .cp-fare { color: #e53935; }
-
-      .cp-alert-countdown-wrap {
-        height: 4px; background: #f0f0f0; border-radius: 2px;
-        overflow: hidden; margin-bottom: 6px;
-      }
-      .cp-alert-countdown-bar {
-        height: 100%; background: #e53935; border-radius: 2px;
-        transition: width 1s linear;
-      }
-      .cp-alert-countdown-label { font-size: 12px; color: #aaa; margin-bottom: 16px; }
-
-      .cp-alert-actions { display: flex; gap: 12px; }
-      .cp-decline-btn {
-        flex: 1; padding: 16px; border: 2px solid #e0e0e0;
-        background: #fff; border-radius: 16px;
-        font-size: 15px; font-weight: 700; color: #666; cursor: pointer;
-        transition: all .15s;
-      }
-      .cp-decline-btn:hover { border-color: #e53935; color: #e53935; background: #fff5f5; }
-      .cp-accept-btn {
-        flex: 2; padding: 16px; border: none;
-        background: linear-gradient(135deg, #4caf50, #2e7d32);
-        border-radius: 16px; font-size: 16px; font-weight: 800; color: #fff;
-        cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
-        box-shadow: 0 4px 14px rgba(76,175,80,.4);
-        animation: acceptPulse 1.5s ease-in-out infinite;
-      }
-      @keyframes acceptPulse { 0%,100% { box-shadow: 0 4px 14px rgba(76,175,80,.4); } 50% { box-shadow: 0 6px 20px rgba(76,175,80,.7); } }
-
-      .verified-driver-badge {
-        display: inline-flex;
-        align-items: center;
-        border-radius: 999px;
-        font-size: 12px;
-        font-weight: 700;
-        padding: 4px 10px;
-        border: 1px solid transparent;
-      }
-
-      .verified-driver-badge.kyc-verified {
-        background: #dcfce7;
-        color: #166534;
-        border-color: #86efac;
-      }
-
-      .verified-driver-badge.kyc-pending {
-        background: #fef3c7;
-        color: #92400e;
-        border-color: #fcd34d;
-      }
-
-      .verified-driver-badge.kyc-rejected,
-      .verified-driver-badge.kyc-not-started {
-        background: #fee2e2;
-        color: #991b1b;
-        border-color: #fecaca;
-      }
-    `
-  ]
+    /* ══ INCOMING RIDE ALERT OVERLAY ══ */
+    .cp-alert-overlay {
+      position: fixed; inset: 0; z-index: 9999;
+      background: rgba(0,0,0,.75);
+      display: flex; align-items: flex-end; justify-content: center;
+      animation: fadeIn .2s ease;
+    }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .cp-alert-sheet {
+      width: 100%; max-width: 480px; background: #fff;
+      border-radius: 28px 28px 0 0; padding: 24px 20px 36px;
+      animation: slideUp .28s ease; text-align: center;
+    }
+    @keyframes slideUp { from { transform: translateY(50px); opacity:.4; } to { transform: translateY(0); opacity:1; } }
+    .cp-alert-pulse-wrap { position: relative; width: 90px; height: 90px; margin: 0 auto 14px; display: flex; align-items: center; justify-content: center; }
+    .cp-alert-pulse-ring { position: absolute; inset: 0; border-radius: 50%; border: 3px solid #e53935; opacity: .5; animation: ringGrow 1.4s ease-out infinite; }
+    .cp-ring2 { animation-delay: .7s; }
+    @keyframes ringGrow { 0% { transform: scale(.8); opacity: .6; } 100% { transform: scale(1.7); opacity: 0; } }
+    .cp-alert-icon { font-size: 40px; z-index: 1; }
+    .cp-alert-badge { display: inline-block; background: #e53935; color: #fff; font-size: 11px; font-weight: 800; letter-spacing: .8px; padding: 4px 12px; border-radius: 20px; margin-bottom: 8px; animation: alertPulse 1s ease-in-out infinite; }
+    @keyframes alertPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(229,57,53,.4); } 50% { box-shadow: 0 0 0 8px rgba(229,57,53,0); } }
+    .cp-alert-title { font-size: 24px; font-weight: 900; color: #111; margin: 0 0 16px; }
+    .cp-alert-route { background: #f8f9fa; border-radius: 14px; padding: 12px 16px; margin-bottom: 14px; text-align: left; }
+    .cp-alert-point { display: flex; align-items: center; gap: 10px; }
+    .cp-alert-line { width: 1.5px; height: 14px; background: #ddd; margin-left: 7px; }
+    .cp-point-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+    .cp-dot-green { background: #4caf50; }
+    .cp-dot-orange { background: #f4511e; }
+    .cp-point-addr { font-size: 13px; font-weight: 600; color: #333; }
+    .cp-alert-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; text-align: left; }
+    .cp-alert-meta-item { background: #f8f9fa; border-radius: 10px; padding: 10px 12px; }
+    .cp-meta-label { font-size: 10px; font-weight: 700; color: #aaa; text-transform: uppercase; margin-bottom: 3px; }
+    .cp-meta-val { font-size: 14px; font-weight: 800; color: #111; }
+    .cp-fare { color: #e53935; }
+    .cp-alert-countdown-wrap { height: 4px; background: #f0f0f0; border-radius: 2px; overflow: hidden; margin-bottom: 6px; }
+    .cp-alert-countdown-bar { height: 100%; background: #e53935; border-radius: 2px; transition: width 1s linear; }
+    .cp-alert-countdown-label { font-size: 12px; color: #aaa; margin-bottom: 16px; }
+    .cp-alert-actions { display: flex; gap: 12px; }
+    .cp-decline-btn { flex: 1; padding: 16px; border: 2px solid #e0e0e0; background: #fff; border-radius: 16px; font-size: 15px; font-weight: 700; color: #666; cursor: pointer; transition: all .15s; }
+    .cp-decline-btn:hover { border-color: #e53935; color: #e53935; background: #fff5f5; }
+    .cp-accept-btn { flex: 2; padding: 16px; border: none; background: linear-gradient(135deg, #4caf50, #2e7d32); border-radius: 16px; font-size: 16px; font-weight: 800; color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 4px 14px rgba(76,175,80,.4); animation: acceptPulse 1.5s ease-in-out infinite; }
+    @keyframes acceptPulse { 0%,100% { box-shadow: 0 4px 14px rgba(76,175,80,.4); } 50% { box-shadow: 0 6px 20px rgba(76,175,80,.7); } }
+  `]
 })
 export class CaptainProfileComponent implements OnInit, OnDestroy {
   captain: AppUser | null = null;
@@ -696,6 +697,13 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
 
   get canSubmitKyc(): boolean {
     return this.kycDocumentType.trim().length > 0 && this.kycDocumentNumber.trim().length >= 6;
+  }
+
+  vehicleEmoji(vehicle: string | undefined): string {
+    const map: Record<string, string> = {
+      bike: '🏍️', auto: '🛺', car: '🚗', scooter: '🛵', van: '🚐', truck: '🚛'
+    };
+    return map[vehicle?.toLowerCase() || ''] || '🚗';
   }
 
   kycStatusLabel(status: KycStatus): string {

@@ -203,24 +203,42 @@ import { SafeResourceUrlPipe } from '../../shared/pipes/safe-resource-url.pipe';
                 <button class="btn btn-sm btn-primary" type="button" (click)="startRideByCaptainOtp(booking)">Verify OTP & Start</button>
               </div>
             </div>
-            <div class="d-flex gap-2 mb-2">
-              <a class="btn btn-sm btn-outline-primary" [href]="callLink(booking.driverPhone)">Call Captain</a>
-              <a class="btn btn-sm btn-outline-success" [href]="whatsAppLink(booking.driverPhone)" target="_blank" rel="noopener">WhatsApp Captain</a>
-              <a class="btn btn-sm btn-outline-dark" [href]="shareTripWhatsAppLink(booking)" target="_blank" rel="noopener">Share Live Trip</a>
-              <button class="btn btn-sm btn-outline-danger" type="button" *ngIf="canTriggerSos()" (click)="triggerSos(booking)">SOS</button>
-              <button class="btn btn-sm btn-danger" type="button" *ngIf="canCancelRide(booking)" (click)="showCancelDialog = true">Cancel Ride</button>
+            <div class="d-flex gap-2 mb-2 flex-wrap">
+              <a class="btn btn-sm btn-outline-primary" [href]="callLink(booking.driverPhone)">📞 Call Captain</a>
+              <a class="btn btn-sm btn-outline-success" [href]="whatsAppLink(booking.driverPhone)" target="_blank" rel="noopener">💬 WhatsApp</a>
+              <a class="btn btn-sm btn-outline-dark" [href]="shareTripWhatsAppLink(booking)" target="_blank" rel="noopener">🔗 Share Trip</a>
+              <button class="btn btn-sm btn-outline-danger" type="button" *ngIf="canTriggerSos()" (click)="triggerSos(booking)">🆘 SOS</button>
             </div>
+
+            <!-- Cancel Ride — prominent card -->
+            <div class="cancel-ride-card mb-3" *ngIf="canCancelRide(booking)">
+              <div class="cancel-ride-inner">
+                <div>
+                  <div class="cancel-ride-title">Need to cancel?</div>
+                  <div class="cancel-ride-sub">You can cancel before the ride starts.</div>
+                </div>
+                <button class="btn btn-sm btn-danger" type="button" (click)="showCancelDialog = true">✕ Cancel Ride</button>
+              </div>
+            </div>
+
             <div class="alert alert-secondary mb-3">{{ booking.notification }}</div>
 
-            <!-- Live Chat Board -->
-            <div class="chat-board mb-3" *ngIf="booking.status === 'assigned' || booking.status === 'pickup_in_progress' || booking.status === 'in_transit'">
+            <!-- Live Chat Board — available from booking creation -->
+            <div class="chat-board mb-3" *ngIf="booking.status !== 'cancelled' && booking.status !== 'completed' && booking.status !== 'delivered'">
               <div class="chat-header">
-                <strong>Live Chat</strong>
+                <div class="chat-header-left">
+                  <span class="chat-header-title">💬 Chat with Captain</span>
+                  <span class="chat-status-dot" [class.active]="booking.status !== 'created'"></span>
+                  <span class="chat-status-label">{{ booking.status === 'created' ? 'Waiting for captain...' : 'Captain connected' }}</span>
+                </div>
                 <span class="badge bg-primary" *ngIf="unreadMessageCount > 0">{{ unreadMessageCount }} new</span>
               </div>
               <div class="chat-messages">
+                <div class="chat-empty" *ngIf="chatMessages.length === 0">
+                  {{ booking.status === 'created' ? '🕐 Your message will be delivered once a captain accepts the ride.' : 'No messages yet. Say hello! 👋' }}
+                </div>
                 <div class="message" *ngFor="let msg of chatMessages" [class.from-captain]="msg.role === 'captain'" [class.from-customer]="msg.role === 'customer'">
-                  <div class="message-role">{{ msg.role === 'captain' ? 'Captain' : 'You' }}</div>
+                  <div class="message-role">{{ msg.role === 'captain' ? '🏍️ Captain' : '👤 You' }}</div>
                   <div class="message-text">{{ msg.text }}</div>
                   <div class="message-time">{{ msg.time | date: 'HH:mm' }}</div>
                 </div>
@@ -228,9 +246,9 @@ import { SafeResourceUrlPipe } from '../../shared/pipes/safe-resource-url.pipe';
               <div class="quick-messages mb-2">
                 <button type="button" class="btn btn-sm btn-outline-secondary" *ngFor="let qm of quickMessages" (click)="sendQuickMessage(qm, booking)">{{ qm }}</button>
               </div>
-              <div class="d-flex gap-2 p-2">
+              <div class="chat-input-row">
                 <input class="form-control form-control-sm" placeholder="Type message..." [(ngModel)]="chatInput" (keydown.enter)="sendChatMessage(booking)" />
-                <button class="btn btn-sm btn-primary" type="button" (click)="sendChatMessage(booking)">Send</button>
+                <button class="btn btn-sm btn-primary" type="button" (click)="sendChatMessage(booking)">Send ➤</button>
               </div>
             </div>
 
@@ -625,6 +643,40 @@ import { SafeResourceUrlPipe } from '../../shared/pipes/safe-resource-url.pipe';
 
     .progress-line.completed {
       background: #28a745;
+    }
+
+    /* ── Cancel Ride Card ── */
+    .cancel-ride-card {
+      border: 1.5px solid #fecaca;
+      background: #fff5f5;
+      border-radius: 12px;
+      padding: 12px 16px;
+    }
+    .cancel-ride-inner {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+    .cancel-ride-title { font-size: 14px; font-weight: 700; color: #991b1b; }
+    .cancel-ride-sub   { font-size: 12px; color: #b91c1c; margin-top: 2px; }
+
+    /* ── Chat enhancements ── */
+    .chat-header-left { display: flex; align-items: center; gap: 8px; }
+    .chat-header-title { font-size: 13px; font-weight: 700; }
+    .chat-status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #9ca3af; flex-shrink: 0;
+    }
+    .chat-status-dot.active { background: #22c55e; }
+    .chat-status-label { font-size: 11px; color: #6b7280; }
+    .chat-empty {
+      text-align: center; color: #9ca3af;
+      font-size: 13px; padding: 24px 12px; font-style: italic;
+    }
+    .chat-input-row {
+      display: flex; gap: 8px; padding: 8px 12px;
+      border-top: 1px solid #dee2e6; background: #fff;
     }
 
     .chat-board {
