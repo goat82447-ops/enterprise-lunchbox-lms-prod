@@ -29,6 +29,14 @@ export class NotificationService {
 
     this.pushBrowserNotification(notification);
 
+    // Auto-play sound for every notification
+    if (level === 'success') {
+      this.playSound('success');
+    } else if (level === 'error' || level === 'warning') {
+      this.playSound('info');
+    }
+    // 'info' level is silent by default to avoid noise on routine messages
+
     setTimeout(() => {
       this.dismiss(notification.id);
     }, this.autoDismissMs);
@@ -64,6 +72,56 @@ export class NotificationService {
     }
 
     return Notification.requestPermission();
+  }
+
+  /** Play a Web Audio sound. type: 'alert' = ride-style beeps, 'success' = cash chime, 'info' = soft ping */
+  playSound(type: 'alert' | 'success' | 'info' = 'info'): void {
+    if (typeof window === 'undefined') return;
+    const AudioCtx = (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext
+      || (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+
+    const doPlay = () => {
+      if (type === 'alert') {
+        [{ freq: 1400, s: 0, d: 0.1 }, { freq: 1600, s: 0.13, d: 0.1 }, { freq: 1800, s: 0.26, d: 0.18 }].forEach(b => {
+          const osc = ctx.createOscillator(); const g = ctx.createGain();
+          osc.type = 'square'; osc.frequency.value = b.freq;
+          g.gain.setValueAtTime(0.0001, ctx.currentTime + b.s);
+          g.gain.exponentialRampToValueAtTime(0.5, ctx.currentTime + b.s + 0.01);
+          g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + b.s + b.d);
+          osc.connect(g); g.connect(ctx.destination);
+          osc.start(ctx.currentTime + b.s); osc.stop(ctx.currentTime + b.s + b.d + 0.01);
+        });
+        setTimeout(() => ctx.close().catch(() => void 0), 700);
+      } else if (type === 'success') {
+        [{ freq: 880, s: 0, d: 0.12 }, { freq: 1320, s: 0.14, d: 0.2 }].forEach(b => {
+          const osc = ctx.createOscillator(); const g = ctx.createGain();
+          osc.type = 'sine'; osc.frequency.value = b.freq;
+          g.gain.setValueAtTime(0.0001, ctx.currentTime + b.s);
+          g.gain.exponentialRampToValueAtTime(0.35, ctx.currentTime + b.s + 0.01);
+          g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + b.s + b.d);
+          osc.connect(g); g.connect(ctx.destination);
+          osc.start(ctx.currentTime + b.s); osc.stop(ctx.currentTime + b.s + b.d + 0.01);
+        });
+        setTimeout(() => ctx.close().catch(() => void 0), 500);
+      } else {
+        const osc = ctx.createOscillator(); const g = ctx.createGain();
+        osc.type = 'sine'; osc.frequency.value = 660;
+        g.gain.setValueAtTime(0.0001, ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.18);
+        osc.connect(g); g.connect(ctx.destination);
+        osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.2);
+        setTimeout(() => ctx.close().catch(() => void 0), 400);
+      }
+    };
+
+    if (ctx.state === 'suspended') {
+      ctx.resume().then(doPlay).catch(() => void 0);
+    } else {
+      doPlay();
+    }
   }
 
   private pushBrowserNotification(notification: AppNotification): void {
