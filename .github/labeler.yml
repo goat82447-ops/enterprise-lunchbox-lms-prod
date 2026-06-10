@@ -6,10 +6,10 @@ bug:
       - 'Frontend/lunchbox-app/src/app/shared/**'
 
 enhancement:
-  - all:
-    - changed-files:
-      - any-glob-to-any-file:
-        - added-files: 'Frontend/lunchbox-app/src/app/features/**/*.ts'
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'Frontend/lunchbox-app/src/app/features/**/*.ts'
+      - 'Frontend/lunchbox-app/src/app/features/**/*.component.ts'
 
 documentation:
   - changed-files:
@@ -22,3 +22,4 @@ chore:
       - 'Frontend/lunchbox-app/package.json'
       - 'Frontend/lunchbox-app/angular.json'
       - '.github/**'
+      - '**/*.yml'
