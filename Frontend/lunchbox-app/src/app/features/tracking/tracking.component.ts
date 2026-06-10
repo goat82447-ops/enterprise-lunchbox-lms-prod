@@ -922,6 +922,8 @@ export class TrackingComponent implements OnInit, OnDestroy {
   private nowTickMs = Date.now();
   private captainPaymentRedirectHandled = false;
   private statusRedirectHandled = false;
+  /** True only when the booking was in a live/active state when first opened this session */
+  private bookingOpenedAsLive = false;
   /** Tracks booking IDs for which recordUserAction('tracking_viewed') has already been sent */
   private readonly trackingViewedIds = new Set<string>();
   /** Tracks the booking ID for which setupLiveTracking was last called to avoid restarting on every poll */
@@ -959,8 +961,9 @@ export class TrackingComponent implements OnInit, OnDestroy {
         return;
       }
 
-      // One-time per booking: record tracking view action
+      // One-time per booking: record whether it was live when opened, and log the view action
       if (!this.trackingViewedIds.has(booking.id)) {
+        this.bookingOpenedAsLive = this.isLiveStatus(booking.status);
         this.trackingViewedIds.add(booking.id);
         this.authService
           .recordUserAction('tracking_viewed', { bookingId: booking.id, status: booking.status })
@@ -1074,7 +1077,9 @@ export class TrackingComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const candidate = this.liveBookings[0] || this.pastBookings[0];
+    // Only auto-navigate to a live ride. Past/completed rides should stay in the list
+    // so the user can browse them without being immediately redirected.
+    const candidate = this.liveBookings[0];
     if (!candidate) {
       return;
     }
@@ -1713,6 +1718,12 @@ export class TrackingComponent implements OnInit, OnDestroy {
     }
 
     if (booking.status !== 'completed' && booking.status !== 'cancelled') {
+      return;
+    }
+
+    // Only redirect home if the booking was LIVE when the user opened this view.
+    // If the user opened a past/completed ride for review, do NOT redirect them away.
+    if (!this.bookingOpenedAsLive) {
       return;
     }
 
