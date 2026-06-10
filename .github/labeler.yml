@@ -1,0 +1,34 @@
+bug:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'Frontend/lunchbox-app/src/app/features/**'
+      - 'Frontend/lunchbox-app/src/app/core/**'
+      - 'Frontend/lunchbox-app/src/app/shared/**'
+
+enhancement:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'Frontend/lunchbox-app/src/app/features/**/*.ts'
+      - 'Frontend/lunchbox-app/src/app/features/**/*.component.ts'
+
+documentation:
+  - changed-files:
+    - any-glob-to-any-file:
+      - '**/*.md'
+
+chore:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'Frontend/lunchbox-app/package.json'
+      - 'Frontend/lunchbox-app/angular.json'
+      - '.github/**'
+      - '**/*.yml'
+
+prod:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'Frontend/lunchbox-app/src/environments/environment.prod.ts'
+      - 'Frontend/lunchbox-app/vercel.json'
+      - 'ZIPTen/nodejs-monorepo/.env*'
+      - 'render.yaml'
+      - 'Frontend/lunchbox-app/angular.json'
