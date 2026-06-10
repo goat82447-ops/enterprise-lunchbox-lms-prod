@@ -64,4 +64,3 @@ export const routes: Routes = [
 	{ path: 'settings', component: SettingsComponent, canActivate: [authGuard] },
 	{ path: '**', redirectTo: '/' }
 ];
-```
