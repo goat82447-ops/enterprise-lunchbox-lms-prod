@@ -21,6 +21,12 @@ import { authGuard } from './core/guards/auth.guard';
 import { adminGuard } from './core/guards/admin.guard';
 import { captainGuard } from './core/guards/captain.guard';
 import { customerGuard } from './core/guards/customer.guard';
+import { SafetyComponent } from './features/safety/safety.component';
+import { RewardsComponent } from './features/rewards/rewards.component';
+import { PowerPassComponent } from './features/power-pass/power-pass.component';
+import { CoinsComponent } from './features/coins/coins.component';
+import { ClaimsComponent } from './features/claims/claims.component';
+import { SettingsComponent } from './features/settings/settings.component';
 
 export const routes: Routes = [
 	{ path: '', component: HomeComponent },
@@ -50,5 +56,12 @@ export const routes: Routes = [
 	{ path: 'captain-profile', component: CaptainProfileComponent, canActivate: [authGuard, captainGuard] },
 	{ path: 'admin', component: AdminComponent, canActivate: [authGuard, adminGuard] },
 	{ path: 'audit', component: AuditComponent, canActivate: [authGuard, adminGuard] },
+	{ path: 'safety', component: SafetyComponent, canActivate: [authGuard] },
+	{ path: 'rewards', component: RewardsComponent, canActivate: [authGuard] },
+	{ path: 'power-pass', component: PowerPassComponent, canActivate: [authGuard] },
+	{ path: 'coins', component: CoinsComponent, canActivate: [authGuard] },
+	{ path: 'claims', component: ClaimsComponent, canActivate: [authGuard] },
+	{ path: 'settings', component: SettingsComponent, canActivate: [authGuard] },
 	{ path: '**', redirectTo: '/' }
 ];
+```
