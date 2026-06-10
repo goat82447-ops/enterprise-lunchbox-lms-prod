@@ -12,17 +12,15 @@ import { CaptainRideAlertService } from '../../../core/services/captain-ride-ale
   template: `
     <div class="cp-alert-overlay" *ngIf="incomingRide" (click)="$event.stopPropagation()">
       <div class="cp-alert-sheet">
-        <!-- Pulse ring -->
         <div class="cp-alert-pulse-wrap">
           <div class="cp-alert-pulse-ring"></div>
           <div class="cp-alert-pulse-ring cp-ring2"></div>
-          <div class="cp-alert-icon">🏍️</div>
+          <div class="cp-alert-icon">&#x1F3CD;&#xFE0F;</div>
         </div>
 
         <div class="cp-alert-badge">NEW RIDE REQUEST</div>
         <h2 class="cp-alert-title">Incoming Ride!</h2>
 
-        <!-- Route -->
         <div class="cp-alert-route">
           <div class="cp-alert-point">
             <div class="cp-point-dot cp-dot-green"></div>
@@ -35,7 +33,6 @@ import { CaptainRideAlertService } from '../../../core/services/captain-ride-ale
           </div>
         </div>
 
-        <!-- Details row -->
         <div class="cp-alert-meta">
           <div class="cp-alert-meta-item">
             <div class="cp-meta-label">Service</div>
@@ -47,7 +44,7 @@ import { CaptainRideAlertService } from '../../../core/services/captain-ride-ale
           </div>
           <div class="cp-alert-meta-item">
             <div class="cp-meta-label">Fare</div>
-            <div class="cp-meta-val cp-fare">₹{{ incomingRide.estimatedFare || '—' }}</div>
+            <div class="cp-meta-val cp-fare">&#x20B9;{{ incomingRide.estimatedFare || '&mdash;' }}</div>
           </div>
           <div class="cp-alert-meta-item">
             <div class="cp-meta-label">Payment</div>
@@ -55,15 +52,13 @@ import { CaptainRideAlertService } from '../../../core/services/captain-ride-ale
           </div>
         </div>
 
-        <!-- Countdown bar -->
         <div class="cp-alert-countdown-wrap">
           <div class="cp-alert-countdown-bar" [style.width.%]="countdownPct"></div>
         </div>
         <div class="cp-alert-countdown-label">{{ countdown }}s to auto-decline</div>
 
-        <!-- Accept / Decline -->
         <div class="cp-alert-actions">
-          <button class="cp-decline-btn" (click)="decline()">✕ Decline</button>
+          <button class="cp-decline-btn" (click)="decline()">&#x2715; Decline</button>
           <button class="cp-accept-btn" (click)="accept()">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <polyline points="20 6 9 17 4 12"/>
@@ -196,7 +191,6 @@ export class CaptainRideAlertComponent implements OnInit, OnDestroy {
       this.alertService.countdown$.subscribe(v => this.countdown = v),
       this.alertService.countdownPct$.subscribe(v => this.countdownPct = v),
       this.alertService.rideAccepted$.subscribe(rideId => {
-        // Navigate to tracking after accepting
         this.router.navigate(['/tracking', rideId]);
       })
     );
