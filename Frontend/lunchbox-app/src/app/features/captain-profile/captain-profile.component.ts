@@ -517,7 +517,7 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
       userId: 'test-user',
       userName: 'Test Customer',
       bookingFor: 'self',
-      serviceType: 'ride',
+      serviceType: 'parcel',
       paymentMethod: 'cash',
       vehicleType: 'bike',
       pickup:  { address: 'Hitech City, Hyderabad', lat: 17.4474, lng: 78.3762 },
@@ -533,12 +533,9 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
       notification: 'Test ride alert',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
-    } as Booking;
+    } as unknown as Booking;
 
-    // Directly trigger the alert service so sound + overlay fires
-    (this.captainRideAlert as unknown as { showAlert: (r: Booking) => void }).showAlert?.(fakeRide);
-
-    // Fallback: play sound directly if showAlert is private
+    this.captainRideAlert.showAlert(fakeRide);
     this.notifications.playSound('alert');
     this.notifications.push('🧪 Test alert fired! You should hear the sound and see the overlay.', 'info');
   }
@@ -558,7 +555,8 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
     private bookingService: BookingService,
     private router: Router,
     private notifications: NotificationService,
-    private route: ActivatedRoute
+    private route: ActivatedRoute,
+    private captainRideAlert: CaptainRideAlertService
   ) {}
 
   ngOnInit(): void {
