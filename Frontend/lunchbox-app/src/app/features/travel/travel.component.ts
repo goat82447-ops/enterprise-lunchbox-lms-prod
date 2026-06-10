@@ -635,22 +635,21 @@ export class TravelComponent implements OnInit, OnDestroy {
       vehicleType: this.selectedVehicle.type,
     } as any;
 
-    this.bookingService.createBooking(payload).subscribe({
-      next: (booking: any) => {
-        this.zone.run(() => {
-          this.booking = false;
-          this.bookingOtp = booking?.otp || `${Math.floor(1000 + Math.random() * 9000)}`;
-          this.step = 4;
-        });
-      },
-      error: () => {
-        this.zone.run(() => {
-          this.booking = false;
-          this.bookingOtp = `${Math.floor(1000 + Math.random() * 9000)}`;
-          this.step = 4;
-        });
-      }
-    });
+    try {
+      const user = this.auth.getCurrentUser();
+      const booking = this.bookingService.createBooking(
+        user?.id || '',
+        user?.displayName || '',
+        payload
+      );
+      this.booking = false;
+      this.bookingOtp = (booking as any)?.otp || `${Math.floor(1000 + Math.random() * 9000)}`;
+      this.step = 4;
+    } catch {
+      this.booking = false;
+      this.bookingOtp = `${Math.floor(1000 + Math.random() * 9000)}`;
+      this.step = 4;
+    }
   }
 
   trackRide(): void { this.router.navigate(['/tracking']); }
