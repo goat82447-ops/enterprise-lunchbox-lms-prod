@@ -24,7 +24,6 @@ export class CaptainRideAlertService implements OnDestroy {
   private bookingsSub: Subscription | null = null;
   private audioUnlocked = false;
 
-  // Emits when the captain accepts or declines so captain-profile can react
   readonly rideAccepted$ = new Subject<string>();
   readonly rideDeclined$ = new Subject<string>();
 
@@ -38,7 +37,6 @@ export class CaptainRideAlertService implements OnDestroy {
       const unlock = () => {
         if (this.audioUnlocked) return;
         this.audioUnlocked = true;
-        // Create a silent context to prime the audio system
         const AudioCtx = this.getAudioCtx();
         if (AudioCtx) {
           const ctx = new AudioCtx();
@@ -88,12 +86,10 @@ export class CaptainRideAlertService implements OnDestroy {
 
     const result = this.bookingService.approveByCaptain(rideId);
     if (result.success) {
-      this.notifications.push(`✅ Ride ${rideId} accepted! Head to pickup location.`, 'success');
-      this.notifications.playSound('success');
+      this.notifications.push(`Ride ${rideId} accepted! Head to pickup location.`, 'success');
       this.rideAccepted$.next(rideId);
     } else {
       this.notifications.push('Ride was already accepted by another captain.', 'warning');
-      this.notifications.playSound('info');
     }
   }
 
@@ -103,13 +99,11 @@ export class CaptainRideAlertService implements OnDestroy {
 
     this.clearTimers();
     this.notifications.push(`Ride ${ride.id} declined.`, 'warning');
-    this.notifications.playSound('info');
     this.rideDeclined$.next(ride.id);
     this.incomingRideSubject.next(null);
   }
 
   private checkForIncomingRides(): void {
-    // Auto-dismiss if the current incoming ride was taken by another captain
     const current = this.incomingRideSubject.value;
     if (current) {
       const live = this.bookingService.getAllBookingsSnapshot().find(b => b.id === current.id);
@@ -130,13 +124,11 @@ export class CaptainRideAlertService implements OnDestroy {
       if (this.notifiedRideIds.has(ride.id)) continue;
       this.notifiedRideIds.add(ride.id);
 
-      // Show alert + sound
       this.showAlert(ride);
 
-      // Also fire a browser notification if permitted
-      const message = `🏍️ New ${ride.serviceType} ride: ${this.shortAddr(ride.pickup.address)} → ${this.shortAddr(ride.drop.address)} · ₹${ride.estimatedFare || '—'}`;
+      const message = `New ${ride.serviceType} ride: ${this.shortAddr(ride.pickup.address)} to ${this.shortAddr(ride.drop.address)} Rs.${ride.estimatedFare || '0'}`;
       if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-        new Notification('🚨 New Ride Request!', {
+        new Notification('New Ride Request!', {
           body: message,
           tag: `ride-${ride.id}`,
           icon: '/assets/lunchbox-logo.svg',
@@ -146,7 +138,8 @@ export class CaptainRideAlertService implements OnDestroy {
     }
   }
 
-  private showAlert(ride: Booking): void {
+  /** Public so captain-profile can trigger test alerts */
+  showAlert(ride: Booking): void {
     this.clearTimers();
     this.incomingRideSubject.next(ride);
     this.countdownSubject.next(ALERT_COUNTDOWN_SECONDS);
@@ -181,7 +174,6 @@ export class CaptainRideAlertService implements OnDestroy {
     if (!AudioCtx) return;
 
     const ctx = new AudioCtx();
-    // Resume suspended context (browser autoplay policy) then play
     const doPlay = () => {
       const beeps = [
         { freq: 1400, start: 0,    dur: 0.1  },
