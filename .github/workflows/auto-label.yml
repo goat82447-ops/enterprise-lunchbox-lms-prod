@@ -1,0 +1,28 @@
+bug:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'Frontend/lunchbox-app/src/app/features/**'
+      - 'Frontend/lunchbox-app/src/app/core/**'
+      - 'Frontend/lunchbox-app/src/app/shared/**'
+
+enhancement:
+  - changed-files:
+    - any-glob-to-any-file:
+      - added-files: 'Frontend/lunchbox-app/src/app/features/**/*.ts'
+      - added-files: 'Frontend/lunchbox-app/src/app/features/**/*.html'
+      - added-files: 'Frontend/lunchbox-app/src/app/features/**/*.css'
+
+documentation:
+  - changed-files:
+    - any-glob-to-any-file:
+      - '**/*.md'
+
+chore:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'Frontend/lunchbox-app/package.json'
+      - 'Frontend/lunchbox-app/package-lock.json'
+      - 'Frontend/lunchbox-app/angular.json'
+      - '.github/**'
+      - '**/*.yaml'
+      - '**/*.yml'
