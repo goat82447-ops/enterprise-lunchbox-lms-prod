@@ -627,29 +627,31 @@ export class TravelComponent implements OnInit, OnDestroy {
   bookRide(): void {
     if (!this.selectedVehicle) return;
     this.booking = true;
-    const payload = {
-      serviceType: 'ride',
-      pickup: { address: this.pickupAddress, lat: this.pickupLat, lng: this.pickupLng },
-      drop: { address: this.dropAddress, lat: this.dropLat, lng: this.dropLng },
-      fare: this.calculateFare(this.selectedVehicle),
-      vehicleType: this.selectedVehicle.type,
-    } as any;
 
-    this.bookingService.createBooking(payload).subscribe({
-      next: (booking: any) => {
-        this.zone.run(() => {
-          this.booking = false;
-          this.bookingOtp = booking?.otp || `${Math.floor(1000 + Math.random() * 9000)}`;
-          this.step = 4;
-        });
-      },
-      error: () => {
-        this.zone.run(() => {
-          this.booking = false;
-          this.bookingOtp = `${Math.floor(1000 + Math.random() * 9000)}`;
-          this.step = 4;
-        });
-      }
+    const user = this.auth.getCurrentUser();
+    const userId   = user?.id            || '';
+    const userName = user?.displayName   || '';
+
+    const vehicleMap: Record<string, string> = {
+      bike: 'bike', auto: 'auto', cab: 'car', prime: 'car'
+    };
+
+    const request = {
+      bookingFor: 'self' as const,
+      serviceType: 'parcel' as const,
+      paymentMethod: 'cash' as const,
+      vehicleType: (vehicleMap[this.selectedVehicle.type] || 'auto') as any,
+      pickup: { address: this.pickupAddress, lat: this.pickupLat, lng: this.pickupLng },
+      drop:   { address: this.dropAddress,   lat: this.dropLat,   lng: this.dropLng   },
+      estimatedFare: this.calculateFare(this.selectedVehicle),
+      notificationTarget: 'all' as const,
+    };
+
+    const booking = this.bookingService.createBooking(userId, userName, request);
+    this.zone.run(() => {
+      this.booking = false;
+      this.bookingOtp = booking?.otp || `${Math.floor(1000 + Math.random() * 9000)}`;
+      this.step = 4;
     });
   }
 
