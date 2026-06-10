@@ -122,7 +122,7 @@ import { NotificationService } from '../../core/services/notification.service';
 
         <div class="profile-row-divider"></div>
 
-        <button class="profile-menu-row" type="button" (click)="router.navigate(['/booking'], { queryParams: { womenSafety: 1, service: 'parcel' } })">
+        <button class="profile-menu-row" type="button" (click)="router.navigate(['/safety'])">
           <span class="profile-menu-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
           </span>
@@ -148,7 +148,7 @@ import { NotificationService } from '../../core/services/notification.service';
 
         <div class="profile-row-divider"></div>
 
-        <button class="profile-menu-row" type="button" (click)="router.navigate(['/activity'])">
+        <button class="profile-menu-row" type="button" (click)="router.navigate(['/rewards'])">
           <span class="profile-menu-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/></svg>
           </span>
@@ -161,7 +161,7 @@ import { NotificationService } from '../../core/services/notification.service';
 
         <div class="profile-row-divider"></div>
 
-        <button class="profile-menu-row" type="button" (click)="router.navigate(['/activity'])">
+        <button class="profile-menu-row" type="button" (click)="router.navigate(['/power-pass'])">
           <span class="profile-menu-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M12 12m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0"/><path d="M6 12h.01M18 12h.01"/></svg>
           </span>
@@ -174,7 +174,7 @@ import { NotificationService } from '../../core/services/notification.service';
 
         <div class="profile-row-divider"></div>
 
-        <button class="profile-menu-row" type="button" (click)="router.navigate(['/activity'])">
+        <button class="profile-menu-row" type="button" (click)="router.navigate(['/coins'])">
           <span class="profile-menu-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="12" r="4"/><circle cx="16" cy="12" r="4"/></svg>
           </span>
@@ -203,7 +203,7 @@ import { NotificationService } from '../../core/services/notification.service';
 
         <div class="profile-row-divider"></div>
 
-        <button class="profile-menu-row" type="button" disabled>
+        <button class="profile-menu-row" type="button" (click)="router.navigate(['/claims'])">
           <span class="profile-menu-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
           </span>
@@ -215,7 +215,7 @@ import { NotificationService } from '../../core/services/notification.service';
 
         <div class="profile-row-divider"></div>
 
-        <button class="profile-menu-row" type="button" disabled>
+        <button class="profile-menu-row" type="button" (click)="router.navigate(['/settings'])">
           <span class="profile-menu-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           </span>
@@ -254,16 +254,59 @@ import { NotificationService } from '../../core/services/notification.service';
 
       </div>
 
-      <!-- ── Logout ── -->
+      <!-- ── Logout + Delete Account ── -->
       <div class="profile-menu-card">
-        <button class="profile-menu-row profile-menu-logout" type="button" (click)="logout()">
+        <button class="profile-menu-row profile-menu-logout" type="button" (click)="showLogoutConfirm = true">
           <span class="profile-menu-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
           </span>
           <div class="profile-menu-content">
             <div class="profile-menu-label">Logout</div>
+            <div class="profile-menu-sub">Sign out of your account</div>
           </div>
         </button>
+
+        <div class="profile-row-divider"></div>
+
+        <button class="profile-menu-row profile-menu-delete" type="button" (click)="showDeleteConfirm = true">
+          <span class="profile-menu-icon profile-menu-icon-danger">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          </span>
+          <div class="profile-menu-content">
+            <div class="profile-menu-label profile-menu-label-danger">Delete Account</div>
+            <div class="profile-menu-sub">Permanently remove your account</div>
+          </div>
+        </button>
+      </div>
+
+      <!-- ── Logout Confirm Modal ── -->
+      <div class="acc-modal-overlay" *ngIf="showLogoutConfirm" (click)="showLogoutConfirm = false">
+        <div class="acc-modal" (click)="$event.stopPropagation()">
+          <div class="acc-modal-icon">👋</div>
+          <h3 class="acc-modal-title">Logout?</h3>
+          <p class="acc-modal-sub">You will be signed out of your RouteX account.</p>
+          <div class="acc-modal-actions">
+            <button class="acc-modal-cancel" (click)="showLogoutConfirm = false">Cancel</button>
+            <button class="acc-modal-confirm acc-modal-confirm-red" (click)="logout()">Logout</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Delete Account Confirm Modal ── -->
+      <div class="acc-modal-overlay" *ngIf="showDeleteConfirm" (click)="showDeleteConfirm = false">
+        <div class="acc-modal" (click)="$event.stopPropagation()">
+          <div class="acc-modal-icon">⚠️</div>
+          <h3 class="acc-modal-title">Delete Account?</h3>
+          <p class="acc-modal-sub">This will <strong>permanently delete</strong> your account and all data from our servers. This cannot be undone.</p>
+          <div *ngIf="deleteAccountError" class="acc-modal-error">{{ deleteAccountError }}</div>
+          <div class="acc-modal-actions">
+            <button class="acc-modal-cancel" (click)="showDeleteConfirm = false" [disabled]="deletingAccount">Cancel</button>
+            <button class="acc-modal-confirm acc-modal-confirm-red" (click)="deleteAccount()" [disabled]="deletingAccount">
+              <span *ngIf="deletingAccount" class="acc-btn-spinner"></span>
+              {{ deletingAccount ? 'Deleting…' : 'Delete' }}
+            </button>
+          </div>
+        </div>
       </div>
 
       <!-- ── Notifications Panel (slide-in) ── -->
@@ -513,6 +556,33 @@ import { NotificationService } from '../../core/services/notification.service';
     .profile-menu-logout .profile-menu-label { color: #ef233c; }
     .profile-menu-logout .profile-menu-icon  { border-color: #fecdd3; }
     .profile-menu-logout .profile-menu-icon svg { color: #ef233c; }
+
+    .profile-menu-delete .profile-menu-label-danger { color: #c62828; font-weight: 700; }
+    .profile-menu-icon-danger { border-color: #fecdd3 !important; }
+    .profile-menu-icon-danger svg { color: #c62828; }
+
+    /* ── Account Modal ── */
+    .acc-modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.55);
+      z-index: 900; display: flex; align-items: center; justify-content: center; padding: 20px;
+    }
+    .acc-modal {
+      background: #fff; border-radius: 22px; padding: 28px 24px;
+      max-width: 340px; width: 100%; text-align: center;
+      animation: slideUp .22s ease;
+    }
+    @keyframes slideUp { from { transform: translateY(30px); opacity: .5; } to { transform: translateY(0); opacity: 1; } }
+    .acc-modal-icon { font-size: 48px; margin-bottom: 10px; }
+    .acc-modal-title { font-size: 18px; font-weight: 900; color: #111; margin: 0 0 8px; }
+    .acc-modal-sub { font-size: 13px; color: #666; margin: 0 0 20px; line-height: 1.6; }
+    .acc-modal-error { background: #fdeaea; color: #c62828; border-radius: 10px; padding: 10px; font-size: 12px; margin-bottom: 14px; }
+    .acc-modal-actions { display: flex; gap: 12px; }
+    .acc-modal-cancel { flex: 1; background: #f0f0f0; color: #444; border: none; border-radius: 14px; padding: 13px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .acc-modal-confirm { flex: 1; border: none; border-radius: 14px; padding: 13px; font-size: 14px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
+    .acc-modal-confirm-red { background: #e53935; color: #fff; }
+    .acc-modal-confirm:disabled, .acc-modal-cancel:disabled { opacity: .5; cursor: not-allowed; }
+    .acc-btn-spinner { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; flex-shrink: 0; }
+    @keyframes spin { to { transform: rotate(360deg); } }
 
     /* Notification badge */
     .profile-badge {
@@ -830,6 +900,10 @@ export class AccountComponent implements OnInit, OnDestroy {
   isUploadingDp = false;
   localAvatarPreview: string | null = null;
   showAvatarPicker = false;
+  showLogoutConfirm = false;
+  showDeleteConfirm = false;
+  deletingAccount = false;
+  deleteAccountError = '';
 
   readonly presetAvatars = [
     { label: 'Adventure', url: 'https://api.dicebear.com/9.x/adventurer/svg?seed=Alex&backgroundColor=b6e3f4' },
@@ -989,7 +1063,24 @@ export class AccountComponent implements OnInit, OnDestroy {
   }
 
   logout(): void {
+    this.showLogoutConfirm = false;
     this.auth.logout();
     this.router.navigate(['/login']);
+  }
+
+  deleteAccount(): void {
+    this.deletingAccount = true;
+    this.deleteAccountError = '';
+    this.auth.deleteAccount().subscribe({
+      next: () => {
+        localStorage.clear();
+        this.auth.logout();
+        this.router.navigate(['/login']);
+      },
+      error: (err) => {
+        this.deletingAccount = false;
+        this.deleteAccountError = err?.error?.error || 'Failed to delete account. Please try again.';
+      }
+    });
   }
 }
