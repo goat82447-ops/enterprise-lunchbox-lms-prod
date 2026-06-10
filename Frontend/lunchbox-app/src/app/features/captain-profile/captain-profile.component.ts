@@ -211,8 +211,68 @@ const CAPTAIN_KYC_STORAGE_KEY = 'delivery_captain_kyc_state';
       </div>
     </div>
 
-  <!-- ══════ INCOMING RIDE ALERT ══════ -->
-  <!-- Alert is now rendered globally in app.ts via CaptainRideAlertService -->
+  <!-- ══════ INCOMING RIDE ALERT OVERLAY ══════ -->
+  <div class="cp-alert-overlay" *ngIf="incomingRide" (click)="$event.stopPropagation()">
+    <div class="cp-alert-sheet">
+      <!-- Pulse ring -->
+      <div class="cp-alert-pulse-wrap">
+        <div class="cp-alert-pulse-ring"></div>
+        <div class="cp-alert-pulse-ring cp-ring2"></div>
+        <div class="cp-alert-icon">🏍️</div>
+      </div>
+
+      <div class="cp-alert-badge">NEW RIDE REQUEST</div>
+      <h2 class="cp-alert-title">Incoming Ride!</h2>
+
+      <!-- Route -->
+      <div class="cp-alert-route">
+        <div class="cp-alert-point">
+          <div class="cp-point-dot cp-dot-green"></div>
+          <div class="cp-point-addr">{{ incomingRide.pickup.address | slice:0:40 }}</div>
+        </div>
+        <div class="cp-alert-line"></div>
+        <div class="cp-alert-point">
+          <div class="cp-point-dot cp-dot-orange"></div>
+          <div class="cp-point-addr">{{ incomingRide.drop.address | slice:0:40 }}</div>
+        </div>
+      </div>
+
+      <!-- Details row -->
+      <div class="cp-alert-meta">
+        <div class="cp-alert-meta-item">
+          <div class="cp-meta-label">Service</div>
+          <div class="cp-meta-val">{{ incomingRide.serviceType | titlecase }}</div>
+        </div>
+        <div class="cp-alert-meta-item">
+          <div class="cp-meta-label">Customer</div>
+          <div class="cp-meta-val">{{ incomingRide.userName }}</div>
+        </div>
+        <div class="cp-alert-meta-item">
+          <div class="cp-meta-label">Fare</div>
+          <div class="cp-meta-val cp-fare">₹{{ incomingRide.estimatedFare || '—' }}</div>
+        </div>
+        <div class="cp-alert-meta-item">
+          <div class="cp-meta-label">Payment</div>
+          <div class="cp-meta-val">{{ incomingRide.paymentMethod | titlecase }}</div>
+        </div>
+      </div>
+
+      <!-- Countdown bar -->
+      <div class="cp-alert-countdown-wrap">
+        <div class="cp-alert-countdown-bar" [style.width.%]="alertCountdownPct"></div>
+      </div>
+      <div class="cp-alert-countdown-label">{{ alertCountdown }}s to auto-decline</div>
+
+      <!-- Accept / Decline -->
+      <div class="cp-alert-actions">
+        <button class="cp-decline-btn" (click)="declineRide()">✕ Decline</button>
+        <button class="cp-accept-btn" (click)="acceptRide()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          Accept Ride
+        </button>
+      </div>
+    </div>
+  </div>
   `,
   styles: [
     `
@@ -283,6 +343,95 @@ const CAPTAIN_KYC_STORAGE_KEY = 'delivery_captain_kyc_state';
       .cp-avail-free { background: #dcfce7; color: #166534; }
       .cp-avail-busy { background: #fee2e2; color: #991b1b; }
 
+      /* ══ INCOMING RIDE ALERT OVERLAY ══ */
+      .cp-alert-overlay {
+        position: fixed; inset: 0; z-index: 9999;
+        background: rgba(0,0,0,.7);
+        display: flex; align-items: flex-end; justify-content: center;
+        animation: fadeIn .2s ease;
+      }
+      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+      .cp-alert-sheet {
+        width: 100%; max-width: 480px;
+        background: #fff; border-radius: 28px 28px 0 0;
+        padding: 24px 20px 36px;
+        animation: slideUp .28s ease;
+        text-align: center;
+      }
+      @keyframes slideUp { from { transform: translateY(50px); opacity: .4; } to { transform: translateY(0); opacity: 1; } }
+
+      .cp-alert-pulse-wrap {
+        position: relative; width: 90px; height: 90px;
+        margin: 0 auto 14px; display: flex; align-items: center; justify-content: center;
+      }
+      .cp-alert-pulse-ring {
+        position: absolute; inset: 0; border-radius: 50%;
+        border: 3px solid #e53935; opacity: .5;
+        animation: ringGrow 1.4s ease-out infinite;
+      }
+      .cp-ring2 { animation-delay: .7s; }
+      @keyframes ringGrow { 0% { transform: scale(.8); opacity: .6; } 100% { transform: scale(1.7); opacity: 0; } }
+      .cp-alert-icon { font-size: 40px; z-index: 1; }
+
+      .cp-alert-badge {
+        display: inline-block; background: #e53935; color: #fff;
+        font-size: 11px; font-weight: 800; letter-spacing: .8px;
+        padding: 4px 12px; border-radius: 20px; margin-bottom: 8px;
+        animation: alertPulse 1s ease-in-out infinite;
+      }
+      @keyframes alertPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(229,57,53,.4); } 50% { box-shadow: 0 0 0 8px rgba(229,57,53,0); } }
+
+      .cp-alert-title { font-size: 24px; font-weight: 900; color: #111; margin: 0 0 16px; }
+
+      .cp-alert-route {
+        background: #f8f9fa; border-radius: 14px;
+        padding: 12px 16px; margin-bottom: 14px; text-align: left;
+      }
+      .cp-alert-point { display: flex; align-items: center; gap: 10px; }
+      .cp-alert-line { width: 1.5px; height: 14px; background: #ddd; margin-left: 7px; }
+      .cp-point-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+      .cp-dot-green { background: #4caf50; }
+      .cp-dot-orange { background: #f4511e; }
+      .cp-point-addr { font-size: 13px; font-weight: 600; color: #333; }
+
+      .cp-alert-meta {
+        display: grid; grid-template-columns: 1fr 1fr;
+        gap: 10px; margin-bottom: 16px; text-align: left;
+      }
+      .cp-alert-meta-item { background: #f8f9fa; border-radius: 10px; padding: 10px 12px; }
+      .cp-meta-label { font-size: 10px; font-weight: 700; color: #aaa; text-transform: uppercase; margin-bottom: 3px; }
+      .cp-meta-val { font-size: 14px; font-weight: 800; color: #111; }
+      .cp-fare { color: #e53935; }
+
+      .cp-alert-countdown-wrap {
+        height: 4px; background: #f0f0f0; border-radius: 2px;
+        overflow: hidden; margin-bottom: 6px;
+      }
+      .cp-alert-countdown-bar {
+        height: 100%; background: #e53935; border-radius: 2px;
+        transition: width 1s linear;
+      }
+      .cp-alert-countdown-label { font-size: 12px; color: #aaa; margin-bottom: 16px; }
+
+      .cp-alert-actions { display: flex; gap: 12px; }
+      .cp-decline-btn {
+        flex: 1; padding: 16px; border: 2px solid #e0e0e0;
+        background: #fff; border-radius: 16px;
+        font-size: 15px; font-weight: 700; color: #666; cursor: pointer;
+        transition: all .15s;
+      }
+      .cp-decline-btn:hover { border-color: #e53935; color: #e53935; background: #fff5f5; }
+      .cp-accept-btn {
+        flex: 2; padding: 16px; border: none;
+        background: linear-gradient(135deg, #4caf50, #2e7d32);
+        border-radius: 16px; font-size: 16px; font-weight: 800; color: #fff;
+        cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+        box-shadow: 0 4px 14px rgba(76,175,80,.4);
+        animation: acceptPulse 1.5s ease-in-out infinite;
+      }
+      @keyframes acceptPulse { 0%,100% { box-shadow: 0 4px 14px rgba(76,175,80,.4); } 50% { box-shadow: 0 6px 20px rgba(76,175,80,.7); } }
+
       .verified-driver-badge {
         display: inline-flex;
         align-items: center;
@@ -330,7 +479,15 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
   captainMapUrl = 'https://www.google.com/maps?q=17.4372,78.4011&z=14&output=embed';
   captainLocationLabel = 'Waiting for location permission...';
   locationError = '';
+  private notifiedRideIds = new Set<string>();
   private notifiedPaymentRideIds = new Set<string>();
+
+  // ── Incoming ride alert ──
+  incomingRide: Booking | null = null;
+  alertCountdown = 25;
+  alertCountdownPct = 100;
+  private alertTimer: ReturnType<typeof setInterval> | null = null;
+  private soundInterval: ReturnType<typeof setInterval> | null = null;
 
   get isCurrentlyBusy(): boolean {
     return this.activeRides.some(r =>
@@ -353,6 +510,36 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
       }).catch(() => void 0);
     }
   }
+
+  /** Simulates a fake incoming ride to test the alert overlay + sound */
+  triggerTestRideAlert(): void {
+    const fakeRide: Booking = {
+      id: `TEST-${Date.now().toString().slice(-6)}`,
+      userId: 'test-user',
+      userName: 'Test Customer',
+      bookingFor: 'self',
+      serviceType: 'parcel',
+      paymentMethod: 'cash',
+      vehicleType: 'bike',
+      pickup:  { address: 'Hitech City, Hyderabad', lat: 17.4474, lng: 78.3762 },
+      drop:    { address: 'Banjara Hills, Hyderabad', lat: 17.4156, lng: 78.4347 },
+      currentLocation: { address: 'Hitech City, Hyderabad', lat: 17.4474, lng: 78.3762 },
+      status: 'created',
+      otp: '999999',
+      otpVerified: false,
+      driverName: 'Test Captain',
+      driverPhone: '+91-00000-00000',
+      notificationTarget: 'all',
+      estimatedFare: 120,
+      notification: 'Test ride alert',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    } as unknown as Booking;
+
+    this.captainRideAlert.showAlert(fakeRide);
+    this.notifications.playSound('alert');
+    this.notifications.push('🧪 Test alert fired! You should hear the sound and see the overlay.', 'info');
+  }
   private notificationPermissionAsked = false;
   highlightedDeliveryBookingId = '';
   readyForPickupMessage = '';
@@ -367,10 +554,10 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
   constructor(
     private authService: AuthService,
     private bookingService: BookingService,
-    private captainRideAlert: CaptainRideAlertService,
     private router: Router,
     private notifications: NotificationService,
-    private route: ActivatedRoute
+    private route: ActivatedRoute,
+    private captainRideAlert: CaptainRideAlertService
   ) {}
 
   ngOnInit(): void {
@@ -383,6 +570,11 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
       this.refreshActiveRides();
       this.refreshCaptainLocation();
       this.ensureBrowserNotificationPermission();
+
+      // When captain identity loads, immediately check for pending rides
+      if (user) {
+        this.notifyForIncomingRides();
+      }
     });
 
     this.route.queryParamMap.pipe(takeUntil(this.destroy$)).subscribe((params) => {
@@ -397,13 +589,20 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
     });
 
     this.bookingService.bookings$.pipe(takeUntil(this.destroy$)).subscribe(() => {
+      // Refresh rides first, THEN check for notifications
       this.refreshActiveRides();
+
+      // Small delay ensures activeRides is populated before notification check
+      setTimeout(() => {
+        if (this.captain) this.notifyForIncomingRides();
+      }, 100);
     });
   }
 
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+    this.clearAlertTimer();
   }
 
   onDpFileSelected(event: Event): void {
@@ -644,7 +843,6 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
 
     this.completedRides = completed.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
     this.updateReadyForPickupMessage();
-    this.notifyForPaymentUpdates();
   }
 
   refreshCaptainLocation(): void {
@@ -668,6 +866,123 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
     );
   }
 
+  private notifyForIncomingRides(): void {
+    if (!this.captain) return;
+
+    // ── Auto-dismiss if incomingRide was accepted by another captain ──
+    if (this.incomingRide) {
+      const currentState = this.bookingService
+        .getAllBookingsSnapshot()
+        .find(b => b.id === this.incomingRide!.id);
+      if (currentState && currentState.status !== 'created') {
+        this.clearAlertTimer();
+        this.incomingRide = null;
+        this.notifications.push('Ride was accepted by another captain.', 'info');
+        return;
+      }
+    }
+
+    // ── Query ALL 'created' bookings broadcast to all captains ──
+    const allBookings = this.bookingService.getAllBookingsSnapshot();
+    const pendingRides = allBookings.filter(b =>
+      b.status === 'created' &&
+      b.notificationTarget === 'all'
+    );
+
+    // ── Skip alert if this captain is already on an active ride ──
+    const captainIsBusy = this.activeRides.some(r =>
+      r.status === 'assigned' ||
+      r.status === 'pickup_in_progress' ||
+      r.status === 'in_transit' ||
+      r.status === 'arriving'
+    );
+
+    for (const ride of pendingRides) {
+      if (this.notifiedRideIds.has(ride.id)) {
+        continue;
+      }
+
+      this.notifiedRideIds.add(ride.id);
+
+      if (captainIsBusy) {
+        continue; // Captain is busy — mark as seen but don't alert
+      }
+
+      // Show full-screen alert + sound
+      this.showIncomingRideAlert(ride);
+
+      const message = `🏍️ New ${ride.serviceType} ride: ${this.shortAddr(ride.pickup.address)} → ${this.shortAddr(ride.drop.address)} · ₹${ride.estimatedFare || '—'}`;
+
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        new Notification('🚨 New Ride Request!', {
+          body: message,
+          tag: `ride-${ride.id}`,
+          icon: '/assets/lunchbox-logo.svg',
+          requireInteraction: true
+        });
+      }
+    }
+
+    this.notifyForPaymentUpdates();
+  }
+
+  private shortAddr(addr: string): string {
+    if (!addr) return '';
+    return addr.split(',').slice(0, 2).join(',').trim();
+  }
+
+  private showIncomingRideAlert(ride: Booking): void {
+    // Clear any existing alert
+    this.clearAlertTimer();
+    this.incomingRide = ride;
+    this.alertCountdown = 25;
+    this.alertCountdownPct = 100;
+
+    // Play loud repeated alert sound every 2s
+    this.playAlertSound();
+    this.soundInterval = setInterval(() => this.playAlertSound(), 2000);
+
+    // Countdown timer
+    this.alertTimer = setInterval(() => {
+      this.alertCountdown--;
+      this.alertCountdownPct = (this.alertCountdown / 25) * 100;
+      if (this.alertCountdown <= 0) {
+        this.declineRide();
+      }
+    }, 1000);
+  }
+
+  acceptRide(): void {
+    if (!this.incomingRide) return;
+    const rideId = this.incomingRide.id;
+    this.clearAlertTimer();
+    this.incomingRide = null;
+
+    const result = this.bookingService.approveByCaptain(rideId);
+    if (result.success) {
+      this.notifications.push(`✅ Ride ${rideId} accepted! Head to pickup location.`, 'success');
+      this.notifications.playSound('success');
+      const accepted = this.activeRides.find(r => r.id === rideId);
+      this.openRideTracking(accepted || null);
+    } else {
+      // Booking was already taken by another captain
+      this.notifications.push('Ride was already accepted by another captain.', 'warning');
+      this.notifications.playSound('info');
+    }
+  }
+
+  declineRide(): void {
+    if (!this.incomingRide) return;
+    this.clearAlertTimer();
+    this.notifications.push(`Ride ${this.incomingRide.id} declined.`, 'warning');
+    this.incomingRide = null;
+  }
+
+  private clearAlertTimer(): void {
+    if (this.alertTimer) { clearInterval(this.alertTimer); this.alertTimer = null; }
+    if (this.soundInterval) { clearInterval(this.soundInterval); this.soundInterval = null; }
+  }
+
   private notifyForPaymentUpdates(): void {
     for (const ride of this.completedRides) {
       if (!ride.paymentDone || this.notifiedPaymentRideIds.has(ride.id)) {
@@ -677,6 +992,7 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
       this.notifiedPaymentRideIds.add(ride.id);
       const message = `Customer paid for ${ride.id}. Amount: Rs ${Math.round(ride.finalAmount || 0)}.`;
       this.notifications.push(message, 'success');
+      this.notifications.playSound('success');
 
       if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
         new Notification('💰 Payment Received', {
@@ -721,6 +1037,43 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
       Notification.requestPermission().catch(() => void 0);
     }
   }
+
+  private playAlertSound(): void {
+    const AudioCtx = (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext
+      || (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+
+    const ctx = new AudioCtx();
+
+    // Uber/Ola style: 3 rapid high-pitched beeps (1400→1600→1800 Hz)
+    // then a pause then repeat — very attention-grabbing
+    const beeps = [
+      { freq: 1400, start: 0,    dur: 0.1  },
+      { freq: 1600, start: 0.13, dur: 0.1  },
+      { freq: 1800, start: 0.26, dur: 0.18 },
+    ];
+
+    beeps.forEach(b => {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'square'; // square wave = more piercing than sine
+      osc.frequency.value = b.freq;
+      // High gain for Uber-level alert
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime + b.start);
+      gain.gain.exponentialRampToValueAtTime(0.5, ctx.currentTime + b.start + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.4, ctx.currentTime + b.start + b.dur * 0.6);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + b.start + b.dur);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(ctx.currentTime + b.start);
+      osc.stop(ctx.currentTime + b.start + b.dur + 0.01);
+    });
+
+    setTimeout(() => ctx.close().catch(() => void 0), 700);
+  }
+
+  // Keep old method name for backward compatibility
+  private playIncomingRideSound(): void { this.playAlertSound(); }
 
   statusBadge(status: Booking['status']): string {
     if (status === 'assigned' || status === 'pickup_in_progress' || status === 'in_transit' || status === 'arriving') {
