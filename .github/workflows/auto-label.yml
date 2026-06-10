@@ -1,28 +1,23 @@
-bug:
-  - changed-files:
-    - any-glob-to-any-file:
-      - 'Frontend/lunchbox-app/src/app/features/**'
-      - 'Frontend/lunchbox-app/src/app/core/**'
-      - 'Frontend/lunchbox-app/src/app/shared/**'
+name: Auto Label PR
 
-enhancement:
-  - changed-files:
-    - any-glob-to-any-file:
-      - added-files: 'Frontend/lunchbox-app/src/app/features/**/*.ts'
-      - added-files: 'Frontend/lunchbox-app/src/app/features/**/*.html'
-      - added-files: 'Frontend/lunchbox-app/src/app/features/**/*.css'
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
 
-documentation:
-  - changed-files:
-    - any-glob-to-any-file:
-      - '**/*.md'
+permissions:
+  contents: read
+  pull-requests: write
 
-chore:
-  - changed-files:
-    - any-glob-to-any-file:
-      - 'Frontend/lunchbox-app/package.json'
-      - 'Frontend/lunchbox-app/package-lock.json'
-      - 'Frontend/lunchbox-app/angular.json'
-      - '.github/**'
-      - '**/*.yaml'
-      - '**/*.yml'
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4    # ← THIS loads the repo so labeler.yml is readable
+
+      - name: Auto Label
+        uses: actions/labeler@v5
+        with:
+          repo-token: "${{ secrets.GITHUB_TOKEN }}"
+          configuration-path: .github/labeler.yml
+          sync-labels: false
