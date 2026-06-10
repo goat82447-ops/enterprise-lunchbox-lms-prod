@@ -13,39 +13,84 @@ export class OffersService {
 
   private readonly baseOffers: Omit<DynamicOffer, 'discountPercent' | 'expiresAt'>[] = [
     {
+      id: 'offer-first-ride',
+      title: 'First Ride Free!',
+      subtitle: 'New users get first ride at ₹0. Limited daily slots.',
+      promoCode: 'FIRST100',
+      badge: '100% OFF',
+      labelType: 'new',
+      emoji: '🎉',
+      color: '#6c3de0'
+    },
+    {
       id: 'offer-mega-flash',
-      title: 'Mega Rider Flash Deal',
-      subtitle: 'Limited realtime drop slots with instant captain assignment',
+      title: 'Mega Flash Deal',
+      subtitle: 'Flash riders unlocked every few minutes. Grab now!',
       promoCode: 'RIDER50',
-      badge: 'Live 50%'
+      badge: 'FLASH 50%',
+      labelType: 'flash',
+      emoji: '⚡',
+      color: '#e53935'
     },
     {
       id: 'offer-fast-food',
-      title: 'Flash Food Delivery',
-      subtitle: 'Priority partner kitchens in under 25 minutes',
+      title: 'Quick Food Delivery',
+      subtitle: 'Priority kitchens delivered under 25 minutes.',
       promoCode: 'FAST25',
-      badge: 'Limited Time'
+      badge: 'HOT DEAL',
+      labelType: 'hot',
+      emoji: '🍔',
+      color: '#ef6c00'
     },
     {
       id: 'offer-parcel',
       title: 'Parcel Week Saver',
-      subtitle: 'City-wide parcel drops with real-time captain tracking',
+      subtitle: 'City-wide parcel drops with real-time tracking.',
       promoCode: 'PARCELPLUS',
-      badge: 'Top Pick'
+      badge: 'TOP PICK',
+      labelType: 'top',
+      emoji: '📦',
+      color: '#00897b'
     },
     {
       id: 'offer-grocery',
-      title: 'Smart Grocery Window',
-      subtitle: 'Book preferred slots and skip surge windows',
+      title: 'Grocery Rush',
+      subtitle: 'Skip surge windows with smart slots.',
       promoCode: 'FRESHNOW',
-      badge: 'Hot'
+      badge: 'HOT',
+      labelType: 'hot',
+      emoji: '🛒',
+      color: '#43a047'
     },
     {
       id: 'offer-medicine',
-      title: 'Medicine Night Route',
-      subtitle: 'Late-hour medicine deliveries with captain verification',
+      title: 'Night Medicine Route',
+      subtitle: 'Late-hour verified medicine delivery.',
       promoCode: 'CARE10',
-      badge: 'Safety'
+      badge: 'CARE',
+      labelType: 'limited',
+      emoji: '💊',
+      color: '#1e88e5'
+    },
+    {
+      id: 'offer-women-safety',
+      title: 'Women Safety Ride',
+      subtitle: 'Top-trusted captains. Extra discount this week.',
+      promoCode: 'SAFENOW',
+      badge: 'NEW',
+      labelType: 'new',
+      emoji: '🛡️',
+      color: '#8e24aa'
+    },
+    {
+      id: 'offer-weekend',
+      title: 'Weekend Special',
+      subtitle: 'Extra savings on all rides Sat & Sun.',
+      promoCode: 'WKND20',
+      badge: 'LIMITED',
+      labelType: 'limited',
+      emoji: '🎯',
+      color: '#d81b60'
     }
   ];
 
@@ -98,7 +143,8 @@ export class OffersService {
     const offers = this.rotate(this.baseOffers, slotBucket % this.baseOffers.length).map((offer, index) => {
       const dynamicBoost = (dayOfMonth + minuteBucket + index) % 4;
       const isFlashOffer = offer.id === 'offer-mega-flash';
-      const discountPercent = isFlashOffer ? 50 : 12 + dynamicBoost * 4 + index;
+      const isFirstRide = offer.id === 'offer-first-ride';
+      const discountPercent = isFirstRide ? 100 : isFlashOffer ? 50 : 12 + dynamicBoost * 4 + index;
       const expiresAt = new Date(now + (index + 6) * 60 * 60 * 1000).toISOString();
       return {
         ...offer,
