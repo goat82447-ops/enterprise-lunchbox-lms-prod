@@ -113,6 +113,9 @@ export interface DynamicOffer {
   promoCode: string;
   badge: string;
   expiresAt: string;
+  labelType: 'hot' | 'new' | 'flash' | 'limited' | 'top';
+  emoji: string;
+  color: string;
 }
 
 export interface DynamicNewsItem {
