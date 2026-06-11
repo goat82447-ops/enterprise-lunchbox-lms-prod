@@ -60,7 +60,16 @@ import { SupportService } from './core/services/support.service';
 
             <!-- Captain links -->
             <li class="nav-item" *ngIf="(isLoggedIn$ | async) && (isCaptain$ | async)">
-              <a class="nav-link" routerLink="/captain-profile" routerLinkActive="active" (click)="handleNavLinkClick()">{{ t('jobsDeliveries') }}</a>
+              <a class="nav-link" routerLink="/captain-profile" routerLinkActive="active" (click)="handleNavLinkClick()">&#x1F3E0; Home</a>
+            </li>
+            <li class="nav-item" *ngIf="(isLoggedIn$ | async) && (isCaptain$ | async)">
+              <a class="nav-link" routerLink="/captain-rides" routerLinkActive="active" (click)="handleNavLinkClick()">&#x1F3CD;&#xFE0F; My Rides</a>
+            </li>
+            <li class="nav-item" *ngIf="(isLoggedIn$ | async) && (isCaptain$ | async)">
+              <a class="nav-link" routerLink="/captain-bank" routerLinkActive="active" (click)="handleNavLinkClick()">&#x1F4B3; Bank</a>
+            </li>
+            <li class="nav-item" *ngIf="(isLoggedIn$ | async) && (isCaptain$ | async)">
+              <button class="btn btn-outline-light btn-sm" type="button" (click)="logout(); handleNavLinkClick()">&#x1F6AA; Logout</button>
             </li>
 
             <!-- Admin links -->
@@ -270,6 +279,26 @@ import { SupportService } from './core/services/support.service';
           <span class="tab-label">Account</span>
         </span>
       </a>
+    </nav>
+
+    <!-- Captain Mobile Bottom Nav (4 tabs) -->
+    <nav class="captain-bottom-nav" *ngIf="(isLoggedIn$ | async) && (isCaptain$ | async)">
+      <a class="captain-tab" routerLink="/captain-profile" routerLinkActive="captain-tab-active">
+        <span class="captain-tab-icon">&#x1F3E0;</span>
+        <span class="captain-tab-label">Home</span>
+      </a>
+      <a class="captain-tab" routerLink="/captain-rides" routerLinkActive="captain-tab-active">
+        <span class="captain-tab-icon">&#x1F3CD;&#xFE0F;</span>
+        <span class="captain-tab-label">My Rides</span>
+      </a>
+      <a class="captain-tab" routerLink="/captain-bank" routerLinkActive="captain-tab-active">
+        <span class="captain-tab-icon">&#x1F4B3;</span>
+        <span class="captain-tab-label">Bank</span>
+      </a>
+      <button class="captain-tab captain-logout-tab" type="button" (click)="logout()">
+        <span class="captain-tab-icon">&#x1F6AA;</span>
+        <span class="captain-tab-label">Logout</span>
+      </button>
     </nav>
 
     <footer class="app-footer" aria-label="RouteX footer">
@@ -545,6 +574,30 @@ import { SupportService } from './core/services/support.service';
       @keyframes spin {
         to { transform: rotate(360deg); }
       }
+
+      /* Captain Mobile Bottom Nav */
+      .captain-bottom-nav {
+        display: none;
+        position: fixed; bottom: 0; left: 0; right: 0; z-index: 1040;
+        background: #1a1a2e; border-top: 2px solid rgba(255,255,255,0.12);
+        padding: 8px 0 env(safe-area-inset-bottom, 8px);
+        justify-content: space-around; align-items: center;
+      }
+      @media (max-width: 991px) {
+        .captain-bottom-nav { display: flex; }
+        .app-main { padding-bottom: 80px; }
+      }
+      .captain-tab {
+        display: flex; flex-direction: column; align-items: center; gap: 3px;
+        flex: 1; padding: 4px 0; color: rgba(255,255,255,0.55);
+        text-decoration: none; font-size: 11px; font-weight: 700;
+        border: none; background: none; cursor: pointer; transition: all .15s;
+      }
+      .captain-tab:hover, .captain-tab-active { color: #fff !important; background: rgba(255,255,255,0.1); border-radius: 10px; }
+      .captain-tab-icon  { font-size: 24px; line-height: 1.1; }
+      .captain-tab-label { font-size: 10px; }
+      .captain-logout-tab { color: #fca5a5; }
+      .captain-logout-tab:hover { color: #fff; background: rgba(239,68,68,0.3); border-radius: 10px; }
     `
   ]
 })
