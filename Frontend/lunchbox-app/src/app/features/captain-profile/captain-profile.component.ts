@@ -29,6 +29,40 @@ const CAPTAIN_KYC_STORAGE_KEY = 'delivery_captain_kyc_state';
     <div class="container py-4" *ngIf="captain as c">
       <h2 class="mb-3">Captain Profile</h2>
 
+      <!-- ── Action Result Toast ── -->
+      <div *ngIf="rideActionResult" class="action-toast"
+        [class.toast-accept]="rideActionResult.type === 'accept'"
+        [class.toast-decline]="rideActionResult.type === 'decline'">
+        <span *ngIf="rideActionResult.type === 'accept'">✅ Ride {{ rideActionResult.rideId }} <strong>Accepted!</strong> Head to pickup now.</span>
+        <span *ngIf="rideActionResult.type === 'decline'">❌ Ride {{ rideActionResult.rideId }} <strong>Declined.</strong> Customer will be re-assigned.</span>
+      </div>
+
+      <!-- ── Ride Accept/Decline Modal ── -->
+      <div class="ride-modal-overlay" *ngIf="activeRideModal" (click)="closeRideModal()">
+        <div class="ride-modal-card" (click)="$event.stopPropagation()">
+          <div class="ride-modal-header">
+            <span class="ride-modal-icon">🚗</span>
+            <h4>New Ride Request!</h4>
+          </div>
+          <div class="ride-modal-body">
+            <div class="ride-modal-row"><span class="label">Ride ID</span><span class="value">{{ activeRideModal.id }}</span></div>
+            <div class="ride-modal-row"><span class="label">📍 Pickup</span><span class="value">{{ activeRideModal.pickup.address }}</span></div>
+            <div class="ride-modal-row"><span class="label">🏁 Drop</span><span class="value">{{ activeRideModal.drop.address }}</span></div>
+            <div class="ride-modal-row"><span class="label">👤 Customer</span><span class="value">{{ activeRideModal.userName }}</span></div>
+            <div class="ride-modal-row" *ngIf="activeRideModal.estimatedFare"><span class="label">💰 Est. Fare</span><span class="value fw-bold text-success">₹{{ activeRideModal.estimatedFare }}</span></div>
+            <div class="ride-modal-row"><span class="label">🔑 OTP</span><span class="value fw-bold">{{ activeRideModal.otp }}</span></div>
+          </div>
+          <div class="ride-modal-actions">
+            <button class="btn btn-danger btn-lg flex-fill" type="button" (click)="declineRide(activeRideModal!)">
+              ❌ Decline
+            </button>
+            <button class="btn btn-success btn-lg flex-fill" type="button" (click)="acceptRide(activeRideModal!)">
+              ✅ Accept
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div class="row g-4">
         <div class="col-lg-4">
           <div class="card p-3 h-100">
@@ -100,8 +134,18 @@ const CAPTAIN_KYC_STORAGE_KEY = 'delivery_captain_kyc_state';
 
           <div class="card p-3 mb-3">
             <div class="d-flex justify-content-between align-items-center mb-3">
-              <h5 class="mb-0">Captain Active Rides</h5>
-              <button class="btn btn-sm btn-outline-secondary" type="button" (click)="refreshActiveRides()">Refresh</button>
+              <h5 class="mb-0">
+                🚗 Active Rides
+                <span *ngIf="newRideAlert" class="badge text-bg-danger ms-2 blink-badge">🔔 NEW RIDE!</span>
+              </h5>
+              <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-warning" type="button" (click)="testSound()" title="Test notification sound">🔊 Test Sound</button>
+                <button class="btn btn-sm btn-outline-secondary" type="button" (click)="refreshActiveRides()">↻ Refresh</button>
+              </div>
+            </div>
+
+            <div *ngIf="newRideAlert" class="alert alert-danger py-2 mb-2 d-flex align-items-center gap-2 blink-alert">
+              <strong>🔔 New ride request received!</strong> Accept it below.
             </div>
 
             <div *ngIf="readyForPickupMessage" class="alert alert-success py-2 mb-2">
@@ -112,18 +156,22 @@ const CAPTAIN_KYC_STORAGE_KEY = 'delivery_captain_kyc_state';
               No active rides available now.
             </div>
 
-            <div class="ride-card" *ngFor="let ride of activeRides">
+            <div class="ride-card" [class.new-ride-card]="isNewRide(ride.id)" *ngFor="let ride of activeRides">
               <div class="d-flex justify-content-between align-items-start gap-2">
                 <div>
                   <div class="fw-semibold">{{ ride.id }}</div>
-                  <div class="small text-muted">{{ ride.pickup.address }} → {{ ride.drop.address }}</div>
-                  <div class="small text-muted">Customer: {{ ride.userName }} • OTP: {{ ride.otp }}</div>
+                  <div class="small text-muted">📍 {{ ride.pickup.address }} → {{ ride.drop.address }}</div>
+                  <div class="small text-muted">👤 {{ ride.userName }} &nbsp;|&nbsp; 🔑 OTP: <strong>{{ ride.otp }}</strong></div>
+                  <div class="small text-muted" *ngIf="ride.estimatedFare">💰 Est. Fare: ₹{{ ride.estimatedFare }}</div>
                 </div>
                 <span class="badge" [ngClass]="statusBadge(ride.status)">{{ ride.status }}</span>
               </div>
 
-              <div class="d-flex gap-2 mt-2">
-                <button class="btn btn-sm btn-primary" type="button" (click)="openRideTracking(ride)">Open Tracking</button>
+              <div class="d-flex gap-2 mt-2 flex-wrap">
+                <button class="btn btn-sm btn-success" type="button"
+                  *ngIf="ride.status === 'created'"
+                  (click)="openRideModal(ride)">🔔 Accept / Decline</button>
+                <button class="btn btn-sm btn-primary" type="button" (click)="openRideTracking(ride)">📍 Open Tracking</button>
               </div>
             </div>
           </div>
@@ -246,6 +294,139 @@ const CAPTAIN_KYC_STORAGE_KEY = 'delivery_captain_kyc_state';
         background: #fff;
       }
 
+      .ride-card.new-ride-card {
+        border-color: #dc3545;
+        background: #fff5f5;
+        box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.2);
+      }
+
+      .blink-badge {
+        animation: blink 1s step-start infinite;
+      }
+
+      .blink-alert {
+        animation: pulse-alert 1.5s ease-in-out infinite;
+      }
+
+      @keyframes blink {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0; }
+      }
+
+      @keyframes pulse-alert {
+        0%, 100% { background-color: #f8d7da; border-color: #f1aeb5; }
+        50% { background-color: #dc3545; border-color: #b02a37; color: #fff; }
+      }
+
+      /* Action Result Toast */
+      .action-toast {
+        position: fixed;
+        top: 72px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 9999;
+        padding: 16px 32px;
+        border-radius: 14px;
+        font-size: 18px;
+        font-weight: 600;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+        animation: slideDown 0.3s ease;
+        min-width: 320px;
+        text-align: center;
+      }
+      .toast-accept { background: #d1fae5; color: #065f46; border: 2px solid #34d399; }
+      .toast-decline { background: #fee2e2; color: #7f1d1d; border: 2px solid #f87171; }
+
+      @keyframes slideDown {
+        from { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+        to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+      }
+
+      /* Ride Modal */
+      .ride-modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.65);
+        z-index: 9998;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        animation: fadeIn 0.2s ease;
+      }
+
+      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+      .ride-modal-card {
+        background: #fff;
+        border-radius: 20px;
+        width: 90%;
+        max-width: 440px;
+        box-shadow: 0 24px 64px rgba(0,0,0,0.35);
+        overflow: hidden;
+        animation: popIn 0.25s cubic-bezier(0.34,1.56,0.64,1);
+      }
+
+      @keyframes popIn {
+        from { transform: scale(0.85); opacity: 0; }
+        to   { transform: scale(1);    opacity: 1; }
+      }
+
+      .ride-modal-header {
+        background: linear-gradient(135deg, #1d3557, #457b9d);
+        color: #fff;
+        padding: 20px 24px 14px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .ride-modal-icon { font-size: 36px; }
+
+      .ride-modal-header h4 {
+        margin: 0;
+        font-size: 22px;
+        font-weight: 700;
+        color: #fff;
+        animation: blink 1s step-start infinite;
+      }
+
+      .ride-modal-body {
+        padding: 18px 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .ride-modal-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 8px;
+        border-bottom: 1px solid #f0f0f0;
+        padding-bottom: 8px;
+        font-size: 14px;
+      }
+
+      .ride-modal-row .label { color: #6c757d; min-width: 90px; }
+      .ride-modal-row .value { text-align: right; font-weight: 500; }
+
+      .ride-modal-actions {
+        display: flex;
+        gap: 0;
+        border-top: 1px solid #e9ecef;
+      }
+
+      .ride-modal-actions .btn {
+        border-radius: 0;
+        padding: 16px;
+        font-size: 17px;
+        font-weight: 700;
+        flex: 1;
+      }
+
+      .ride-modal-actions .btn:first-child { border-bottom-left-radius: 20px; }
+      .ride-modal-actions .btn:last-child  { border-bottom-right-radius: 20px; }
+
       .delivery-card {
         border: 1px solid #e9ecef;
         border-radius: 10px;
@@ -311,6 +492,13 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
   private notificationPermissionAsked = false;
   highlightedDeliveryBookingId = '';
   readyForPickupMessage = '';
+  newRideAlert = false;
+  private newRideIds = new Set<string>();
+  private newRideAlertTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Modal state for Accept / Decline
+  activeRideModal: Booking | null = null;
+  rideActionResult: { type: 'accept' | 'decline'; rideId: string } | null = null;
   kycStatus: KycStatus = 'not_started';
   kycDocumentType = 'Driving License';
   kycDocumentNumber = '';
@@ -359,6 +547,7 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+    if (this.newRideAlertTimer) clearTimeout(this.newRideAlertTimer);
   }
 
   onDpFileSelected(event: Event): void {
@@ -530,6 +719,51 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
     this.router.navigate(['/tracking', booking.id]);
   }
 
+  testSound(): void {
+    this.playIncomingRideSound();
+    this.notifications.push('🔊 Sound test played!', 'info');
+  }
+
+  openRideModal(ride: Booking): void {
+    this.activeRideModal = ride;
+  }
+
+  closeRideModal(): void {
+    this.activeRideModal = null;
+  }
+
+  acceptRide(ride: Booking): void {
+    const result = this.bookingService.approveByCaptain(ride.id);
+    this.activeRideModal = null;
+    if (result.success) {
+      this.newRideIds.delete(ride.id);
+      if (this.newRideIds.size === 0) this.newRideAlert = false;
+      this.rideActionResult = { type: 'accept', rideId: ride.id };
+      this.notifications.push(`✅ Ride ${ride.id} accepted! Head to pickup: ${ride.pickup.address}`, 'success');
+      setTimeout(() => { this.rideActionResult = null; }, 5000);
+    } else {
+      this.notifications.push(result.message, 'warning');
+    }
+  }
+
+  declineRide(ride: Booking): void {
+    const result = this.bookingService.cancelRide(ride.id, 'captain');
+    this.activeRideModal = null;
+    if (result.success) {
+      this.newRideIds.delete(ride.id);
+      if (this.newRideIds.size === 0) this.newRideAlert = false;
+      this.rideActionResult = { type: 'decline', rideId: ride.id };
+      this.notifications.push(`❌ Ride ${ride.id} declined. Customer will be notified.`, 'warning');
+      setTimeout(() => { this.rideActionResult = null; }, 5000);
+    } else {
+      this.notifications.push(result.message, 'warning');
+    }
+  }
+
+  isNewRide(rideId: string): boolean {
+    return this.newRideIds.has(rideId);
+  }
+
   refreshActiveRides(): void {
     const captain = this.captain;
     const active = this.bookingService
@@ -628,12 +862,26 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
       }
 
       this.notifiedRideIds.add(ride.id);
-      const message = `New ride ${ride.id}: ${ride.pickup.address} → ${ride.drop.address}`;
+      this.newRideIds.add(ride.id);
+      const message = `🔔 New ride ${ride.id}: ${ride.pickup.address} → ${ride.drop.address}`;
       this.notifications.push(message, 'info');
       this.playIncomingRideSound();
 
+      // Auto-open the modal for the first new ride
+      if (!this.activeRideModal) {
+        this.activeRideModal = ride;
+      }
+
+      // Show flashing alert banner
+      this.newRideAlert = true;
+      if (this.newRideAlertTimer) clearTimeout(this.newRideAlertTimer);
+      this.newRideAlertTimer = setTimeout(() => {
+        this.newRideAlert = false;
+        this.newRideIds.clear();
+      }, 30000);
+
       if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-        new Notification('New Ride Assigned', {
+        new Notification('🚗 New Ride Assigned!', {
           body: message,
           tag: `ride-${ride.id}`
         });
@@ -706,22 +954,32 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
     }
 
     const context = new AudioCtx();
-    const sequence = [0, 0.14, 0.28];
-    sequence.forEach((offset) => {
-      const oscillator = context.createOscillator();
+
+    // Three-beep alert tune: rising tones at full volume
+    const notes = [
+      { freq: 880,  startAt: 0.00, dur: 0.18 },
+      { freq: 1046, startAt: 0.22, dur: 0.18 },
+      { freq: 1318, startAt: 0.44, dur: 0.30 },
+    ];
+
+    notes.forEach(({ freq, startAt, dur }) => {
+      const osc  = context.createOscillator();
       const gain = context.createGain();
-      oscillator.type = 'sine';
-      oscillator.frequency.value = 880;
-      gain.gain.setValueAtTime(0.0001, context.currentTime + offset);
-      gain.gain.exponentialRampToValueAtTime(0.08, context.currentTime + offset + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + offset + 0.1);
-      oscillator.connect(gain);
+      osc.type = 'square';              // square wave = louder & punchy
+      osc.frequency.value = freq;
+
+      // Ramp up fast then fade — peak at 0.9 (near max)
+      gain.gain.setValueAtTime(0.0001, context.currentTime + startAt);
+      gain.gain.exponentialRampToValueAtTime(0.9, context.currentTime + startAt + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + startAt + dur);
+
+      osc.connect(gain);
       gain.connect(context.destination);
-      oscillator.start(context.currentTime + offset);
-      oscillator.stop(context.currentTime + offset + 0.12);
+      osc.start(context.currentTime + startAt);
+      osc.stop(context.currentTime + startAt + dur + 0.02);
     });
 
-    setTimeout(() => context.close().catch(() => void 0), 700);
+    setTimeout(() => context.close().catch(() => void 0), 1200);
   }
 
   statusBadge(status: Booking['status']): string {
