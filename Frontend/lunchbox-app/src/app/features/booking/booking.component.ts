@@ -623,22 +623,39 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
             </div>
 
             <ng-container *ngIf="serviceType !== 'food'; else foodAutoCaptainMode">
-            <h5 class="mb-2">Choose Vehicle Type</h5>
-            <p class="text-muted small mb-2">Captain list updates instantly based on your selected vehicle.</p>
-            <div class="vehicle-grid mb-4">
-              <button
-                type="button"
-                class="vehicle-card"
-                [class.selected]="vehicleType === option.type"
-                *ngFor="let option of bookingVehicleOptions"
-                (click)="onVehicleTypeChange(option.type)"
-              >
-                <span class="vehicle-price-badge" *ngIf="vehiclePriceBadge(option.type)">{{ vehiclePriceBadge(option.type) }}</span>
-                <div class="vehicle-icon">{{ option.icon }}</div>
-                <div class="vehicle-name">{{ option.label }}</div>
-                <div class="vehicle-hint" *ngIf="vehiclePriceHint(option.type)">{{ vehiclePriceHint(option.type) }}</div>
-              </button>
-            </div>
+
+            <!-- For delivery services: show single service card instead of vehicle picker -->
+            <ng-container *ngIf="isDeliveryService(); else showVehiclePicker">
+              <div class="delivery-service-card mb-4">
+                <div class="delivery-service-icon">{{ deliveryServiceIcon() }}</div>
+                <div class="delivery-service-info">
+                  <div class="delivery-service-title">{{ deliveryServiceTitle() }}</div>
+                  <div class="delivery-service-sub">{{ deliveryServiceDesc() }}</div>
+                  <div class="delivery-service-badge">⚡ Fastest available captain assigned automatically</div>
+                </div>
+              </div>
+            </ng-container>
+
+            <!-- For ride services: show full vehicle picker -->
+            <ng-template #showVehiclePicker>
+              <h5 class="mb-2">Choose Vehicle Type</h5>
+              <p class="text-muted small mb-2">Captain list updates instantly based on your selected vehicle.</p>
+              <div class="vehicle-grid mb-4">
+                <button
+                  type="button"
+                  class="vehicle-card"
+                  [class.selected]="vehicleType === option.type"
+                  *ngFor="let option of bookingVehicleOptions"
+                  (click)="onVehicleTypeChange(option.type)"
+                >
+                  <span class="vehicle-price-badge" *ngIf="vehiclePriceBadge(option.type)">{{ vehiclePriceBadge(option.type) }}</span>
+                  <div class="vehicle-icon">{{ option.icon }}</div>
+                  <div class="vehicle-name">{{ option.label }}</div>
+                  <div class="vehicle-hint" *ngIf="vehiclePriceHint(option.type)">{{ vehiclePriceHint(option.type) }}</div>
+                </button>
+              </div>
+            </ng-template>
+
             </ng-container>
             <ng-template #foodAutoCaptainMode>
               <div class="alert alert-info small mb-3">
@@ -1140,6 +1157,42 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 10px;
+      }
+
+      /* ── Delivery Service Card (parcel / medicine / grocery / documents) ── */
+      .delivery-service-card {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+        border: 2px solid #0ea5e9;
+        border-radius: 16px;
+        padding: 18px 20px;
+      }
+      .delivery-service-icon {
+        font-size: 52px;
+        flex-shrink: 0;
+        line-height: 1;
+      }
+      .delivery-service-title {
+        font-size: 18px;
+        font-weight: 800;
+        color: #0c4a6e;
+        margin-bottom: 4px;
+      }
+      .delivery-service-sub {
+        font-size: 13px;
+        color: #0369a1;
+        margin-bottom: 8px;
+      }
+      .delivery-service-badge {
+        display: inline-block;
+        background: #0ea5e9;
+        color: #fff;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 3px 10px;
+        border-radius: 20px;
       }
 
       .vehicle-card {
@@ -1734,7 +1787,7 @@ export class BookingComponent implements OnDestroy {
   recipientName = '';
   recipientPhone = '';
   bookingTimeMode: 'now' | 'later' = 'now';
-  notificationTarget: 'all' | 'preferred' = 'preferred';
+  notificationTarget: 'all' | 'preferred' = 'all';
   focusedMode: FocusedBookingMode = 'all';
   womenSafetyProtectionMode = false;
   teenageRideMode = false;
@@ -2334,6 +2387,12 @@ export class BookingComponent implements OnDestroy {
     this.serviceType = serviceType;
     this.showAllHotels = false;
 
+    // Auto-select bike for delivery services (no vehicle picker shown)
+    if (['parcel', 'medicine', 'grocery', 'documents'].includes(serviceType)) {
+      this.vehicleType = 'bike';
+      this.notificationTarget = 'all';
+    }
+
     if (serviceType === 'food') {
       this.foodFlowStage = this.selectedHotelId ? 'menu' : 'hotels';
       this.vehicleType = 'bike';
@@ -2810,39 +2869,61 @@ export class BookingComponent implements OnDestroy {
   }
 
   vehicleIcon(vehicleType: VehicleType): string {
-    if (vehicleType === 'bike' || vehicleType === 'scooter') {
-      return '🏍️';
-    }
-    if (vehicleType === 'auto') {
-      return '🛺';
-    }
-    if (vehicleType === 'car') {
-      return '🚗';
-    }
-    if (vehicleType === 'van') {
-      return '🚐';
-    }
+    if (vehicleType === 'bike' || vehicleType === 'scooter') return '🏍️';
+    if (vehicleType === 'auto') return '🛺';
+    if (vehicleType === 'car') return '🚗';
+    if (vehicleType === 'van') return '🚐';
     return '🚚';
   }
 
   vehiclePriceBadge(vehicleType: VehicleType): string {
-    if (vehicleType === 'scooter') {
-      return 'Cheapest';
-    }
-    if (vehicleType === 'bike') {
-      return 'Budget';
-    }
+    if (vehicleType === 'scooter') return 'Cheapest';
+    if (vehicleType === 'bike') return 'Budget';
     return '';
   }
 
   vehiclePriceHint(vehicleType: VehicleType): string {
-    if (vehicleType === 'scooter') {
-      return 'Save Rs 5-Rs 15 vs Bike';
-    }
-    if (vehicleType === 'bike') {
-      return 'Low fare option';
-    }
+    if (vehicleType === 'scooter') return 'Save Rs 5-Rs 15 vs Bike';
+    if (vehicleType === 'bike') return 'Low fare option';
     return '';
+  }
+
+  /** Returns true for delivery services that don't need vehicle picker */
+  isDeliveryService(): boolean {
+    return ['parcel', 'medicine', 'grocery', 'documents'].includes(this.serviceType);
+  }
+
+  /** Big icon for each delivery service */
+  deliveryServiceIcon(): string {
+    const icons: Record<string, string> = {
+      parcel:    '📦',
+      medicine:  '⚕️',
+      grocery:   '🛒',
+      documents: '📄'
+    };
+    return icons[this.serviceType] || '📦';
+  }
+
+  /** Title for each delivery service */
+  deliveryServiceTitle(): string {
+    const titles: Record<string, string> = {
+      parcel:    'Parcel Delivery',
+      medicine:  'Medicine Delivery',
+      grocery:   'Grocery Delivery',
+      documents: 'Document Delivery'
+    };
+    return titles[this.serviceType] || 'Delivery';
+  }
+
+  /** Description for each delivery service */
+  deliveryServiceDesc(): string {
+    const descs: Record<string, string> = {
+      parcel:    'Safe & fast parcel pickup and drop anywhere in the city.',
+      medicine:  'Urgent medicine delivery from pharmacy to your door.',
+      grocery:   'Fresh groceries delivered from your local store.',
+      documents: 'Secure document courier with real-time tracking.'
+    };
+    return descs[this.serviceType] || 'Fast delivery service.';
   }
 
   statusBadge(status: NearbyCaptain['availability']): string {

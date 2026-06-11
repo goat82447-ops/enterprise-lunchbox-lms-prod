@@ -62,9 +62,6 @@ import { SupportService } from './core/services/support.service';
             <li class="nav-item" *ngIf="(isLoggedIn$ | async) && (isCaptain$ | async)">
               <a class="nav-link" routerLink="/captain-profile" routerLinkActive="active" (click)="handleNavLinkClick()">{{ t('jobsDeliveries') }}</a>
             </li>
-            <li class="nav-item" *ngIf="(isLoggedIn$ | async) && (isCaptain$ | async)">
-              <button class="btn btn-outline-light btn-sm ms-1" type="button" (click)="logout(); handleNavLinkClick()">🚪 Logout</button>
-            </li>
 
             <!-- Admin links -->
             <li class="nav-item" *ngIf="(isLoggedIn$ | async) && (isAdmin$ | async)">
@@ -273,18 +270,6 @@ import { SupportService } from './core/services/support.service';
           <span class="tab-label">Account</span>
         </span>
       </a>
-    </nav>
-
-    <!-- Captain Mobile Bottom Bar -->
-    <nav class="captain-bottom-nav" aria-label="Captain navigation" *ngIf="(isLoggedIn$ | async) && (isCaptain$ | async)">
-      <a class="captain-tab" routerLink="/captain-profile" routerLinkActive="captain-tab-active">
-        <span class="captain-tab-icon">🏍️</span>
-        <span class="captain-tab-label">My Rides</span>
-      </a>
-      <button class="captain-tab captain-logout-tab" type="button" (click)="logout()">
-        <span class="captain-tab-icon">🚪</span>
-        <span class="captain-tab-label">Logout</span>
-      </button>
     </nav>
 
     <footer class="app-footer" aria-label="RouteX footer">
@@ -560,48 +545,6 @@ import { SupportService } from './core/services/support.service';
       @keyframes spin {
         to { transform: rotate(360deg); }
       }
-
-      /* ── Captain Mobile Bottom Bar ── */
-      .captain-bottom-nav {
-        display: none;
-        position: fixed;
-        bottom: 0; left: 0; right: 0;
-        z-index: 1040;
-        background: #1a1a2e;
-        border-top: 1px solid rgba(255,255,255,0.1);
-        padding: 6px 0 env(safe-area-inset-bottom, 6px);
-        justify-content: space-around;
-        align-items: center;
-      }
-      @media (max-width: 991px) {
-        .captain-bottom-nav { display: flex; }
-        .app-main { padding-bottom: 72px; }
-      }
-      .captain-tab {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 3px;
-        padding: 8px 32px;
-        color: rgba(255,255,255,0.6);
-        text-decoration: none;
-        font-size: 11px;
-        font-weight: 600;
-        border: none;
-        background: none;
-        cursor: pointer;
-        border-radius: 12px;
-        transition: all 0.15s;
-        flex: 1;
-      }
-      .captain-tab:hover, .captain-tab.captain-tab-active {
-        color: #fff;
-        background: rgba(255,255,255,0.1);
-      }
-      .captain-tab-icon { font-size: 22px; line-height: 1; }
-      .captain-tab-label { font-size: 11px; font-weight: 700; }
-      .captain-logout-tab { color: #fca5a5; }
-      .captain-logout-tab:hover { color: #fff; background: rgba(239,68,68,0.25); }
     `
   ]
 })
