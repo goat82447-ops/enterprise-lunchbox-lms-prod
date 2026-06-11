@@ -1734,7 +1734,7 @@ export class BookingComponent implements OnDestroy {
   recipientName = '';
   recipientPhone = '';
   bookingTimeMode: 'now' | 'later' = 'now';
-  notificationTarget: 'all' | 'preferred' = 'preferred';
+  notificationTarget: 'all' | 'preferred' = 'all';
   focusedMode: FocusedBookingMode = 'all';
   womenSafetyProtectionMode = false;
   teenageRideMode = false;
