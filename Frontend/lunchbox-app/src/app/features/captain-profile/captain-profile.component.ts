@@ -540,12 +540,13 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
     });
 
     // CaptainRideAlertService fires the sound + browser notification.
-    // Here we just update the UI state (modal, badge, banner).
-    this.rideAlert.newRide$.pipe(takeUntil(this.destroy$)).subscribe(({ booking }) => {
-      this.newRideIds.add(booking.id);
+    // Subscribe to incomingRide$ to open the modal when a new ride arrives.
+    this.rideAlert.incomingRide$.pipe(takeUntil(this.destroy$)).subscribe((ride: Booking | null) => {
+      if (!ride) return;
+      this.newRideIds.add(ride.id);
       this.newRideAlert = true;
       if (!this.activeRideModal) {
-        this.activeRideModal = booking;
+        this.activeRideModal = ride;
       }
       if (this.newRideAlertTimer) clearTimeout(this.newRideAlertTimer);
       this.newRideAlertTimer = setTimeout(() => {
@@ -747,34 +748,25 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
 
   closeRideModal(): void {
     this.activeRideModal = null;
+    this.rideAlert.declineRide(); // also decline in service so countdown stops
   }
 
   acceptRide(ride: Booking): void {
-    const result = this.bookingService.approveByCaptain(ride.id);
     this.activeRideModal = null;
-    if (result.success) {
-      this.newRideIds.delete(ride.id);
-      if (this.newRideIds.size === 0) this.newRideAlert = false;
-      this.rideActionResult = { type: 'accept', rideId: ride.id };
-      this.notifications.push(`✅ Ride ${ride.id} accepted! Head to pickup: ${ride.pickup.address}`, 'success');
-      setTimeout(() => { this.rideActionResult = null; }, 5000);
-    } else {
-      this.notifications.push(result.message, 'warning');
-    }
+    this.newRideIds.delete(ride.id);
+    if (this.newRideIds.size === 0) this.newRideAlert = false;
+    this.rideActionResult = { type: 'accept', rideId: ride.id };
+    this.rideAlert.acceptRide(); // delegates to service which calls approveByCaptain
+    setTimeout(() => { this.rideActionResult = null; }, 5000);
   }
 
   declineRide(ride: Booking): void {
-    const result = this.bookingService.cancelRide(ride.id, 'captain');
     this.activeRideModal = null;
-    if (result.success) {
-      this.newRideIds.delete(ride.id);
-      if (this.newRideIds.size === 0) this.newRideAlert = false;
-      this.rideActionResult = { type: 'decline', rideId: ride.id };
-      this.notifications.push(`❌ Ride ${ride.id} declined. Customer will be notified.`, 'warning');
-      setTimeout(() => { this.rideActionResult = null; }, 5000);
-    } else {
-      this.notifications.push(result.message, 'warning');
-    }
+    this.newRideIds.delete(ride.id);
+    if (this.newRideIds.size === 0) this.newRideAlert = false;
+    this.rideActionResult = { type: 'decline', rideId: ride.id };
+    this.rideAlert.declineRide(); // delegates to service which calls cancelRide
+    setTimeout(() => { this.rideActionResult = null; }, 5000);
   }
 
   isNewRide(rideId: string): boolean {
