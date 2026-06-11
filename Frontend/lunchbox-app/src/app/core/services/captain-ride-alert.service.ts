@@ -11,33 +11,41 @@ const ALERT_COUNTDOWN = 25;
 export class CaptainRideAlertService implements OnDestroy {
   private incomingRideSubject = new BehaviorSubject<Booking | null>(null);
   readonly incomingRide$ = this.incomingRideSubject.asObservable();
+
   private countdownSubject = new BehaviorSubject<number>(ALERT_COUNTDOWN);
   readonly countdown$ = this.countdownSubject.asObservable();
+
   private countdownPctSubject = new BehaviorSubject<number>(100);
   readonly countdownPct$ = this.countdownPctSubject.asObservable();
+
   readonly rideAccepted$ = new Subject<string>();
   readonly rideDeclined$ = new Subject<string>();
 
   private notifiedRideIds = new Set<string>();
-  private alertTimer: any = null;
-  private soundInterval: any = null;
+  private alertTimer: ReturnType<typeof setInterval> | null = null;
+  private soundInterval: ReturnType<typeof setInterval> | null = null;
   private bookingsSub: Subscription | null = null;
   private audioUnlocked = false;
 
-  constructor(private auth: AuthService, private bookingService: BookingService, private notifications: NotificationService) {
+  constructor(
+    private auth: AuthService,
+    private bookingService: BookingService,
+    private notifications: NotificationService
+  ) {
     if (typeof window !== 'undefined') {
       const unlock = () => {
         if (this.audioUnlocked) return;
         this.audioUnlocked = true;
-        const AC = (window as any).AudioContext || (window as any).webkitAudioContext;
-        if (AC) { const c = new AC(); c.resume().then(() => c.close()).catch(() => {}); }
-        ['click','touchstart','keydown'].forEach(e => window.removeEventListener(e, unlock, true));
+        const AC = (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext
+          || (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (AC) { const c = new AC(); c.resume().then(() => c.close()).catch(() => void 0); }
+        ['click', 'touchstart', 'keydown'].forEach(e => window.removeEventListener(e, unlock, true));
       };
-      ['click','touchstart','keydown'].forEach(e => window.addEventListener(e, unlock, true));
+      ['click', 'touchstart', 'keydown'].forEach(e => window.addEventListener(e, unlock, true));
     }
     this.auth.user$.subscribe(user => {
       if (user?.role === 'captain' && typeof Notification !== 'undefined' && Notification.permission === 'default') {
-        Notification.requestPermission().catch(() => {});
+        Notification.requestPermission().catch(() => void 0);
       }
     });
     this.bookingsSub = this.bookingService.bookings$.subscribe(() => {
@@ -46,7 +54,14 @@ export class CaptainRideAlertService implements OnDestroy {
   }
 
   ngOnDestroy(): void { this.clearTimers(); this.bookingsSub?.unsubscribe(); }
+
   get incomingRide(): Booking | null { return this.incomingRideSubject.value; }
+
+  requestPermission(): void {
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => void 0);
+    }
+  }
 
   acceptRide(): void {
     const ride = this.incomingRideSubject.value;
@@ -55,7 +70,7 @@ export class CaptainRideAlertService implements OnDestroy {
     this.incomingRideSubject.next(null);
     const result = this.bookingService.approveByCaptain(ride.id);
     if (result.success) {
-      this.notifications.push(`Ride ${ride.id} accepted! Head to pickup location.`, 'success');
+      this.notifications.push(`Ride ${ride.id} accepted! Head to pickup: ${ride.pickup.address}`, 'success');
       this.rideAccepted$.next(ride.id);
     } else {
       this.notifications.push('Ride was already accepted by another captain.', 'warning');
@@ -86,35 +101,9 @@ export class CaptainRideAlertService implements OnDestroy {
     }, 1000);
   }
 
-  private checkForIncomingRides(): void {
-    const current = this.incomingRideSubject.value;
-    if (current) {
-      const live = this.bookingService.getAllBookingsSnapshot().find(b => b.id === current.id);
-      if (live && live.status !== 'created') {
-        this.clearTimers();
-        this.incomingRideSubject.next(null);
-        this.notifications.push('Ride was accepted by another captain.', 'info');
-        return;
-      }
-    }
-    const pending = this.bookingService.getAllBookingsSnapshot().filter(b => b.status === 'created' && b.notificationTarget === 'all');
-    for (const ride of pending) {
-      if (this.notifiedRideIds.has(ride.id)) continue;
-      this.notifiedRideIds.add(ride.id);
-      this.showAlert(ride);
-      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-        new Notification('New Ride Request!', { body: `${ride.serviceType} ride: ${ride.pickup.address.split(',')[0]} to ${ride.drop.address.split(',')[0]} - Rs.${ride.estimatedFare || 0}`, tag: `ride-${ride.id}`, icon: '/assets/lunchbox-logo.svg', requireInteraction: true });
-      }
-    }
-  }
-
-  private clearTimers(): void {
-    if (this.alertTimer) { clearInterval(this.alertTimer); this.alertTimer = null; }
-    if (this.soundInterval) { clearInterval(this.soundInterval); this.soundInterval = null; }
-  }
-
-  private playAlertSound(): void {
-    const AC = (window as any)?.AudioContext || (window as any)?.webkitAudioContext;
+  playAlertSound(): void {
+    const AC = (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext
+      || (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AC) return;
     const ctx: AudioContext = new AC();
     const run = () => {
@@ -127,20 +116,63 @@ export class CaptainRideAlertService implements OnDestroy {
       const master = ctx.createGain();
       master.gain.setValueAtTime(1.0, ctx.currentTime);
       master.connect(comp);
-      [{ f:1200,s:0,d:0.14 },{ f:1500,s:0.17,d:0.14 },{ f:1800,s:0.34,d:0.14 },{ f:2100,s:0.51,d:0.20 }].forEach(b => {
-        [-4,0,4].forEach(det => {
-          const o = ctx.createOscillator(), g = ctx.createGain();
-          o.type = 'square'; o.frequency.value = b.f; o.detune.value = det;
-          g.gain.setValueAtTime(0.0001, ctx.currentTime+b.s);
-          g.gain.exponentialRampToValueAtTime(1.0, ctx.currentTime+b.s+0.008);
-          g.gain.setValueAtTime(1.0, ctx.currentTime+b.s+b.d-0.01);
-          g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+b.s+b.d);
-          o.connect(g); g.connect(master);
-          o.start(ctx.currentTime+b.s); o.stop(ctx.currentTime+b.s+b.d+0.01);
+      [
+        { f: 1200, s: 0.00, d: 0.14 },
+        { f: 1500, s: 0.17, d: 0.14 },
+        { f: 1800, s: 0.34, d: 0.14 },
+        { f: 2100, s: 0.51, d: 0.20 }
+      ].forEach(b => {
+        [-4, 0, 4].forEach(det => {
+          const o = ctx.createOscillator();
+          const g = ctx.createGain();
+          o.type = 'square';
+          o.frequency.value = b.f;
+          o.detune.value = det;
+          g.gain.setValueAtTime(0.0001, ctx.currentTime + b.s);
+          g.gain.exponentialRampToValueAtTime(1.0, ctx.currentTime + b.s + 0.008);
+          g.gain.setValueAtTime(1.0, ctx.currentTime + b.s + b.d - 0.01);
+          g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + b.s + b.d);
+          o.connect(g);
+          g.connect(master);
+          o.start(ctx.currentTime + b.s);
+          o.stop(ctx.currentTime + b.s + b.d + 0.01);
         });
       });
-      setTimeout(() => ctx.close().catch(() => {}), 900);
+      setTimeout(() => ctx.close().catch(() => void 0), 900);
     };
-    if (ctx.state === 'suspended') { ctx.resume().then(run).catch(() => {}); } else { run(); }
+    if (ctx.state === 'suspended') { ctx.resume().then(run).catch(() => void 0); } else { run(); }
+  }
+
+  private checkForIncomingRides(): void {
+    const current = this.incomingRideSubject.value;
+    if (current) {
+      const live = this.bookingService.getAllBookingsSnapshot().find((b: Booking) => b.id === current.id);
+      if (live && live.status !== 'created') {
+        this.clearTimers();
+        this.incomingRideSubject.next(null);
+        this.notifications.push('Ride was accepted by another captain.', 'info');
+        return;
+      }
+    }
+    const pending = this.bookingService.getAllBookingsSnapshot()
+      .filter((b: Booking) => b.status === 'created' && b.notificationTarget === 'all');
+    for (const ride of pending) {
+      if (this.notifiedRideIds.has(ride.id)) continue;
+      this.notifiedRideIds.add(ride.id);
+      this.showAlert(ride);
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        new Notification('New Ride Request!', {
+          body: `${ride.serviceType} ride: ${ride.pickup.address.split(',')[0]} to ${ride.drop.address.split(',')[0]} - Rs.${ride.estimatedFare || 0}`,
+          tag: `ride-${ride.id}`,
+          icon: '/assets/lunchbox-logo.svg',
+          requireInteraction: true
+        });
+      }
+    }
+  }
+
+  private clearTimers(): void {
+    if (this.alertTimer) { clearInterval(this.alertTimer); this.alertTimer = null; }
+    if (this.soundInterval) { clearInterval(this.soundInterval); this.soundInterval = null; }
   }
 }
