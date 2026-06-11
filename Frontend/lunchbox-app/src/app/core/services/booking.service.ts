@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { BehaviorSubject, Observable, catchError, distinctUntilChanged, fromEvent, interval, map, of, switchMap } from 'rxjs';
+import { BehaviorSubject, Observable, catchError, distinctUntilChanged, fromEvent, interval, map, of, retry, switchMap, timer } from 'rxjs';
 import { Booking, BookingRequest, BookingStatus } from '../models/delivery.models';
 import { NotificationService } from './notification.service';
 import { AuthService } from './auth.service';
@@ -8,6 +8,7 @@ import { environment } from '../../../environments/environment';
 
 const STORAGE_KEY = 'delivery_bookings';
 const BOOKINGS_API = `${environment.parcelApiBase}/api/bookings`;
+const BROADCAST_CHANNEL_NAME = 'routex_bookings';
 
 @Injectable({ providedIn: 'root' })
 export class BookingService {
@@ -17,6 +18,7 @@ export class BookingService {
   readonly bookings$: Observable<Booking[]> = this.bookingsSubject.asObservable();
   /** Track booking IDs that have already fired their one-time auto-cancel/confirm notification to prevent spam */
   private readonly notifiedBookingIds = new Set<string>();
+  private broadcastChannel: BroadcastChannel | null = null;
 
   constructor(
     private notifications: NotificationService,
@@ -30,6 +32,20 @@ export class BookingService {
     interval(14 * 60 * 1000)
       .subscribe(() => this.http.get(`${environment.parcelApiBase}/health`, { responseType: 'text' })
         .subscribe({ error: () => void 0 }));
+
+    // BroadcastChannel: instant cross-tab real-time (customer → captain on same browser/device)
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      this.broadcastChannel = new BroadcastChannel(BROADCAST_CHANNEL_NAME);
+      this.broadcastChannel.onmessage = (event) => {
+        if (event.data?.type === 'NEW_BOOKING' && event.data?.booking) {
+          this.upsertBooking(event.data.booking as Booking);
+        }
+        if (event.data?.type === 'BOOKINGS_UPDATED') {
+          const latest = this.loadBookings();
+          this.bookingsSubject.next(latest);
+        }
+      };
+    }
 
     interval(6000).subscribe(() => this.tickBookings());
 
@@ -57,7 +73,8 @@ export class BookingService {
       this.syncBookingsFromServer(true);
     });
 
-    interval(3000)
+    // Poll every 1.5s for fast captain notification (down from 3s)
+    interval(1500)
       .pipe(switchMap(() => this.fetchBookingsFromServer()))
       .subscribe((bookings) => {
         if (!bookings) {
@@ -96,7 +113,7 @@ export class BookingService {
       driverName: request.captainName || 'Ravi Kumar',
       driverPhone: request.captainPhone || '+91-90000-12345',
       captainId: request.captainId,
-      notificationTarget: request.notificationTarget || 'preferred',
+      notificationTarget: request.notificationTarget || 'all',  // default broadcast to ALL captains
       preferredCaptainId: request.preferredCaptainId,
       preferredCaptainName: request.preferredCaptainName,
       notification: isScheduled
@@ -121,15 +138,21 @@ export class BookingService {
     const updated = [booking, ...this.bookingsSubject.value];
     this.persist(updated);
 
+    // ── INSTANT cross-tab broadcast (captain on same browser gets it immediately, zero delay) ──
+    this.broadcastChannel?.postMessage({ type: 'NEW_BOOKING', booking });
+
+    // ── POST to server with auto-retry (up to 5 attempts, 3s apart) so captain on other devices gets it ──
     this.http
       .post<Booking>(BOOKINGS_API, request, { headers: this.getSessionHeaders() })
+      .pipe(retry({ count: 5, delay: 3000 }))
       .subscribe({
         next: (serverBooking) => {
           this.upsertBooking(serverBooking);
+          // Broadcast updated list after server confirms so all captain tabs refresh
+          this.broadcastChannel?.postMessage({ type: 'BOOKINGS_UPDATED' });
         },
         error: () => {
-          // Silently swallow — booking is already saved locally.
-          // The 3-second poll will sync it once the server is reachable (Render free tier wakes up).
+          // After 5 retries still failed — silently ignore, local booking is safe
         }
       });
 
@@ -642,6 +665,8 @@ export class BookingService {
   private persist(bookings: Booking[], notify: boolean = true): void {
     this.bookingsSubject.next(bookings);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(bookings));
+    // Notify other tabs (captain tab) instantly via BroadcastChannel
+    this.broadcastChannel?.postMessage({ type: 'BOOKINGS_UPDATED' });
 
     if (notify) {
       return;
