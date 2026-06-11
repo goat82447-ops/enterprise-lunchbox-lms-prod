@@ -8,6 +8,7 @@ import { AppUser, Booking, CaptainFeedbackComment, KycStatus } from '../../core/
 import { AuthService } from '../../core/services/auth.service';
 import { BookingService } from '../../core/services/booking.service';
 import { NotificationService } from '../../core/services/notification.service';
+import { CaptainRideAlertService } from '../../core/services/captain-ride-alert.service';
 import { SafeResourceUrlPipe } from '../../shared/pipes/safe-resource-url.pipe';
 
 type CaptainKycFormState = {
@@ -487,9 +488,7 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
   captainMapUrl = 'https://www.google.com/maps?q=17.4372,78.4011&z=14&output=embed';
   captainLocationLabel = 'Waiting for location permission...';
   locationError = '';
-  private notifiedRideIds = new Set<string>();
   private notifiedPaymentRideIds = new Set<string>();
-  private notificationPermissionAsked = false;
   highlightedDeliveryBookingId = '';
   readyForPickupMessage = '';
   newRideAlert = false;
@@ -512,10 +511,13 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
     private bookingService: BookingService,
     private router: Router,
     private notifications: NotificationService,
-    private route: ActivatedRoute
+    private route: ActivatedRoute,
+    private rideAlert: CaptainRideAlertService
   ) {}
 
   ngOnInit(): void {
+    this.rideAlert.requestPermission();
+
     this.authService.user$.pipe(takeUntil(this.destroy$)).subscribe((user) => {
       this.captain = user;
       this.dpPreview = user?.profileImageUrl || '';
@@ -524,7 +526,6 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
       this.loadStats();
       this.refreshActiveRides();
       this.refreshCaptainLocation();
-      this.ensureBrowserNotificationPermission();
     });
 
     this.route.queryParamMap.pipe(takeUntil(this.destroy$)).subscribe((params) => {
@@ -538,9 +539,25 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
       }
     });
 
+    // CaptainRideAlertService fires the sound + browser notification.
+    // Here we just update the UI state (modal, badge, banner).
+    this.rideAlert.newRide$.pipe(takeUntil(this.destroy$)).subscribe(({ booking }) => {
+      this.newRideIds.add(booking.id);
+      this.newRideAlert = true;
+      if (!this.activeRideModal) {
+        this.activeRideModal = booking;
+      }
+      if (this.newRideAlertTimer) clearTimeout(this.newRideAlertTimer);
+      this.newRideAlertTimer = setTimeout(() => {
+        this.newRideAlert = false;
+        this.newRideIds.clear();
+      }, 30000);
+    });
+
+    // Refresh ride list + payment alerts whenever bookings change
     this.bookingService.bookings$.pipe(takeUntil(this.destroy$)).subscribe(() => {
       this.refreshActiveRides();
-      this.notifyForIncomingRides();
+      this.notifyForPaymentUpdates();
     });
   }
 
@@ -720,8 +737,8 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
   }
 
   testSound(): void {
-    this.playIncomingRideSound();
-    this.notifications.push('🔊 Sound test played!', 'info');
+    this.rideAlert.playAlertSound();
+    this.notifications.push('🔊 Sound test played! This is the exact sound captains hear for new rides.', 'info');
   }
 
   openRideModal(ride: Booking): void {
@@ -855,42 +872,6 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
     );
   }
 
-  private notifyForIncomingRides(): void {
-    for (const ride of this.activeRides) {
-      if (this.notifiedRideIds.has(ride.id)) {
-        continue;
-      }
-
-      this.notifiedRideIds.add(ride.id);
-      this.newRideIds.add(ride.id);
-      const message = `🔔 New ride ${ride.id}: ${ride.pickup.address} → ${ride.drop.address}`;
-      this.notifications.push(message, 'info');
-      this.playIncomingRideSound();
-
-      // Auto-open the modal for the first new ride
-      if (!this.activeRideModal) {
-        this.activeRideModal = ride;
-      }
-
-      // Show flashing alert banner
-      this.newRideAlert = true;
-      if (this.newRideAlertTimer) clearTimeout(this.newRideAlertTimer);
-      this.newRideAlertTimer = setTimeout(() => {
-        this.newRideAlert = false;
-        this.newRideIds.clear();
-      }, 30000);
-
-      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-        new Notification('🚗 New Ride Assigned!', {
-          body: message,
-          tag: `ride-${ride.id}`
-        });
-      }
-    }
-
-    this.notifyForPaymentUpdates();
-  }
-
   private notifyForPaymentUpdates(): void {
     for (const ride of this.completedRides) {
       if (!ride.paymentDone || this.notifiedPaymentRideIds.has(ride.id)) {
@@ -928,58 +909,6 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
     }
 
     this.readyForPickupMessage = `Ride ${latestCompletedRide.id} ended. I am ready to pickup you for the next trip.`;
-  }
-
-  private ensureBrowserNotificationPermission(): void {
-    if (this.notificationPermissionAsked) {
-      return;
-    }
-
-    this.notificationPermissionAsked = true;
-    if (typeof Notification === 'undefined') {
-      return;
-    }
-
-    if (Notification.permission === 'default') {
-      Notification.requestPermission().catch(() => void 0);
-    }
-  }
-
-  private playIncomingRideSound(): void {
-    const AudioCtx = (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext
-      || (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-
-    if (!AudioCtx) {
-      return;
-    }
-
-    const context = new AudioCtx();
-
-    // Three-beep alert tune: rising tones at full volume
-    const notes = [
-      { freq: 880,  startAt: 0.00, dur: 0.18 },
-      { freq: 1046, startAt: 0.22, dur: 0.18 },
-      { freq: 1318, startAt: 0.44, dur: 0.30 },
-    ];
-
-    notes.forEach(({ freq, startAt, dur }) => {
-      const osc  = context.createOscillator();
-      const gain = context.createGain();
-      osc.type = 'square';              // square wave = louder & punchy
-      osc.frequency.value = freq;
-
-      // Ramp up fast then fade — peak at 0.9 (near max)
-      gain.gain.setValueAtTime(0.0001, context.currentTime + startAt);
-      gain.gain.exponentialRampToValueAtTime(0.9, context.currentTime + startAt + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + startAt + dur);
-
-      osc.connect(gain);
-      gain.connect(context.destination);
-      osc.start(context.currentTime + startAt);
-      osc.stop(context.currentTime + startAt + dur + 0.02);
-    });
-
-    setTimeout(() => context.close().catch(() => void 0), 1200);
   }
 
   statusBadge(status: Booking['status']): string {
