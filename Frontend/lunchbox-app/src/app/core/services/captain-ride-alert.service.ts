@@ -32,7 +32,6 @@ export class CaptainRideAlertService implements OnDestroy {
     private bookingService: BookingService,
     private notifications: NotificationService
   ) {
-    // Unlock audio on first user gesture (browsers block audio before interaction)
     if (typeof window !== 'undefined') {
       const unlock = () => {
         if (this.audioUnlocked) return;
@@ -51,7 +50,6 @@ export class CaptainRideAlertService implements OnDestroy {
       window.addEventListener('keydown', unlock, true);
     }
 
-    // Request browser notification permission as soon as a captain logs in
     this.auth.user$.subscribe(user => {
       if (user?.role === 'captain') {
         if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
@@ -79,11 +77,9 @@ export class CaptainRideAlertService implements OnDestroy {
   acceptRide(): void {
     const ride = this.incomingRideSubject.value;
     if (!ride) return;
-
     const rideId = ride.id;
     this.clearTimers();
     this.incomingRideSubject.next(null);
-
     const result = this.bookingService.approveByCaptain(rideId);
     if (result.success) {
       this.notifications.push(`Ride ${rideId} accepted! Head to pickup location.`, 'success');
@@ -96,7 +92,6 @@ export class CaptainRideAlertService implements OnDestroy {
   declineRide(): void {
     const ride = this.incomingRideSubject.value;
     if (!ride) return;
-
     this.clearTimers();
     this.notifications.push(`Ride ${ride.id} declined.`, 'warning');
     this.rideDeclined$.next(ride.id);
@@ -123,7 +118,6 @@ export class CaptainRideAlertService implements OnDestroy {
     for (const ride of pendingRides) {
       if (this.notifiedRideIds.has(ride.id)) continue;
       this.notifiedRideIds.add(ride.id);
-
       this.showAlert(ride);
 
       const message = `New ${ride.serviceType} ride: ${this.shortAddr(ride.pickup.address)} to ${this.shortAddr(ride.drop.address)} Rs.${ride.estimatedFare || '0'}`;
@@ -138,23 +132,18 @@ export class CaptainRideAlertService implements OnDestroy {
     }
   }
 
-  /** Public so captain-profile can trigger test alerts */
   showAlert(ride: Booking): void {
     this.clearTimers();
     this.incomingRideSubject.next(ride);
     this.countdownSubject.next(ALERT_COUNTDOWN_SECONDS);
     this.countdownPctSubject.next(100);
-
     this.playAlertSound();
-    this.soundInterval = setInterval(() => this.playAlertSound(), 1200); // repeat every 1.2s for urgency
-
+    this.soundInterval = setInterval(() => this.playAlertSound(), 1200);
     this.alertTimer = setInterval(() => {
       const next = this.countdownSubject.value - 1;
       this.countdownSubject.next(next);
       this.countdownPctSubject.next((next / ALERT_COUNTDOWN_SECONDS) * 100);
-      if (next <= 0) {
-        this.declineRide();
-      }
+      if (next <= 0) { this.declineRide(); }
     }, 1000);
   }
 
@@ -172,10 +161,8 @@ export class CaptainRideAlertService implements OnDestroy {
   private playAlertSound(): void {
     const AudioCtx = this.getAudioCtx();
     if (!AudioCtx) return;
-
     const ctx = new AudioCtx();
     const doPlay = () => {
-      // DynamicsCompressor acts as a hardware limiter/maximizer — pushes perceived loudness to max
       const compressor = ctx.createDynamicsCompressor();
       compressor.threshold.setValueAtTime(-6, ctx.currentTime);
       compressor.knee.setValueAtTime(0, ctx.currentTime);
@@ -183,29 +170,22 @@ export class CaptainRideAlertService implements OnDestroy {
       compressor.attack.setValueAtTime(0.001, ctx.currentTime);
       compressor.release.setValueAtTime(0.1, ctx.currentTime);
       compressor.connect(ctx.destination);
-
-      // Master gain at full volume
       const masterGain = ctx.createGain();
       masterGain.gain.setValueAtTime(1.0, ctx.currentTime);
       masterGain.connect(compressor);
-
-      // 4 beeps: escalating frequency for urgency (like emergency alarm)
       const beeps = [
         { freq: 1200, start: 0,    dur: 0.14 },
         { freq: 1500, start: 0.17, dur: 0.14 },
         { freq: 1800, start: 0.34, dur: 0.14 },
         { freq: 2100, start: 0.51, dur: 0.20 },
       ];
-
       beeps.forEach(b => {
-        // Stack 3 oscillators per beep (slightly detuned) = much richer/louder sound
         [-4, 0, 4].forEach(detune => {
-          const osc  = ctx.createOscillator();
+          const osc = ctx.createOscillator();
           const gain = ctx.createGain();
           osc.type = 'square';
           osc.frequency.value = b.freq;
           osc.detune.value = detune;
-          // Sharp attack, full sustain, sharp cutoff
           gain.gain.setValueAtTime(0.0001, ctx.currentTime + b.start);
           gain.gain.exponentialRampToValueAtTime(1.0, ctx.currentTime + b.start + 0.008);
           gain.gain.setValueAtTime(1.0, ctx.currentTime + b.start + b.dur - 0.01);
@@ -216,10 +196,8 @@ export class CaptainRideAlertService implements OnDestroy {
           osc.stop(ctx.currentTime + b.start + b.dur + 0.01);
         });
       });
-
       setTimeout(() => ctx.close().catch(() => void 0), 900);
     };
-
     if (ctx.state === 'suspended') {
       ctx.resume().then(doPlay).catch(() => void 0);
     } else {
