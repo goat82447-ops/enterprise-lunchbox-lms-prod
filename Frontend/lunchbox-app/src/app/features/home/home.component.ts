@@ -1,6 +1,6 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router, RouterLink } from '@angular/router';
+import { Params, Router, RouterLink } from '@angular/router';
 import { catchError, interval, map, Observable, of, startWith, Subject, switchMap, takeUntil } from 'rxjs';
 import {
   DynamicNewsItem,
@@ -623,7 +623,7 @@ export class HomeComponent {
   private readonly destroy$ = new Subject<void>();
   integrationCheckedAt = new Date().toISOString();
 
-  readonly serviceHighlights = [
+  readonly serviceHighlights: HomeServiceHighlight[] = [
     {
       icon: '🍔',
       title: 'Food Delivery',
@@ -829,4 +829,12 @@ interface HomeIntegrationCard {
   statusColor: IntegrationStatusColor;
   details: string;
   checkedAt?: string;
+}
+
+interface HomeServiceHighlight {
+  icon: string;
+  title: string;
+  description: string;
+  route: string;
+  queryParams?: Params;
 }
