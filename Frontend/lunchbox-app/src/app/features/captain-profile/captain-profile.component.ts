@@ -20,7 +20,18 @@ type CaptainKycFormState = {
   kycUpdatedAt: string;
 };
 
+type CaptainVehicleProfileState = {
+  userId: string;
+  vehicleName: string;
+  vehicleNumber: string;
+  drivingLicenseNumber: string;
+  rcNumber: string;
+  insuranceNumber: string;
+  emergencyContact: string;
+};
+
 const CAPTAIN_KYC_STORAGE_KEY = 'delivery_captain_kyc_state';
+const CAPTAIN_VEHICLE_PROFILE_KEY = 'delivery_captain_vehicle_profile';
 
 @Component({
   selector: 'app-captain-profile',
@@ -125,6 +136,52 @@ const CAPTAIN_KYC_STORAGE_KEY = 'delivery_captain_kyc_state';
             <div class="zcp-earn-label">Reviews</div>
           </div>
         </div>
+      </div>
+
+      <!-- ── Vehicle & Customer Basics ── -->
+      <div class="zcp-section">
+        <div class="zcp-section-title">Vehicle & Document Details</div>
+        <div class="zcp-mini-grid">
+          <div class="zcp-mini-field">
+            <label class="zcp-label">Vehicle Name</label>
+            <input class="zcp-input" [(ngModel)]="vehicleName" placeholder="Honda Activa / Swift Dzire" />
+          </div>
+          <div class="zcp-mini-field">
+            <label class="zcp-label">Vehicle Number</label>
+            <input class="zcp-input" [(ngModel)]="vehicleNumber" placeholder="TS09AB1234" />
+          </div>
+          <div class="zcp-mini-field">
+            <label class="zcp-label">Driving License No.</label>
+            <input class="zcp-input" [(ngModel)]="drivingLicenseNumber" placeholder="DL-042011..." />
+          </div>
+          <div class="zcp-mini-field">
+            <label class="zcp-label">RC Number</label>
+            <input class="zcp-input" [(ngModel)]="rcNumber" placeholder="RC / Chassis No." />
+          </div>
+          <div class="zcp-mini-field">
+            <label class="zcp-label">Insurance Policy No.</label>
+            <input class="zcp-input" [(ngModel)]="insuranceNumber" placeholder="Policy Number" />
+          </div>
+          <div class="zcp-mini-field">
+            <label class="zcp-label">Emergency Contact</label>
+            <input class="zcp-input" [(ngModel)]="emergencyContact" placeholder="+91-9XXXXXXXXX" />
+          </div>
+        </div>
+        <button class="zcp-save-dp-btn mt-2" type="button" (click)="saveVehicleProfile()">Save Details</button>
+      </div>
+
+      <div class="zcp-section">
+        <div class="zcp-section-title">Customer Basic Details</div>
+        <div class="zcp-customer-card" *ngIf="currentCustomerRide as ride; else noCustomerBasics">
+          <div class="zcp-customer-row"><span class="zcp-customer-key">Booking</span><span class="zcp-customer-val">{{ ride.id }}</span></div>
+          <div class="zcp-customer-row"><span class="zcp-customer-key">Customer</span><span class="zcp-customer-val">{{ ride.userName }}</span></div>
+          <div class="zcp-customer-row"><span class="zcp-customer-key">Contact</span><span class="zcp-customer-val">{{ ride.recipientPhone || 'Not shared' }}</span></div>
+          <div class="zcp-customer-row"><span class="zcp-customer-key">Payment</span><span class="zcp-customer-val">{{ ride.paymentMethod | titlecase }}</span></div>
+          <div class="zcp-customer-row"><span class="zcp-customer-key">Service</span><span class="zcp-customer-val">{{ ride.serviceType | titlecase }}</span></div>
+        </div>
+        <ng-template #noCustomerBasics>
+          <div class="zcp-empty-small">Customer details appear when a ride is assigned/active.</div>
+        </ng-template>
       </div>
 
       <!-- ── New Ride Banner ── -->
@@ -505,6 +562,14 @@ const CAPTAIN_KYC_STORAGE_KEY = 'delivery_captain_kyc_state';
     .zcp-kyc-verify-btn:disabled { opacity:.4; }
     .zcp-kyc-reject-btn { padding:9px 14px; background:#ffe7ea; color:#ae2e3a; border:1px solid #fecaca; border-radius:8px; font-size:12px; font-weight:700; cursor:pointer; }
     .zcp-kyc-reject-btn:disabled { opacity:.4; }
+    .zcp-mini-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+    .zcp-mini-field { display:flex; flex-direction:column; gap:5px; }
+    .zcp-customer-card { border:1px solid #ececf0; border-radius:12px; background:#fafafb; padding:12px; }
+    .zcp-customer-row { display:flex; justify-content:space-between; gap:10px; padding:6px 0; border-bottom:1px dashed #e4e5eb; }
+    .zcp-customer-row:last-child { border-bottom:none; }
+    .zcp-customer-key { font-size:12px; color:#6b6d78; font-weight:600; }
+    .zcp-customer-val { font-size:12px; color:#20222a; font-weight:700; text-align:right; }
+    @media (max-width: 640px) { .zcp-mini-grid { grid-template-columns:1fr; } }
   `]
 })
 export class CaptainProfileComponent implements OnInit, OnDestroy {
@@ -541,6 +606,12 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
   kycDocumentNumber = '';
   kycReferenceId = '';
   kycUpdatedAt = '';
+  vehicleName = '';
+  vehicleNumber = '';
+  drivingLicenseNumber = '';
+  rcNumber = '';
+  insuranceNumber = '';
+  emergencyContact = '';
 
   private readonly destroy$ = new Subject<void>();
 
@@ -558,6 +629,12 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
     return this.completedRides
       .filter(r => r.paymentDone && new Date(r.updatedAt).toDateString() === today)
       .reduce((s, r) => s + (r.finalAmount || 0), 0);
+  }
+
+  get currentCustomerRide(): Booking | null {
+    if (this.activeRides.length > 0) return this.activeRides[0];
+    if (this.completedRides.length > 0) return this.completedRides[0];
+    return null;
   }
 
   toggleOnline(): void {
@@ -606,6 +683,7 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
       this.dpPreview = user?.profileImageUrl || '';
       this.defaultDp = `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.displayName || 'Captain')}&background=f8d7da&color=7a1632&size=128`;
       this.loadKycState(user);
+      this.loadVehicleProfileState(user);
       this.loadStats();
       this.refreshActiveRides();
       this.refreshCaptainLocation();
@@ -1050,6 +1128,51 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
     this.kycDocumentNumber = '';
     this.kycReferenceId = stored?.kycReferenceId || user.kycReferenceId || '';
     this.kycUpdatedAt = stored?.kycUpdatedAt || user.kycUpdatedAt || '';
+  }
+
+  private loadVehicleProfileState(user: AppUser | null): void {
+    this.vehicleName = user?.captainVehicle ? `${user.captainVehicle.toUpperCase()} Vehicle` : '';
+    this.vehicleNumber = '';
+    this.drivingLicenseNumber = '';
+    this.rcNumber = '';
+    this.insuranceNumber = '';
+    this.emergencyContact = '';
+
+    if (!user?.id) return;
+
+    const raw = localStorage.getItem(CAPTAIN_VEHICLE_PROFILE_KEY);
+    if (!raw) return;
+
+    try {
+      const stored = JSON.parse(raw) as CaptainVehicleProfileState;
+      if (stored.userId !== user.id) return;
+      this.vehicleName = stored.vehicleName || this.vehicleName;
+      this.vehicleNumber = stored.vehicleNumber || '';
+      this.drivingLicenseNumber = stored.drivingLicenseNumber || '';
+      this.rcNumber = stored.rcNumber || '';
+      this.insuranceNumber = stored.insuranceNumber || '';
+      this.emergencyContact = stored.emergencyContact || '';
+    } catch {
+      // ignore invalid local cache
+    }
+  }
+
+  saveVehicleProfile(): void {
+    const userId = this.captain?.id;
+    if (!userId) return;
+
+    const payload: CaptainVehicleProfileState = {
+      userId,
+      vehicleName: this.vehicleName.trim(),
+      vehicleNumber: this.vehicleNumber.trim(),
+      drivingLicenseNumber: this.drivingLicenseNumber.trim(),
+      rcNumber: this.rcNumber.trim(),
+      insuranceNumber: this.insuranceNumber.trim(),
+      emergencyContact: this.emergencyContact.trim()
+    };
+
+    localStorage.setItem(CAPTAIN_VEHICLE_PROFILE_KEY, JSON.stringify(payload));
+    this.notifications.push('Vehicle and document details saved.', 'success');
   }
 
   private persistKycState(): void {
