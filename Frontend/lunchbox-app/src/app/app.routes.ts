@@ -27,6 +27,8 @@ import { PowerPassComponent } from './features/power-pass/power-pass.component';
 import { CoinsComponent } from './features/coins/coins.component';
 import { ClaimsComponent } from './features/claims/claims.component';
 import { SettingsComponent } from './features/settings/settings.component';
+import { CaptainRidesComponent } from './features/captain-rides/captain-rides.component';
+import { CaptainBankComponent } from './features/captain_bank/captain_bank.component';
 
 export const routes: Routes = [
 	{ path: '', component: HomeComponent },
@@ -54,6 +56,8 @@ export const routes: Routes = [
 	{ path: 'tracking', component: TrackingComponent, canActivate: [authGuard] },
 	{ path: 'tracking/:id', component: TrackingComponent, canActivate: [authGuard] },
 	{ path: 'captain-profile', component: CaptainProfileComponent, canActivate: [authGuard, captainGuard] },
+	{ path: 'captain-rides', component: CaptainRidesComponent, canActivate: [authGuard, captainGuard] },
+	{ path: 'captain-bank', component: CaptainBankComponent, canActivate: [authGuard, captainGuard] },
 	{ path: 'admin', component: AdminComponent, canActivate: [authGuard, adminGuard] },
 	{ path: 'audit', component: AuditComponent, canActivate: [authGuard, adminGuard] },
 	{ path: 'safety', component: SafetyComponent, canActivate: [authGuard] },
