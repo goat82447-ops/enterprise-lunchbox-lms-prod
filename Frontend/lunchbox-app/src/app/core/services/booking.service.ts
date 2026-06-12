@@ -8,6 +8,7 @@ import { environment } from '../../../environments/environment';
 
 const STORAGE_KEY = 'delivery_bookings';
 const BOOKINGS_API = `${environment.parcelApiBase}/api/bookings`;
+const EVENTS_API = `${environment.parcelApiBase}/api/events`;
 const BROADCAST_CHANNEL_NAME = 'routex_bookings';
 
 @Injectable({ providedIn: 'root' })
@@ -16,9 +17,10 @@ export class BookingService {
   private static readonly CAPTAIN_ACCEPT_TIMEOUT_MINUTES = 20;
   private readonly bookingsSubject = new BehaviorSubject<Booking[]>(this.loadBookings());
   readonly bookings$: Observable<Booking[]> = this.bookingsSubject.asObservable();
-  /** Track booking IDs that have already fired their one-time auto-cancel/confirm notification to prevent spam */
   private readonly notifiedBookingIds = new Set<string>();
   private broadcastChannel: BroadcastChannel | null = null;
+  private eventSource: EventSource | null = null;
+  private sseRetryTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private notifications: NotificationService,
@@ -28,8 +30,8 @@ export class BookingService {
     // Wake up Render free-tier server on app start (avoids first-request cold start delay)
     this.http.get(`${environment.parcelApiBase}/health`, { responseType: 'text' })
       .subscribe({ error: () => void 0 });
-    // Re-ping every 14 minutes to keep server warm
-    interval(14 * 60 * 1000)
+    // Re-ping every 5 minutes to keep Render server awake
+    interval(5 * 60 * 1000)
       .subscribe(() => this.http.get(`${environment.parcelApiBase}/health`, { responseType: 'text' })
         .subscribe({ error: () => void 0 }));
 
@@ -60,21 +62,22 @@ export class BookingService {
       });
     }
 
-    // Only sync (and show the 'Live ride sync' popup) when the user logs in or out,
-    // not on every profile update that re-emits user$ with the same user ID.
     this.auth.user$.pipe(
       distinctUntilChanged((prev, curr) => (prev?.id ?? null) === (curr?.id ?? null))
     ).subscribe((user) => {
       if (!user) {
         this.persist([]);
+        this.disconnectSse();
         return;
       }
 
       this.syncBookingsFromServer(true);
+      // Connect SSE for real-time cross-device push (captains receive instant notifications)
+      this.connectSse();
     });
 
-    // Poll every 1.5s for fast captain notification (down from 3s)
-    interval(1500)
+    // Fallback polling every 5s (SSE handles real-time; polling catches missed events)
+    interval(5000)
       .pipe(switchMap(() => this.fetchBookingsFromServer()))
       .subscribe((bookings) => {
         if (!bookings) {
@@ -469,6 +472,36 @@ export class BookingService {
   private getSessionHeaders(): HttpHeaders {
     const token = this.auth.getSessionToken();
     return token ? new HttpHeaders({ 'x-session-token': token }) : new HttpHeaders();
+  }
+
+  private connectSse(): void {
+    this.disconnectSse();
+    const token = this.auth.getSessionToken();
+    if (!token || typeof EventSource === 'undefined') return;
+    const url = `${EVENTS_API}?sessionToken=${encodeURIComponent(token)}`;
+    const es = new EventSource(url);
+    this.eventSource = es;
+
+    es.addEventListener('new_booking', (event: MessageEvent) => {
+      try { this.upsertBooking(JSON.parse(event.data) as Booking); } catch { /* ignore */ }
+    });
+
+    es.addEventListener('booking_updated', (event: MessageEvent) => {
+      try { this.upsertBooking(JSON.parse(event.data) as Booking); } catch { /* ignore */ }
+    });
+
+    es.onerror = () => {
+      es.close();
+      this.eventSource = null;
+      if (this.auth.getSessionToken()) {
+        this.sseRetryTimer = setTimeout(() => this.connectSse(), 5000);
+      }
+    };
+  }
+
+  private disconnectSse(): void {
+    if (this.sseRetryTimer) { clearTimeout(this.sseRetryTimer); this.sseRetryTimer = null; }
+    if (this.eventSource) { this.eventSource.close(); this.eventSource = null; }
   }
 
   private upsertBooking(serverBooking: Booking): void {
