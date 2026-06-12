@@ -252,6 +252,7 @@ export interface Booking {
 }
 
 export interface BookingRequest {
+  clientRequestId?: string;
   bookingFor: 'self' | 'others';
   recipientName?: string;
   recipientPhone?: string;
