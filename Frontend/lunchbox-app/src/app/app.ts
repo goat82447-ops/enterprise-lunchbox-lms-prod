@@ -10,13 +10,14 @@ import { AppNotification, AppUser } from './core/models/delivery.models';
 import { LanguageCode, LanguageService } from './core/services/language.service';
 import { ThemeCode, ThemeService } from './core/services/theme.service';
 import { ChatbotComponent } from './shared/components/chatbot/chatbot.component';
+import { CaptainRideAlertComponent } from './shared/components/captain-ride-alert/captain-rides.alert.component';
 import { environment } from '../environments/environment';
 import { SupportService } from './core/services/support.service';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterOutlet, RouterLink, RouterLinkActive, ChatbotComponent],
+  imports: [CommonModule, FormsModule, RouterOutlet, RouterLink, RouterLinkActive, ChatbotComponent, CaptainRideAlertComponent],
   template: `
     <nav class="navbar navbar-expand-lg navbar-dark sticky-top app-nav">
       <div class="container-fluid">
@@ -237,6 +238,9 @@ import { SupportService } from './core/services/support.service';
     <main class="app-main">
       <router-outlet></router-outlet>
     </main>
+
+    <!-- Captain ride alert overlay: shows from any page when a new ride arrives -->
+    <app-captain-ride-alert *ngIf="isCaptain$ | async"></app-captain-ride-alert>
 
     <nav class="bottom-tab-nav" aria-label="Mobile bottom navigation" *ngIf="(isLoggedIn$ | async) && !(isAdmin$ | async) && !(isCaptain$ | async)">
       <a class="tab-item" [class.active]="isBottomTabActive('home')" routerLink="/home" aria-label="Home">
