@@ -18,6 +18,7 @@ export class BookingService {
   private readonly bookingsSubject = new BehaviorSubject<Booking[]>(this.loadBookings());
   readonly bookings$: Observable<Booking[]> = this.bookingsSubject.asObservable();
   private readonly notifiedBookingIds = new Set<string>();
+  private readonly notifiedSseBookingIds = new Set<string>();
   private broadcastChannel: BroadcastChannel | null = null;
   private eventSource: EventSource | null = null;
   private sseRetryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -494,7 +495,21 @@ export class BookingService {
     this.eventSource = es;
 
     es.addEventListener('new_booking', (event: MessageEvent) => {
-      try { this.upsertBooking(JSON.parse(event.data) as Booking); } catch { /* ignore */ }
+      try {
+        const booking = JSON.parse(event.data) as Booking;
+        this.upsertBooking(booking);
+        const me = this.auth.getCurrentUser();
+        if (
+          me?.role === 'customer' &&
+          booking.userId === me.id &&
+          !this.notifiedSseBookingIds.has(booking.id)
+        ) {
+          this.notifiedSseBookingIds.add(booking.id);
+          this.notifications.push(`Booking ${booking.id} confirmed. Captain notifications sent.`, 'success');
+        }
+      } catch {
+        /* ignore */
+      }
     });
 
     es.addEventListener('booking_updated', (event: MessageEvent) => {
