@@ -18,6 +18,7 @@ export class BookingService {
   private readonly bookingsSubject = new BehaviorSubject<Booking[]>(this.loadBookings());
   readonly bookings$: Observable<Booking[]> = this.bookingsSubject.asObservable();
   private readonly notifiedBookingIds = new Set<string>();
+  private readonly notifiedSseBookingIds = new Set<string>();
   private broadcastChannel: BroadcastChannel | null = null;
   private eventSource: EventSource | null = null;
   private sseRetryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -145,8 +146,16 @@ export class BookingService {
     this.broadcastChannel?.postMessage({ type: 'NEW_BOOKING', booking });
 
     // ── POST to server with auto-retry (up to 5 attempts, 3s apart) so captain on other devices gets it ──
+    const serverPayload: BookingRequest = {
+      ...request,
+      clientRequestId: booking.id,
+      notificationTarget: 'all',
+      preferredCaptainId: undefined,
+      preferredCaptainName: undefined
+    };
+
     this.http
-      .post<Booking>(BOOKINGS_API, request, { headers: this.getSessionHeaders() })
+      .post<Booking>(BOOKINGS_API, serverPayload, { headers: this.getSessionHeaders() })
       .pipe(retry({ count: 5, delay: 3000 }))
       .subscribe({
         next: (serverBooking) => {
@@ -155,7 +164,10 @@ export class BookingService {
           this.broadcastChannel?.postMessage({ type: 'BOOKINGS_UPDATED' });
         },
         error: () => {
-          // After 5 retries still failed — silently ignore, local booking is safe
+          this.notifications.push(
+            `Booking ${booking.id} was created locally but backend sync failed. Captains on other phones may not receive it until connection recovers.`,
+            'error'
+          );
         }
       });
 
@@ -483,7 +495,21 @@ export class BookingService {
     this.eventSource = es;
 
     es.addEventListener('new_booking', (event: MessageEvent) => {
-      try { this.upsertBooking(JSON.parse(event.data) as Booking); } catch { /* ignore */ }
+      try {
+        const booking = JSON.parse(event.data) as Booking;
+        this.upsertBooking(booking);
+        const me = this.auth.getCurrentUser();
+        if (
+          me?.role === 'customer' &&
+          booking.userId === me.id &&
+          !this.notifiedSseBookingIds.has(booking.id)
+        ) {
+          this.notifiedSseBookingIds.add(booking.id);
+          this.notifications.push(`Booking ${booking.id} confirmed. Captain notifications sent.`, 'success');
+        }
+      } catch {
+        /* ignore */
+      }
     });
 
     es.addEventListener('booking_updated', (event: MessageEvent) => {

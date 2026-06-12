@@ -1,6 +1,6 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router, RouterLink } from '@angular/router';
+import { Params, Router, RouterLink } from '@angular/router';
 import { catchError, interval, map, Observable, of, startWith, Subject, switchMap, takeUntil } from 'rxjs';
 import {
   DynamicNewsItem,
@@ -31,7 +31,7 @@ import { AuthService } from '../../core/services/auth.service';
             <h1 class="display-5 fw-bold mb-2 mt-2 hero-headline">One App. Every Journey 🚀</h1>
             <p class="lead mb-4">Book food, parcel, pickup service, women safety rides, and more with live captain tracking.</p>
             <div class="d-grid d-md-flex gap-2 flex-wrap">
-              <a routerLink="/booking" class="btn btn-danger btn-lg">{{ t('bookDelivery') }}</a>
+              <a routerLink="/travel" class="btn btn-danger btn-lg">{{ t('bookDelivery') }}</a>
               <a routerLink="/services" class="btn btn-outline-light btn-lg fw-semibold">Explore Services</a>
             </div>
           </div>
@@ -623,7 +623,7 @@ export class HomeComponent {
   private readonly destroy$ = new Subject<void>();
   integrationCheckedAt = new Date().toISOString();
 
-  readonly serviceHighlights = [
+  readonly serviceHighlights: HomeServiceHighlight[] = [
     {
       icon: '🍔',
       title: 'Food Delivery',
@@ -634,22 +634,19 @@ export class HomeComponent {
       icon: '🛍️',
       title: 'Pickup Service',
       description: 'Pickup item from any shop to your destination.',
-      route: '/booking',
-      queryParams: { service: 'parcel', pickupService: 1 }
+      route: '/travel'
     },
     {
       icon: '🛡️',
       title: 'Women Safety Mode',
       description: 'Top-ranked trusted captains prioritized first.',
-      route: '/booking',
-      queryParams: { womenSafety: 1, service: 'parcel' }
+      route: '/travel'
     },
     {
       icon: '🎒',
       title: 'School and Teen Rides',
       description: 'RouteX school delivery and teen-safe assisted ride options.',
-      route: '/lunchbox-delivery',
-      queryParams: { lunchBox: 1, service: 'food' }
+      route: '/travel'
     }
   ];
 
@@ -832,4 +829,12 @@ interface HomeIntegrationCard {
   statusColor: IntegrationStatusColor;
   details: string;
   checkedAt?: string;
+}
+
+interface HomeServiceHighlight {
+  icon: string;
+  title: string;
+  description: string;
+  route: string;
+  queryParams?: Params;
 }
