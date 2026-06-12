@@ -1,6 +1,6 @@
 import { Injectable, OnDestroy } from '@angular/core';
 import { BehaviorSubject, Subject, Subscription } from 'rxjs';
-import { AppUser, Booking } from '../models/delivery.models';
+import { Booking } from '../models/delivery.models';
 import { AuthService } from './auth.service';
 import { BookingService } from './booking.service';
 import { NotificationService } from './notification.service';
@@ -144,9 +144,6 @@ export class CaptainRideAlertService implements OnDestroy {
   }
 
   private checkForIncomingRides(): void {
-    const captain = this.auth.getCurrentUser();
-    if (!captain) return;
-
     const current = this.incomingRideSubject.value;
     if (current) {
       const live = this.bookingService.getAllBookingsSnapshot().find((b: Booking) => b.id === current.id);
@@ -158,45 +155,20 @@ export class CaptainRideAlertService implements OnDestroy {
       }
     }
     const pending = this.bookingService.getAllBookingsSnapshot()
-      .filter((b: Booking) => b.status === 'created' && this.isRideForCaptain(b, captain));
+      .filter((b: Booking) => b.status === 'created' && b.notificationTarget === 'all');
     for (const ride of pending) {
       if (this.notifiedRideIds.has(ride.id)) continue;
       this.notifiedRideIds.add(ride.id);
       this.showAlert(ride);
-      this.notifications.push(
-        `New ride request ${ride.id}: ${ride.pickup.address.split(',')[0]} to ${ride.drop.address.split(',')[0]}.`,
-        'warning'
-      );
-      this.notifications.playSound('alert');
       if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
         new Notification('New Ride Request!', {
           body: `${ride.serviceType} ride: ${ride.pickup.address.split(',')[0]} to ${ride.drop.address.split(',')[0]} - Rs.${ride.estimatedFare || 0}`,
           tag: `ride-${ride.id}`,
           icon: '/assets/lunchbox-logo.svg',
-          requireInteraction: true,
-          silent: false
+          requireInteraction: true
         });
       }
     }
-  }
-
-  private isRideForCaptain(ride: Booking, captain: AppUser): boolean {
-    if (ride.notificationTarget === 'all') return true;
-
-    const captainId = String(captain.id || '').trim().toLowerCase();
-    const captainUserName = String(captain.username || '').trim().toLowerCase();
-    const captainDisplayName = String(captain.displayName || '').trim().toLowerCase();
-    const preferredCaptainId = String(ride.preferredCaptainId || '').trim().toLowerCase();
-    const preferredCaptainName = String(ride.preferredCaptainName || '').trim().toLowerCase();
-    const assignedCaptainId = String(ride.captainId || '').trim().toLowerCase();
-    const driverName = String(ride.driverName || '').trim().toLowerCase();
-
-    return Boolean(
-      (preferredCaptainId.length > 0 && (preferredCaptainId === captainId || preferredCaptainId === captainUserName)) ||
-      (assignedCaptainId.length > 0 && (assignedCaptainId === captainId || assignedCaptainId === captainUserName)) ||
-      (preferredCaptainName.length > 0 && (preferredCaptainName === captainDisplayName || preferredCaptainName === captainUserName)) ||
-      (driverName.length > 0 && (driverName === captainDisplayName || driverName === captainUserName))
-    );
   }
 
   private clearTimers(): void {
