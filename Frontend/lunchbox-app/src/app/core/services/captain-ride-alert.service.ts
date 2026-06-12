@@ -26,6 +26,18 @@ export class CaptainRideAlertService implements OnDestroy {
   private soundInterval: ReturnType<typeof setInterval> | null = null;
   private bookingsSub: Subscription | null = null;
   private audioUnlocked = false;
+  private sharedCtx: AudioContext | null = null;
+
+  private getAudioCtx(): AudioContext | null {
+    if (typeof window === 'undefined') return null;
+    const AC = (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext
+      || (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AC) return null;
+    if (!this.sharedCtx || this.sharedCtx.state === 'closed') {
+      this.sharedCtx = new AC();
+    }
+    return this.sharedCtx;
+  }
 
   constructor(
     private auth: AuthService,
@@ -36,9 +48,8 @@ export class CaptainRideAlertService implements OnDestroy {
       const unlock = () => {
         if (this.audioUnlocked) return;
         this.audioUnlocked = true;
-        const AC = (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext
-          || (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-        if (AC) { const c = new AC(); c.resume().then(() => c.close()).catch(() => void 0); }
+        const ctx = this.getAudioCtx();
+        if (ctx) ctx.resume().catch(() => void 0);
         ['click', 'touchstart', 'keydown'].forEach(e => window.removeEventListener(e, unlock, true));
       };
       ['click', 'touchstart', 'keydown'].forEach(e => window.addEventListener(e, unlock, true));
@@ -53,7 +64,12 @@ export class CaptainRideAlertService implements OnDestroy {
     });
   }
 
-  ngOnDestroy(): void { this.clearTimers(); this.bookingsSub?.unsubscribe(); }
+  ngOnDestroy(): void {
+    this.clearTimers();
+    this.bookingsSub?.unsubscribe();
+    this.sharedCtx?.close().catch(() => void 0);
+    this.sharedCtx = null;
+  }
 
   get incomingRide(): Booking | null { return this.incomingRideSubject.value; }
 
@@ -102,10 +118,8 @@ export class CaptainRideAlertService implements OnDestroy {
   }
 
   playAlertSound(): void {
-    const AC = (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext
-      || (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!AC) return;
-    const ctx: AudioContext = new AC();
+    const ctx = this.getAudioCtx();
+    if (!ctx) return;
     const run = () => {
       const comp = ctx.createDynamicsCompressor();
       comp.threshold.setValueAtTime(-6, ctx.currentTime);
@@ -138,7 +152,6 @@ export class CaptainRideAlertService implements OnDestroy {
           o.stop(ctx.currentTime + b.s + b.d + 0.01);
         });
       });
-      setTimeout(() => ctx.close().catch(() => void 0), 900);
     };
     if (ctx.state === 'suspended') { ctx.resume().then(run).catch(() => void 0); } else { run(); }
   }
