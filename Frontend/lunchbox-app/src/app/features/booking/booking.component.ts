@@ -782,16 +782,9 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
             <h5 class="mb-2" *ngIf="serviceType !== 'food'">Captain Notification Audience</h5>
             <div class="d-flex flex-wrap gap-3 mb-2" *ngIf="serviceType !== 'food'">
               <label class="form-check-label">
-                <input type="radio" class="form-check-input me-2" name="notificationTarget" value="preferred" [(ngModel)]="notificationTarget" />
-                Preferred Captain Only
-              </label>
-              <label class="form-check-label">
                 <input type="radio" class="form-check-input me-2" name="notificationTarget" value="all" [(ngModel)]="notificationTarget" />
                 All Captains
               </label>
-            </div>
-            <div class="small text-muted mb-4" *ngIf="serviceType !== 'food' && notificationTarget === 'preferred' && selectedCaptain">
-              Notifications with sound will be sent only to Captain({{ selectedCaptain.name }}).
             </div>
             <div class="small text-muted mb-4" *ngIf="serviceType !== 'food' && notificationTarget === 'all'">
               Notifications with sound will be sent to all captains.
@@ -2764,12 +2757,12 @@ export class BookingComponent implements OnDestroy {
   onTeenageRideModeChange(): void {
     if (this.teenageRideMode) {
       this.bookingFor = 'others';
-      this.notificationTarget = 'preferred';
+      this.notificationTarget = 'all';
       this.activateFocusedMode('teen');
       if (!this.rideNotes.toLowerCase().includes('teenage ride mode')) {
         this.rideNotes = `${this.rideNotes ? `${this.rideNotes} | ` : ''}Teenage Ride Mode`;
       }
-      this.notifications.push('Teenage Ride Mode enabled. Booking is set for Others with preferred captain alerts.', 'info');
+      this.notifications.push('Teenage Ride Mode enabled. Booking is set for Others and notifications go to all captains.', 'info');
       return;
     }
 
