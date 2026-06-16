@@ -5,6 +5,30 @@ import { AdminUserListItem, Booking, UserStats } from '../../core/models/deliver
 import { AuthService } from '../../core/services/auth.service';
 import { BookingService } from '../../core/services/booking.service';
 
+type CaptainVerificationRequestState = {
+  requestId: string;
+  userId: string;
+  captainName: string;
+  status: 'pending' | 'approved' | 'rejected';
+  submittedAt: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+  reviewNote?: string;
+  kycReferenceId?: string;
+};
+
+type CaptainKycFormState = {
+  userId: string;
+  kycStatus: 'not_started' | 'pending' | 'verified' | 'rejected';
+  kycDocumentType: string;
+  kycDocumentNumberMasked: string;
+  kycReferenceId: string;
+  kycUpdatedAt: string;
+};
+
+const CAPTAIN_VERIFICATION_REQUESTS_KEY = 'delivery_captain_verification_requests';
+const CAPTAIN_KYC_STORAGE_KEY = 'delivery_captain_kyc_state';
+
 @Component({
   selector: 'app-admin',
   standalone: true,
@@ -131,6 +155,44 @@ import { BookingService } from '../../core/services/booking.service';
         Ride start is customer-controlled only. Admin approval is removed. Customer must enter OTP from tracking page to start ride.
       </div>
 
+      <div class="card p-3 mb-3">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <h5 class="mb-0">Captain Verification Requests</h5>
+          <button class="btn btn-outline-secondary btn-sm" type="button" (click)="loadVerificationRequests()">Refresh</button>
+        </div>
+        <div class="text-muted small" *ngIf="verificationRequests.length === 0">No captain verification requests yet.</div>
+        <div class="table-responsive" *ngIf="verificationRequests.length > 0">
+          <table class="table table-sm align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Captain</th>
+                <th>KYC Ref</th>
+                <th>Status</th>
+                <th>Submitted</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let req of verificationRequests">
+                <td>{{ req.captainName }}</td>
+                <td>{{ req.kycReferenceId || '-' }}</td>
+                <td><span class="badge text-capitalize" [ngClass]="req.status === 'approved' ? 'text-bg-success' : (req.status === 'rejected' ? 'text-bg-danger' : 'text-bg-warning')">{{ req.status }}</span></td>
+                <td>{{ req.submittedAt | date:'short' }}</td>
+                <td>
+                  <div class="btn-group btn-group-sm" *ngIf="req.status === 'pending'; else reviewedState">
+                    <button class="btn btn-outline-success" type="button" (click)="approveCaptainVerification(req)">Approve</button>
+                    <button class="btn btn-outline-danger" type="button" (click)="rejectCaptainVerification(req)">Reject</button>
+                  </div>
+                  <ng-template #reviewedState>
+                    <small class="text-muted">{{ req.reviewedBy || 'Admin' }} • {{ req.reviewedAt | date:'short' }}</small>
+                  </ng-template>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="card p-3" *ngFor="let booking of bookings$ | async">
         <div class="row g-3 align-items-end">
           <div class="col-lg-4"><strong>{{ booking.id }}</strong></div>
@@ -177,6 +239,7 @@ export class AdminComponent {
   userStatsError = '';
   users: AdminUserListItem[] = [];
   usersError = '';
+  verificationRequests: CaptainVerificationRequestState[] = [];
   searchTerm = '';
   selectedRole: 'all' | 'admin' | 'captain' | 'customer' = 'all';
   pageSize = 10;
@@ -186,6 +249,96 @@ export class AdminComponent {
     this.bookings$ = this.bookingService.bookings$;
     this.loadUserStats();
     this.loadUsers();
+    this.loadVerificationRequests();
+  }
+
+  loadVerificationRequests(): void {
+    const raw = localStorage.getItem(CAPTAIN_VERIFICATION_REQUESTS_KEY);
+    if (!raw) {
+      this.verificationRequests = [];
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as CaptainVerificationRequestState[];
+      this.verificationRequests = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      this.verificationRequests = [];
+    }
+  }
+
+  approveCaptainVerification(req: CaptainVerificationRequestState): void {
+    const now = new Date().toISOString();
+    this.verificationRequests = this.verificationRequests.map((item) =>
+      item.requestId === req.requestId
+        ? {
+            ...item,
+            status: 'approved',
+            reviewedAt: now,
+            reviewedBy: 'Admin',
+            reviewNote: 'Approved by admin'
+          }
+        : item
+    );
+
+    this.persistVerificationRequests();
+    this.applyKycStatusForCaptain(req.userId, 'verified', req.kycReferenceId || '');
+  }
+
+  rejectCaptainVerification(req: CaptainVerificationRequestState): void {
+    const now = new Date().toISOString();
+    this.verificationRequests = this.verificationRequests.map((item) =>
+      item.requestId === req.requestId
+        ? {
+            ...item,
+            status: 'rejected',
+            reviewedAt: now,
+            reviewedBy: 'Admin',
+            reviewNote: 'Rejected by admin. Please update docs and apply again.'
+          }
+        : item
+    );
+
+    this.persistVerificationRequests();
+    this.applyKycStatusForCaptain(req.userId, 'rejected', req.kycReferenceId || '');
+  }
+
+  private persistVerificationRequests(): void {
+    localStorage.setItem(CAPTAIN_VERIFICATION_REQUESTS_KEY, JSON.stringify(this.verificationRequests));
+  }
+
+  private applyKycStatusForCaptain(userId: string, status: 'verified' | 'rejected', referenceId: string): void {
+    const raw = localStorage.getItem(CAPTAIN_KYC_STORAGE_KEY);
+    const now = new Date().toISOString();
+    let store: Record<string, CaptainKycFormState> = {};
+
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw) as Record<string, CaptainKycFormState> | CaptainKycFormState;
+        if ('userId' in (parsed as any)) {
+          const legacy = parsed as CaptainKycFormState;
+          if (legacy.userId) {
+            store = { [legacy.userId]: legacy };
+          }
+        } else {
+          store = parsed as Record<string, CaptainKycFormState>;
+        }
+      } catch {
+        store = {};
+      }
+    }
+
+    const existing = store[userId];
+    store[userId] = {
+      userId,
+      kycStatus: status,
+      kycDocumentType: existing?.kycDocumentType || 'Driving License',
+      kycDocumentNumberMasked: existing?.kycDocumentNumberMasked || '',
+      kycReferenceId: referenceId || existing?.kycReferenceId || '',
+      kycUpdatedAt: now
+    };
+
+    localStorage.setItem(CAPTAIN_KYC_STORAGE_KEY, JSON.stringify(store));
   }
 
   private loadUserStats(): void {

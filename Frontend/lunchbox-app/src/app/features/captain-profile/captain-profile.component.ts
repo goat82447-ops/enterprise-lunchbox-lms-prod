@@ -30,8 +30,22 @@ type CaptainVehicleProfileState = {
   emergencyContact: string;
 };
 
+type CaptainVerificationRequestState = {
+  requestId: string;
+  userId: string;
+  captainName: string;
+  status: 'pending' | 'approved' | 'rejected';
+  submittedAt: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+  reviewNote?: string;
+  kycReferenceId?: string;
+};
+
 const CAPTAIN_KYC_STORAGE_KEY = 'delivery_captain_kyc_state';
 const CAPTAIN_VEHICLE_PROFILE_KEY = 'delivery_captain_vehicle_profile';
+const CAPTAIN_BANK_STORAGE_KEY = 'captain_bank_details_v1';
+const CAPTAIN_VERIFICATION_REQUESTS_KEY = 'delivery_captain_verification_requests';
 
 @Component({
   selector: 'app-captain-profile',
@@ -97,6 +111,7 @@ const CAPTAIN_VEHICLE_PROFILE_KEY = 'delivery_captain_vehicle_profile';
             <div class="zcp-captain-text">
               <div class="zcp-captain-name">{{ c.displayName }}</div>
               <div class="zcp-captain-sub">{{ c.captainVehicle | titlecase }} Captain</div>
+              <div class="zcp-verified-driver-badge" *ngIf="kycStatus === 'verified'">✔ Verified Driver</div>
               <div class="zcp-stars">
                 <span *ngFor="let s of starArray(avgCaptainRating)">{{ s }}</span>
                 <span class="zcp-rating-val">{{ avgCaptainRating.toFixed(1) }}</span>
@@ -372,9 +387,11 @@ const CAPTAIN_VEHICLE_PROFILE_KEY = 'delivery_captain_vehicle_profile';
 
             <div class="zcp-kyc-actions">
               <button class="zcp-kyc-submit-btn" type="button" (click)="submitKyc()" [disabled]="!canSubmitKyc">Submit KYC</button>
-              <button class="zcp-kyc-verify-btn" type="button" (click)="markKycVerified()" [disabled]="kycStatus !== 'pending'">Mark Verified</button>
-              <button class="zcp-kyc-reject-btn" type="button" (click)="markKycRejected()" [disabled]="kycStatus !== 'pending'">Reject</button>
+              <button class="zcp-kyc-verify-btn" type="button" (click)="applyForVerification()" [disabled]="!canApplyForVerification">Apply (Admin Approval)</button>
             </div>
+            <div class="zcp-kyc-hint mt-2">Bank Details Status: <strong>{{ bankDetailsSaved ? 'Saved' : 'Not Saved' }}</strong></div>
+            <div class="zcp-kyc-hint" *ngIf="verificationAppliedAt">Application Submitted: {{ verificationAppliedAt | date:'medium' }}</div>
+            <div class="zcp-kyc-hint" *ngIf="verificationReviewMessage">Review: {{ verificationReviewMessage }}</div>
           </div>
         </div>
       </div>
@@ -436,6 +453,7 @@ const CAPTAIN_VEHICLE_PROFILE_KEY = 'delivery_captain_vehicle_profile';
     .zcp-avatar-status.online { background:#26e36c; }
     .zcp-captain-name { font-size:18px; font-weight:800; line-height:1.2; }
     .zcp-captain-sub { font-size:12px; color:#aaa; margin-top:2px; }
+    .zcp-verified-driver-badge { display:inline-flex; align-items:center; gap:6px; width:max-content; margin-top:5px; font-size:11px; font-weight:800; color:#0f7a42; background:#e7f9ee; border:1px solid #bbf7d0; border-radius:999px; padding:2px 9px; }
     .zcp-stars { display:flex; align-items:center; gap:2px; margin-top:4px; font-size:13px; color:#f5a623; }
     .zcp-rating-val { color:#ddd; font-size:12px; font-weight:700; margin-left:4px; }
     .zcp-toggle-btn { padding:10px 18px; border-radius:999px; border:none; font-size:14px; font-weight:800; cursor:pointer; display:flex; align-items:center; gap:8px; transition:all .2s; flex-shrink:0; }
@@ -606,6 +624,9 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
   kycDocumentNumber = '';
   kycReferenceId = '';
   kycUpdatedAt = '';
+  bankDetailsSaved = false;
+  verificationAppliedAt = '';
+  verificationReviewMessage = '';
   vehicleName = '';
   vehicleNumber = '';
   drivingLicenseNumber = '';
@@ -833,6 +854,17 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
     return this.kycDocumentType.trim().length > 0 && this.kycDocumentNumber.trim().length >= 6;
   }
 
+  get canApplyForVerification(): boolean {
+    const vehicleComplete =
+      this.vehicleName.trim().length > 0 &&
+      this.vehicleNumber.trim().length > 0 &&
+      this.drivingLicenseNumber.trim().length > 0 &&
+      this.rcNumber.trim().length > 0 &&
+      this.insuranceNumber.trim().length > 0;
+
+    return vehicleComplete && this.canSubmitKyc && this.bankDetailsSaved && this.kycStatus !== 'pending' && this.kycStatus !== 'verified';
+  }
+
   kycStatusLabel(status: KycStatus): string {
     if (status === 'verified') {
       return 'Verified';
@@ -865,33 +897,44 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
       return;
     }
 
+    this.kycStatus = this.kycStatus === 'rejected' ? 'rejected' : 'not_started';
+    if (!this.kycReferenceId) {
+      this.kycReferenceId = this.generateKycReference();
+    }
+    this.kycUpdatedAt = new Date().toISOString();
+    this.persistKycState();
+    this.notifications.push('KYC details saved. Click Apply for admin approval.', 'success');
+  }
+
+  applyForVerification(): void {
+    if (!this.canApplyForVerification || !this.captain?.id) {
+      this.notifications.push('Complete Vehicle, Document, KYC, and Bank details before applying.', 'warning');
+      return;
+    }
+
     this.kycStatus = 'pending';
-    this.kycReferenceId = this.generateKycReference();
-    this.kycUpdatedAt = new Date().toISOString();
-    this.persistKycState();
-    this.notifications.push('KYC submitted successfully and moved to pending verification.', 'success');
-  }
-
-  markKycVerified(): void {
-    if (this.kycStatus !== 'pending') {
-      return;
+    if (!this.kycReferenceId) {
+      this.kycReferenceId = this.generateKycReference();
     }
-
-    this.kycStatus = 'verified';
     this.kycUpdatedAt = new Date().toISOString();
     this.persistKycState();
-    this.notifications.push('Captain KYC verified. Verified Driver Badge is now active.', 'success');
-  }
 
-  markKycRejected(): void {
-    if (this.kycStatus !== 'pending') {
-      return;
-    }
+    const requests = this.loadVerificationRequests();
+    const now = new Date().toISOString();
+    const next: CaptainVerificationRequestState = {
+      requestId: `VRF-${Date.now().toString().slice(-8)}`,
+      userId: this.captain.id,
+      captainName: this.captain.displayName,
+      status: 'pending',
+      submittedAt: now,
+      kycReferenceId: this.kycReferenceId
+    };
 
-    this.kycStatus = 'rejected';
-    this.kycUpdatedAt = new Date().toISOString();
-    this.persistKycState();
-    this.notifications.push('Captain KYC rejected. Please re-submit correct document details.', 'warning');
+    const merged = [next, ...requests.filter((item) => item.userId !== this.captain?.id)];
+    localStorage.setItem(CAPTAIN_VERIFICATION_REQUESTS_KEY, JSON.stringify(merged));
+    this.verificationAppliedAt = now;
+    this.verificationReviewMessage = 'Waiting for admin approval.';
+    this.notifications.push('Application submitted. Admin will verify and approve your driver status.', 'success');
   }
 
   openRideTracking(booking: Booking): void {
@@ -1111,23 +1154,16 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
     }
 
     let stored: CaptainKycFormState | null = null;
-    const raw = localStorage.getItem(CAPTAIN_KYC_STORAGE_KEY);
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw) as CaptainKycFormState;
-        if (parsed.userId === user.id) {
-          stored = parsed;
-        }
-      } catch {
-        stored = null;
-      }
-    }
+    const store = this.loadKycStore();
+    stored = store[user.id] || null;
 
     this.kycStatus = stored?.kycStatus || user.kycStatus || 'not_started';
     this.kycDocumentType = stored?.kycDocumentType || user.kycDocumentType || 'Driving License';
     this.kycDocumentNumber = '';
     this.kycReferenceId = stored?.kycReferenceId || user.kycReferenceId || '';
     this.kycUpdatedAt = stored?.kycUpdatedAt || user.kycUpdatedAt || '';
+    this.loadVerificationState(user.id);
+    this.loadBankDetailsState(user.id);
   }
 
   private loadVehicleProfileState(user: AppUser | null): void {
@@ -1140,12 +1176,11 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
 
     if (!user?.id) return;
 
-    const raw = localStorage.getItem(CAPTAIN_VEHICLE_PROFILE_KEY);
-    if (!raw) return;
+    const map = this.loadVehicleProfileStore();
+    const stored = map[user.id];
+    if (!stored) return;
 
     try {
-      const stored = JSON.parse(raw) as CaptainVehicleProfileState;
-      if (stored.userId !== user.id) return;
       this.vehicleName = stored.vehicleName || this.vehicleName;
       this.vehicleNumber = stored.vehicleNumber || '';
       this.drivingLicenseNumber = stored.drivingLicenseNumber || '';
@@ -1171,7 +1206,9 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
       emergencyContact: this.emergencyContact.trim()
     };
 
-    localStorage.setItem(CAPTAIN_VEHICLE_PROFILE_KEY, JSON.stringify(payload));
+    const map = this.loadVehicleProfileStore();
+    map[userId] = payload;
+    localStorage.setItem(CAPTAIN_VEHICLE_PROFILE_KEY, JSON.stringify(map));
     this.notifications.push('Vehicle and document details saved.', 'success');
   }
 
@@ -1190,7 +1227,9 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
       kycUpdatedAt: this.kycUpdatedAt || new Date().toISOString()
     };
 
-    localStorage.setItem(CAPTAIN_KYC_STORAGE_KEY, JSON.stringify(payload));
+    const store = this.loadKycStore();
+    store[userId] = payload;
+    localStorage.setItem(CAPTAIN_KYC_STORAGE_KEY, JSON.stringify(store));
     this.authService.applyCaptainKycStatus(this.kycStatus, {
       kycDocumentType: payload.kycDocumentType,
       kycReferenceId: payload.kycReferenceId,
@@ -1207,5 +1246,84 @@ export class CaptainProfileComponent implements OnInit, OnDestroy {
       .map((part) => part[0]?.toUpperCase() || '')
       .join('');
     return `KYC-${initials || 'CP'}-${stamp}`;
+  }
+
+  private loadKycStore(): Record<string, CaptainKycFormState> {
+    const raw = localStorage.getItem(CAPTAIN_KYC_STORAGE_KEY);
+    if (!raw) return {};
+    try {
+      const parsed = JSON.parse(raw) as Record<string, CaptainKycFormState> | CaptainKycFormState;
+      if ('userId' in (parsed as any)) {
+        const legacy = parsed as CaptainKycFormState;
+        return legacy.userId ? { [legacy.userId]: legacy } : {};
+      }
+      return parsed as Record<string, CaptainKycFormState>;
+    } catch {
+      return {};
+    }
+  }
+
+  private loadVehicleProfileStore(): Record<string, CaptainVehicleProfileState> {
+    const raw = localStorage.getItem(CAPTAIN_VEHICLE_PROFILE_KEY);
+    if (!raw) return {};
+    try {
+      const parsed = JSON.parse(raw) as Record<string, CaptainVehicleProfileState> | CaptainVehicleProfileState;
+      if ('userId' in (parsed as any)) {
+        const legacy = parsed as CaptainVehicleProfileState;
+        return legacy.userId ? { [legacy.userId]: legacy } : {};
+      }
+      return parsed as Record<string, CaptainVehicleProfileState>;
+    } catch {
+      return {};
+    }
+  }
+
+  private loadVerificationRequests(): CaptainVerificationRequestState[] {
+    const raw = localStorage.getItem(CAPTAIN_VERIFICATION_REQUESTS_KEY);
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw) as CaptainVerificationRequestState[];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private loadVerificationState(userId: string): void {
+    const request = this.loadVerificationRequests().find((item) => item.userId === userId);
+    if (!request) {
+      this.verificationAppliedAt = '';
+      this.verificationReviewMessage = '';
+      return;
+    }
+
+    this.verificationAppliedAt = request.submittedAt;
+    if (request.status === 'approved') {
+      this.kycStatus = 'verified';
+      this.verificationReviewMessage = `Approved by ${request.reviewedBy || 'Admin'}.`;
+      this.kycUpdatedAt = request.reviewedAt || this.kycUpdatedAt;
+      this.persistKycState();
+      return;
+    }
+
+    if (request.status === 'rejected') {
+      this.kycStatus = 'rejected';
+      this.verificationReviewMessage = request.reviewNote || 'Rejected by admin. Update details and re-apply.';
+      this.kycUpdatedAt = request.reviewedAt || this.kycUpdatedAt;
+      this.persistKycState();
+      return;
+    }
+
+    this.kycStatus = 'pending';
+    this.verificationReviewMessage = 'Waiting for admin approval.';
+  }
+
+  private loadBankDetailsState(userId: string): void {
+    try {
+      const raw = localStorage.getItem(`${CAPTAIN_BANK_STORAGE_KEY}_${userId}`);
+      this.bankDetailsSaved = !!raw;
+    } catch {
+      this.bankDetailsSaved = false;
+    }
   }
 }
