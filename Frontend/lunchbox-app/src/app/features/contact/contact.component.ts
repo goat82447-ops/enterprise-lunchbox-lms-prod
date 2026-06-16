@@ -178,6 +178,7 @@ import { SupportService } from '../../core/services/support.service';
   ]
 })
 export class ContactComponent {
+  private readonly githubNewIssueUrl = 'https://github.com/goat82447-ops/enterprise-lunchbox-lms-prod/issues/new';
   reportType: 'Complaint' | 'Bug' | 'Suggestion' = 'Complaint';
   reportSubject = '';
   reportName = '';
@@ -216,6 +217,9 @@ export class ContactComponent {
       description
     }).subscribe({
       next: () => {
+        if (this.reportType === 'Bug') {
+          this.openGithubBugIssue(subject, description);
+        }
         this.notificationService.push('Complaint/Bug submitted successfully.', 'success');
         this.resetReportForm();
         this.isSubmittingReport = false;
@@ -234,5 +238,30 @@ export class ContactComponent {
     this.reportContact = '';
     this.reportDescription = '';
     this.reportValidationError = '';
+  }
+
+  private openGithubBugIssue(subject: string, description: string): void {
+    const lines = [
+      '## Bug Details',
+      description,
+      '',
+      '## Reporter',
+      `- Name: ${this.reportName?.trim() || 'Not provided'}`,
+      `- Contact: ${this.reportContact?.trim() || 'Not provided'}`,
+      '',
+      '## Source',
+      `- Raised from app: Contact > Complaint / Bug Report`,
+      `- Raised at: ${new Date().toISOString()}`
+    ];
+
+    const params = new URLSearchParams({
+      title: `[Bug] ${subject}`,
+      body: lines.join('\n'),
+      labels: 'bug'
+    });
+
+    if (typeof window !== 'undefined') {
+      window.open(`${this.githubNewIssueUrl}?${params.toString()}`, '_blank', 'noopener,noreferrer');
+    }
   }
 }
