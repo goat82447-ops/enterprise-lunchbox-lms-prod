@@ -122,18 +122,23 @@ import { LoginStartResponse, UserRole } from '../../core/models/delivery.models'
       }
 
       .brand-strip {
-        display: grid;
-        grid-template-columns: 170px 1fr;
-        gap: 12px;
+        display: flex;
+        flex-direction: row;
+        gap: 20px;
         align-items: center;
+        margin-bottom: 8px;
       }
 
       .brand-logo {
-        width: 100%;
-        max-width: 170px;
-        border-radius: 10px;
-        border: 1px solid rgba(255, 255, 255, 0.15);
+        width: 160px;
+        height: 160px;
+        object-fit: contain;
+        border-radius: 16px;
+        border: 2px solid rgba(255, 58, 89, 0.4);
         background: #111318;
+        padding: 10px;
+        flex-shrink: 0;
+        box-shadow: 0 0 24px rgba(255, 40, 70, 0.2);
       }
 
       h2,
