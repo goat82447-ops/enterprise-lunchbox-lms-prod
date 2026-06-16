@@ -32,6 +32,16 @@ interface StopPoint {
   lng: number;
 }
 
+interface TravelOfferRule {
+  title: string;
+  code: string;
+  detail: string;
+  type: 'flat' | 'percent';
+  value: number;
+  minFare: number;
+  maxDiscount?: number;
+}
+
 @Component({
   selector: 'app-travel',
   standalone: true,
@@ -222,7 +232,23 @@ interface StopPoint {
 
           <div class="payment-row">
             <button class="pay-pill">💳 Cash ›</button>
-            <button class="pay-pill">% Offers ›</button>
+            <button class="pay-pill" (click)="toggleOffersPanel()">% Offers ›</button>
+          </div>
+
+          <div class="travel-offers-box" *ngIf="showOffersPanel">
+            <div class="small fw-semibold mb-1">Available Offers</div>
+            <div class="travel-offer-item" *ngFor="let offer of travelOfferRules">
+              <div>
+                <div class="fw-semibold">{{ offer.title }}</div>
+                <div class="small text-muted">{{ offer.detail }}</div>
+                <div class="small mt-1">Code: <span class="travel-offer-code">{{ offer.code }}</span></div>
+              </div>
+              <button class="btn btn-outline-success btn-sm" type="button" (click)="claimTravelOffer(offer.code)">I am eligible</button>
+            </div>
+            <div class="small text-success" *ngIf="appliedTravelOfferCode">
+              Offer {{ appliedTravelOfferCode }} applied. You save ₹{{ selectedVehicle ? getOfferDiscountForVehicle(selectedVehicle) : 0 }}.
+            </div>
+            <button class="btn btn-outline-secondary btn-sm mt-1" *ngIf="appliedTravelOfferCode" (click)="clearTravelOffer()" type="button">Remove Offer</button>
           </div>
 
           <button class="confirm-btn" [disabled]="!selectedVehicle || booking" (click)="bookRide()">
@@ -541,6 +567,39 @@ interface StopPoint {
       border-radius: 20px; padding: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
     }
 
+    .travel-offers-box {
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      background: #fafafa;
+      padding: 10px;
+      margin-bottom: 10px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .travel-offer-item {
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      background: #fff;
+      padding: 8px;
+      display: flex;
+      gap: 8px;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+
+    .travel-offer-code {
+      display: inline-flex;
+      align-items: center;
+      border: 1px dashed #cbd5e1;
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 11px;
+      font-weight: 700;
+      background: #f8fafc;
+      color: #0f172a;
+    }
+
     /* STEP 4 CONFIRM */
     .confirm-screen {
       display: flex; flex-direction: column; align-items: center;
@@ -598,6 +657,14 @@ export class TravelComponent implements OnInit, OnDestroy {
   isRideCancelled = false;
   cancelReason = '';
   cancelReasonOther = '';
+  showOffersPanel = false;
+  appliedTravelOfferCode = '';
+  readonly travelOfferRules: TravelOfferRule[] = [
+    { title: 'First Trip 50% OFF', code: 'FIRST50', detail: 'Valid for new users on first completed ride only.', type: 'percent', value: 50, minFare: 100, maxDiscount: 150 },
+    { title: 'Night Ride 30% OFF', code: 'NIGHT30', detail: 'Available from 10 PM to 6 AM.', type: 'percent', value: 30, minFare: 120, maxDiscount: 120 },
+    { title: 'City Ride 20% OFF', code: 'CAPTAIN20', detail: 'Best for premium captain assignment rides.', type: 'percent', value: 20, minFare: 100, maxDiscount: 80 },
+    { title: 'Flat ₹40 OFF', code: 'PARCEL25', detail: 'Flat discount on eligible city rides.', type: 'flat', value: 40, minFare: 140 }
+  ];
   readonly cancelReasonOptions = ['Taking too long', 'Changed my mind', 'Wrong location selected', 'Driver not reachable', 'Other'];
 
   readonly vehicleOptions: VehicleOption[] = [
@@ -878,8 +945,72 @@ export class TravelComponent implements OnInit, OnDestroy {
 
   selectVehicle(v: VehicleOption): void { this.selectedVehicle = v; }
 
-  calculateFare(v: VehicleOption): number {
+  private calculateFareBase(v: VehicleOption): number {
     return Math.round(20 + this.distanceKm * v.farePerKm);
+  }
+
+  private getTravelOfferRule(code: string): TravelOfferRule | undefined {
+    const normalized = String(code || '').trim().toUpperCase();
+    return this.travelOfferRules.find((rule) => rule.code === normalized);
+  }
+
+  private computeOfferDiscount(baseFare: number, code: string): number {
+    const rule = this.getTravelOfferRule(code);
+    if (!rule || baseFare < rule.minFare) {
+      return 0;
+    }
+
+    if (rule.type === 'flat') {
+      return Math.min(baseFare, rule.value);
+    }
+
+    const raw = Math.round((baseFare * rule.value) / 100);
+    if (rule.maxDiscount !== undefined) {
+      return Math.min(raw, rule.maxDiscount);
+    }
+    return raw;
+  }
+
+  getOfferDiscountForVehicle(v: VehicleOption): number {
+    const base = this.calculateFareBase(v);
+    return this.computeOfferDiscount(base, this.appliedTravelOfferCode);
+  }
+
+  calculateFare(v: VehicleOption): number {
+    const baseFare = this.calculateFareBase(v);
+    const discount = this.computeOfferDiscount(baseFare, this.appliedTravelOfferCode);
+    return Math.max(0, baseFare - discount);
+  }
+
+  toggleOffersPanel(): void {
+    this.showOffersPanel = !this.showOffersPanel;
+  }
+
+  claimTravelOffer(code: string): void {
+    if (!code) {
+      return;
+    }
+
+    const rule = this.getTravelOfferRule(code);
+    if (!rule) {
+      this.notifications.push('Selected offer is not available.', 'warning');
+      return;
+    }
+
+    const probeVehicle = this.selectedVehicle || this.vehicleOptions[1];
+    const baseFare = this.calculateFareBase(probeVehicle);
+    if (baseFare < rule.minFare) {
+      this.notifications.push(`You are not eligible yet. Minimum fare should be ₹${rule.minFare} for ${rule.code}.`, 'warning');
+      return;
+    }
+
+    this.appliedTravelOfferCode = rule.code;
+    this.notifications.push(`Offer ${rule.code} applied successfully.`, 'success');
+  }
+
+  clearTravelOffer(): void {
+    this.appliedTravelOfferCode = '';
+    this.notifications.push('Offer removed.', 'info');
   }
 
   getDropTime(etaMin: number): string {
@@ -979,6 +1110,8 @@ export class TravelComponent implements OnInit, OnDestroy {
     this.isRideCancelled = false;
     this.cancelReason = '';
     this.cancelReasonOther = '';
+    this.showOffersPanel = false;
+    this.appliedTravelOfferCode = '';
   }
 
   shortName(addr: string): string {

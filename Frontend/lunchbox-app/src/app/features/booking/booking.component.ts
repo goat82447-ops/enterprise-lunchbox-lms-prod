@@ -46,6 +46,12 @@ type NearbyShopOption = {
   lng?: number;
 };
 
+type DriverFeedbackDraft = {
+  captainRating: number;
+  feedbackText: string;
+  lovedCaptain: boolean;
+};
+
 type FoodMenuItem = {
   id: string;
   name: string;
@@ -507,6 +513,21 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
                       <button class="btn btn-outline-primary" type="button" (click)="applyPromoCode()" [disabled]="isApplyingPromo">{{ isApplyingPromo ? 'Applying...' : 'Apply' }}</button>
                       <button class="btn btn-outline-secondary" type="button" (click)="removePromoCode()" *ngIf="appliedPromoCode">Remove</button>
                     </div>
+                    <button class="btn btn-link btn-sm p-0 mt-1" type="button" (click)="toggleOffersPanel()">
+                      {{ showOffersPanel ? 'Hide Offers' : 'Show Offers' }}
+                    </button>
+                    <div class="offer-picker mt-2" *ngIf="showOffersPanel">
+                      <div class="offer-item-card" *ngFor="let offer of promoOffers">
+                        <div class="d-flex justify-content-between align-items-start gap-2">
+                          <div>
+                            <div class="fw-semibold">{{ offer.title }}</div>
+                            <div class="small text-muted">{{ offer.detail }}</div>
+                            <div class="small mt-1">Code: <span class="offer-code-chip">{{ offer.code }}</span></div>
+                          </div>
+                          <button class="btn btn-outline-success btn-sm" type="button" (click)="claimOfferAsEligible(offer.code)">I am eligible</button>
+                        </div>
+                      </div>
+                    </div>
                     <div class="small text-success mt-1" *ngIf="promoStatusLevel === 'success'">{{ promoStatusMessage }}</div>
                     <div class="small text-danger mt-1" *ngIf="promoStatusLevel === 'error'">{{ promoStatusMessage }}</div>
                   </div>
@@ -570,6 +591,21 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
                 <input class="form-control" placeholder="Enter promo code" [(ngModel)]="promoCodeInput" />
                 <button class="btn btn-outline-primary" type="button" (click)="applyPromoCode()" [disabled]="isApplyingPromo">{{ isApplyingPromo ? 'Applying...' : 'Apply' }}</button>
                 <button class="btn btn-outline-secondary" type="button" (click)="removePromoCode()" *ngIf="appliedPromoCode">Remove</button>
+              </div>
+              <button class="btn btn-link btn-sm p-0 mt-1" type="button" (click)="toggleOffersPanel()">
+                {{ showOffersPanel ? 'Hide Offers' : 'Show Offers' }}
+              </button>
+              <div class="offer-picker mt-2" *ngIf="showOffersPanel">
+                <div class="offer-item-card" *ngFor="let offer of promoOffers">
+                  <div class="d-flex justify-content-between align-items-start gap-2">
+                    <div>
+                      <div class="fw-semibold">{{ offer.title }}</div>
+                      <div class="small text-muted">{{ offer.detail }}</div>
+                      <div class="small mt-1">Code: <span class="offer-code-chip">{{ offer.code }}</span></div>
+                    </div>
+                    <button class="btn btn-outline-success btn-sm" type="button" (click)="claimOfferAsEligible(offer.code)">I am eligible</button>
+                  </div>
+                </div>
               </div>
               <div class="small text-success mt-1" *ngIf="promoStatusLevel === 'success'">{{ promoStatusMessage }}</div>
               <div class="small text-danger mt-1" *ngIf="promoStatusLevel === 'error'">{{ promoStatusMessage }}</div>
@@ -1160,6 +1196,56 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
                   <button class="btn btn-sm btn-outline-primary" type="button" (click)="rebookFromHistory(item)">Rebook</button>
                   <button class="btn btn-sm btn-outline-dark" type="button" (click)="openTracking(item)">Track Order</button>
                 </div>
+
+                <div class="feedback-card mt-2" *ngIf="item.status === 'completed' && (item.feedbackSubmitted || item.id === nextPendingFeedbackBookingId)">
+                  <div class="small fw-semibold mb-1">Driver Feedback</div>
+
+                  <div class="feedback-thanks" *ngIf="item.feedbackSubmitted">
+                    Thank you for rating {{ item.driverName || 'your driver' }}
+                    <span *ngIf="item.lovedCaptain">❤</span>
+                  </div>
+
+                  <ng-container *ngIf="!item.feedbackSubmitted">
+                    <div class="small text-muted mb-1">How was your driver?</div>
+                    <div class="feedback-stars mb-2">
+                      <button
+                        type="button"
+                        class="star-btn"
+                        *ngFor="let star of feedbackStars"
+                        [class.active]="feedbackDraftFor(item).captainRating >= star"
+                        (click)="setDriverRating(item.id, star)"
+                      >
+                        ★
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      class="love-btn mb-2"
+                      [class.active]="feedbackDraftFor(item).lovedCaptain"
+                      (click)="toggleDriverLove(item.id)"
+                    >
+                      ❤ Love Driver
+                    </button>
+
+                    <textarea
+                      class="form-control form-control-sm mb-2"
+                      rows="2"
+                      placeholder="Any feedback for driver? (optional)"
+                      [ngModel]="feedbackDraftFor(item).feedbackText"
+                      (ngModelChange)="setDriverFeedbackText(item.id, $event)"
+                    ></textarea>
+
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-danger"
+                      [disabled]="feedbackDraftFor(item).captainRating < 1"
+                      (click)="submitDriverFeedback(item)"
+                    >
+                      Submit Feedback
+                    </button>
+                  </ng-container>
+                </div>
               </div>
             </div>
             <div class="text-muted small" *ngIf="bookingHistory.length > 0 && filteredBookingHistory.length === 0">
@@ -1512,6 +1598,77 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         border-radius: 10px;
         padding: 10px;
         background: #fff;
+      }
+
+      .feedback-card {
+        border-top: 1px dashed #d1d5db;
+        padding-top: 8px;
+      }
+
+      .feedback-stars {
+        display: flex;
+        gap: 6px;
+      }
+
+      .star-btn {
+        border: none;
+        background: transparent;
+        color: #cbd5e1;
+        font-size: 20px;
+        line-height: 1;
+        padding: 0;
+      }
+
+      .star-btn.active {
+        color: #f59e0b;
+      }
+
+      .love-btn {
+        border: 1px solid #fecaca;
+        background: #fff;
+        color: #b91c1c;
+        border-radius: 18px;
+        padding: 4px 10px;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .love-btn.active {
+        background: #fee2e2;
+      }
+
+      .feedback-thanks {
+        font-size: 12px;
+        color: #0f766e;
+        font-weight: 700;
+      }
+
+      .offer-picker {
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        background: #fafafa;
+        padding: 8px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .offer-item-card {
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        background: #fff;
+        padding: 8px;
+      }
+
+      .offer-code-chip {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        border: 1px dashed #cbd5e1;
+        background: #f8fafc;
+        color: #0f172a;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 2px 8px;
       }
 
       .food-suggestion-box {
@@ -1911,6 +2068,13 @@ export class BookingComponent implements OnDestroy {
   promoStatusMessage = '';
   promoStatusLevel: 'success' | 'error' | '' = '';
   isApplyingPromo = false;
+  showOffersPanel = false;
+  readonly promoOffers: Array<{ title: string; code: string; detail: string }> = [
+    { title: 'First Trip 50% OFF', code: 'FIRST50', detail: 'Valid for new users on first completed ride only.' },
+    { title: 'Night Delivery 30% OFF', code: 'NIGHT30', detail: 'Available from 10 PM to 6 AM for food and medicine.' },
+    { title: 'Parcel Combo 25% OFF', code: 'PARCEL25', detail: 'Apply on parcel bookings with multiple drops.' },
+    { title: 'Captain Choice Deal 20% OFF', code: 'CAPTAIN20', detail: 'Discount unlocks for top-rated captain assignments.' }
+  ];
   private appliedPromoRule: PromoRule | null = null;
   bookingFor: 'self' | 'others' = 'self';
   recipientName = '';
@@ -2035,6 +2199,8 @@ export class BookingComponent implements OnDestroy {
   bookingHistory: Booking[] = [];
   historyFilter: 'all' | 'completed' | 'cancelled' | 'scheduled' = 'all';
   historySearch = '';
+  readonly feedbackStars = [1, 2, 3, 4, 5];
+  private feedbackDrafts: Record<string, DriverFeedbackDraft> = {};
   private refreshHandle: ReturnType<typeof setInterval> | null = null;
   private nearbyHotelsRefreshHandle: ReturnType<typeof setInterval> | null = null;
   private liveTrackHandle: ReturnType<typeof setInterval> | null = null;
@@ -2970,6 +3136,15 @@ export class BookingComponent implements OnDestroy {
     });
   }
 
+  toggleOffersPanel(): void {
+    this.showOffersPanel = !this.showOffersPanel;
+  }
+
+  claimOfferAsEligible(code: string): void {
+    this.promoCodeInput = String(code || '').trim().toUpperCase();
+    this.applyPromoCode();
+  }
+
   removePromoCode(): void {
     this.appliedPromoCode = '';
     this.appliedPromoRule = null;
@@ -3708,6 +3883,72 @@ export class BookingComponent implements OnDestroy {
     this.historyFilter = filter;
   }
 
+  feedbackDraftFor(booking: Booking): DriverFeedbackDraft {
+    if (!this.feedbackDrafts[booking.id]) {
+      this.feedbackDrafts[booking.id] = {
+        captainRating: Number(booking.captainRating || 0),
+        feedbackText: String(booking.feedbackText || ''),
+        lovedCaptain: !!booking.lovedCaptain
+      };
+    }
+
+    return this.feedbackDrafts[booking.id];
+  }
+
+  private feedbackDraftById(bookingId: string): DriverFeedbackDraft {
+    if (!this.feedbackDrafts[bookingId]) {
+      this.feedbackDrafts[bookingId] = {
+        captainRating: 0,
+        feedbackText: '',
+        lovedCaptain: false
+      };
+    }
+
+    return this.feedbackDrafts[bookingId];
+  }
+
+  setDriverRating(bookingId: string, rating: number): void {
+    const draft = this.feedbackDraftById(bookingId);
+    draft.captainRating = Math.max(1, Math.min(5, Number(rating || 0)));
+  }
+
+  toggleDriverLove(bookingId: string): void {
+    const draft = this.feedbackDraftById(bookingId);
+    draft.lovedCaptain = !draft.lovedCaptain;
+  }
+
+  setDriverFeedbackText(bookingId: string, value: string): void {
+    const draft = this.feedbackDraftById(bookingId);
+    draft.feedbackText = String(value || '');
+  }
+
+  submitDriverFeedback(booking: Booking): void {
+    if (!booking?.id) {
+      return;
+    }
+
+    const draft = this.feedbackDraftFor(booking);
+    if (draft.captainRating < 1) {
+      this.notifications.push('Please rate driver before submitting feedback.', 'warning');
+      return;
+    }
+
+    const result = this.bookingService.submitRideFeedback(booking.id, {
+      rideRating: draft.captainRating,
+      captainRating: draft.captainRating,
+      feedbackText: draft.feedbackText,
+      lovedRide: draft.captainRating >= 4,
+      lovedCaptain: draft.lovedCaptain
+    });
+
+    if (!result.success) {
+      this.notifications.push(result.message, 'warning');
+      return;
+    }
+
+    this.notifications.push('Driver feedback submitted successfully.', 'success');
+  }
+
   get filteredBookingHistory(): Booking[] {
     const search = this.historySearch.trim().toLowerCase();
 
@@ -3732,6 +3973,11 @@ export class BookingComponent implements OnDestroy {
         String(item.recipientPhone || '').toLowerCase().includes(search)
       );
     });
+  }
+
+  get nextPendingFeedbackBookingId(): string {
+    const nextPending = this.filteredBookingHistory.find((item) => item.status === 'completed' && !item.feedbackSubmitted);
+    return nextPending?.id || '';
   }
 
   get pendingAcceptanceCount(): number {
