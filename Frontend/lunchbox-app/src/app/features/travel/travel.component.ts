@@ -26,6 +26,12 @@ interface VehicleOption {
   tag?: string;
 }
 
+interface StopPoint {
+  address: string;
+  lat: number;
+  lng: number;
+}
+
 @Component({
   selector: 'app-travel',
   standalone: true,
@@ -102,6 +108,16 @@ interface VehicleOption {
             <span class="route-dot green"></span>
             <span class="route-text">{{ shortName(pickupAddress) }}</span>
           </div>
+
+          <ng-container *ngFor="let stop of stops; let i = index">
+            <div class="route-divider"></div>
+            <div class="route-row">
+              <span class="route-dot amber"></span>
+              <span class="route-text">Stop {{ i + 1 }}: {{ shortName(stop.address) }}</span>
+              <button class="clear-btn-sm" (click)="removeStop(i)" title="Remove stop">✕</button>
+            </div>
+          </ng-container>
+
           <div class="route-divider"></div>
           <div class="route-row">
             <span class="route-dot orange"></span>
@@ -113,7 +129,30 @@ interface VehicleOption {
 
         <div class="action-row">
           <button class="action-pill" (click)="useMapForDrop()">📍 Select on map</button>
-          <button class="action-pill" (click)="addStop()">＋ Add stops</button>
+        </div>
+
+        <div class="stop-input-row px-3">
+          <div class="search-box stop-search-box">
+            <span>➕</span>
+            <input
+              class="search-input"
+              [(ngModel)]="stopQuery"
+              (ngModelChange)="onStopSearch($event)"
+              placeholder="Add a stop (optional)"
+            />
+            <button *ngIf="stopQuery" class="clear-btn" (click)="stopQuery=''; stopSuggestions=[]">✕</button>
+          </div>
+          <button class="action-pill" [disabled]="!stopQuery.trim()" (click)="addStop()">Add stop</button>
+        </div>
+
+        <div *ngIf="stopSuggestions.length" class="suggestion-list px-3">
+          <div class="suggestion-item" *ngFor="let s of stopSuggestions" (click)="selectStopSuggestion(s)">
+            <span class="sug-icon">➕</span>
+            <div class="overflow-hidden flex-1">
+              <div class="sug-title">{{ shortName(s.display_name) }}</div>
+              <div class="sug-sub">{{ s.display_name }}</div>
+            </div>
+          </div>
         </div>
 
         <div *ngIf="dropSuggestions.length" class="suggestion-list px-3">
@@ -128,6 +167,15 @@ interface VehicleOption {
         </div>
 
         <div *ngIf="!dropSuggestions.length && dropQuery.length < 2" class="px-3">
+          <p class="section-title mt-2 mb-2" *ngIf="recentStops.length">Recent Stops</p>
+          <div class="popular-grid" *ngIf="recentStops.length">
+            <div class="popular-card" *ngFor="let stop of recentStops" (click)="useRecentStop(stop)">
+              <span>🕘</span>
+              <span>{{ shortName(stop.address) }}</span>
+              <span class="pop-arrow">›</span>
+            </div>
+          </div>
+
           <p class="section-title mt-3 mb-2">Popular Places</p>
           <div class="popular-grid">
             <div class="popular-card" *ngFor="let p of popularPlaces" (click)="selectPopular(p)">
@@ -331,6 +379,7 @@ interface VehicleOption {
     .route-row { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
     .route-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
     .route-dot.green { background: #1a6e32; }
+    .route-dot.amber { background: #f9a825; }
     .route-dot.orange { background: #e65100; }
     .route-text { font-size: 13px; font-weight: 600; color: #222; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 280px; }
     .route-divider { width: 2px; height: 16px; background: #ddd; margin-left: 5px; margin-block: 2px; }
@@ -338,6 +387,13 @@ interface VehicleOption {
     .route-input::placeholder { color: #aaa; }
     .clear-btn-sm { background: none; border: none; font-size: 13px; color: #aaa; cursor: pointer; }
     .action-row { display: flex; gap: 10px; padding: 8px 14px 10px; }
+    .stop-input-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      padding-bottom: 8px;
+    }
+    .stop-search-box { flex: 1; }
     .action-pill {
       border: 1px solid #ddd; background: #fff; border-radius: 20px;
       padding: 8px 14px; font-size: 12px; font-weight: 600; cursor: pointer;
@@ -426,6 +482,8 @@ interface VehicleOption {
   `]
 })
 export class TravelComponent implements OnInit, OnDestroy {
+  private static readonly RECENT_STOPS_KEY = 'travel_recent_stops';
+
   step = 1;
   locating = false;
 
@@ -441,6 +499,10 @@ export class TravelComponent implements OnInit, OnDestroy {
   dropAddress = '';
   dropQuery = '';
   dropSuggestions: PlaceSuggestion[] = [];
+  stopQuery = '';
+  stopSuggestions: PlaceSuggestion[] = [];
+  stops: StopPoint[] = [];
+  recentStops: StopPoint[] = [];
   routeMapUrl: SafeResourceUrl | null = null;
 
   distanceKm = 0;
@@ -464,6 +526,7 @@ export class TravelComponent implements OnInit, OnDestroy {
 
   private readonly pickupSearch$ = new Subject<string>();
   private readonly dropSearch$ = new Subject<string>();
+  private readonly stopSearch$ = new Subject<string>();
   private readonly destroy$ = new Subject<void>();
 
   constructor(
@@ -477,6 +540,7 @@ export class TravelComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
+    this.loadRecentStops();
     this.detectLiveLocation();
     this.selectedVehicle = this.vehicleOptions[1];
 
@@ -487,6 +551,10 @@ export class TravelComponent implements OnInit, OnDestroy {
     this.dropSearch$
       .pipe(debounceTime(400), distinctUntilChanged(), switchMap(q => this.nominatimSearch(q)))
       .subscribe(results => this.zone.run(() => this.dropSuggestions = results));
+
+    this.stopSearch$
+      .pipe(debounceTime(400), distinctUntilChanged(), switchMap(q => this.nominatimSearch(q)))
+      .subscribe(results => this.zone.run(() => this.stopSuggestions = results));
   }
 
   ngOnDestroy(): void {
@@ -541,7 +609,11 @@ export class TravelComponent implements OnInit, OnDestroy {
   }
 
   private updateRouteMap(): void {
-    const url = `https://maps.google.com/maps?saddr=${this.pickupLat},${this.pickupLng}&daddr=${this.dropLat},${this.dropLng}&output=embed`;
+    const waypoints = this.stops
+      .map(s => `${s.lat},${s.lng}`)
+      .join('|');
+    const waypointPart = waypoints ? `&waypoints=${encodeURIComponent(waypoints)}` : '';
+    const url = `https://maps.google.com/maps?saddr=${this.pickupLat},${this.pickupLng}&daddr=${this.dropLat},${this.dropLng}${waypointPart}&output=embed`;
     this.routeMapUrl = this.sanitizer.bypassSecurityTrustResourceUrl(url);
   }
 
@@ -576,12 +648,15 @@ export class TravelComponent implements OnInit, OnDestroy {
 
   onDropSearch(q: string): void { this.dropSearch$.next(q); }
 
+  onStopSearch(q: string): void { this.stopSearch$.next(q); }
+
   selectDrop(s: PlaceSuggestion): void {
     this.dropLat = parseFloat(s.lat);
     this.dropLng = parseFloat(s.lon);
     this.dropAddress = s.display_name;
     this.dropQuery = s.display_name;
     this.dropSuggestions = [];
+    this.storeRecentStop({ address: s.display_name, lat: this.dropLat, lng: this.dropLng });
     this.computeDistance();
     this.updateRouteMap();
     this.step = 3;
@@ -590,6 +665,12 @@ export class TravelComponent implements OnInit, OnDestroy {
   selectPopular(p: { name: string }): void {
     this.dropQuery = p.name;
     this.dropSearch$.next(p.name);
+  }
+
+  selectStopSuggestion(s: PlaceSuggestion): void {
+    this.stopQuery = s.display_name;
+    this.stopSuggestions = [];
+    this.addStop();
   }
 
   useMapForDrop(): void {
@@ -615,7 +696,82 @@ export class TravelComponent implements OnInit, OnDestroy {
   }
 
   addStop(): void {
-    this.notifications.push('Multi-stop coming soon!', 'info' as any);
+    if (this.step === 3) {
+      this.step = 2;
+      this.notifications.push('Add stops from the stop field in Drop screen.', 'info');
+      return;
+    }
+
+    const query = this.stopQuery.trim();
+    if (!query) {
+      this.notifications.push('Type stop location and tap Add stop.', 'warning');
+      return;
+    }
+
+    this.nominatimSearch(query).subscribe((results) => {
+      this.zone.run(() => {
+        const first = results?.[0];
+        if (!first) {
+          this.notifications.push('Stop not found. Try a more specific location.', 'warning');
+          return;
+        }
+
+        const stop: StopPoint = {
+          address: first.display_name,
+          lat: parseFloat(first.lat),
+          lng: parseFloat(first.lon)
+        };
+
+        const exists = this.stops.some(s => s.address === stop.address);
+        if (!exists) {
+          this.stops.push(stop);
+          this.storeRecentStop(stop);
+        }
+
+        this.stopQuery = '';
+        this.stopSuggestions = [];
+        this.notifications.push(`Stop added: ${this.shortName(stop.address)}`, 'success');
+      });
+    });
+  }
+
+  removeStop(index: number): void {
+    this.stops.splice(index, 1);
+    if (this.step === 3 && this.dropLat && this.dropLng) {
+      this.updateRouteMap();
+    }
+  }
+
+  useRecentStop(stop: StopPoint): void {
+    const exists = this.stops.some(s => s.address === stop.address);
+    if (!exists) {
+      this.stops.push(stop);
+      this.notifications.push(`Stop added: ${this.shortName(stop.address)}`, 'success');
+    }
+  }
+
+  private loadRecentStops(): void {
+    try {
+      const raw = localStorage.getItem(TravelComponent.RECENT_STOPS_KEY);
+      if (!raw) {
+        this.recentStops = [];
+        return;
+      }
+
+      const parsed = JSON.parse(raw) as StopPoint[];
+      this.recentStops = Array.isArray(parsed) ? parsed.slice(0, 6) : [];
+    } catch {
+      this.recentStops = [];
+    }
+  }
+
+  private storeRecentStop(stop: StopPoint): void {
+    this.recentStops = [stop, ...this.recentStops.filter(s => s.address !== stop.address)].slice(0, 6);
+    try {
+      localStorage.setItem(TravelComponent.RECENT_STOPS_KEY, JSON.stringify(this.recentStops));
+    } catch {
+      // Ignore storage failures.
+    }
   }
 
   private computeDistance(): void {
@@ -674,8 +830,11 @@ export class TravelComponent implements OnInit, OnDestroy {
 
   resetFlow(): void {
     this.step = 1;
+    this.stops = [];
     this.dropAddress = '';
     this.dropQuery = '';
+    this.stopQuery = '';
+    this.stopSuggestions = [];
     this.dropLat = 0;
     this.dropLng = 0;
     this.routeMapUrl = null;
