@@ -46,6 +46,12 @@ type NearbyShopOption = {
   lng?: number;
 };
 
+type DriverFeedbackDraft = {
+  captainRating: number;
+  feedbackText: string;
+  lovedCaptain: boolean;
+};
+
 type FoodMenuItem = {
   id: string;
   name: string;
@@ -1160,6 +1166,56 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
                   <button class="btn btn-sm btn-outline-primary" type="button" (click)="rebookFromHistory(item)">Rebook</button>
                   <button class="btn btn-sm btn-outline-dark" type="button" (click)="openTracking(item)">Track Order</button>
                 </div>
+
+                <div class="feedback-card mt-2" *ngIf="item.status === 'completed' && (item.feedbackSubmitted || item.id === nextPendingFeedbackBookingId)">
+                  <div class="small fw-semibold mb-1">Driver Feedback</div>
+
+                  <div class="feedback-thanks" *ngIf="item.feedbackSubmitted">
+                    Thank you for rating {{ item.driverName || 'your driver' }}
+                    <span *ngIf="item.lovedCaptain">❤</span>
+                  </div>
+
+                  <ng-container *ngIf="!item.feedbackSubmitted">
+                    <div class="small text-muted mb-1">How was your driver?</div>
+                    <div class="feedback-stars mb-2">
+                      <button
+                        type="button"
+                        class="star-btn"
+                        *ngFor="let star of feedbackStars"
+                        [class.active]="feedbackDraftFor(item).captainRating >= star"
+                        (click)="setDriverRating(item.id, star)"
+                      >
+                        ★
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      class="love-btn mb-2"
+                      [class.active]="feedbackDraftFor(item).lovedCaptain"
+                      (click)="toggleDriverLove(item.id)"
+                    >
+                      ❤ Love Driver
+                    </button>
+
+                    <textarea
+                      class="form-control form-control-sm mb-2"
+                      rows="2"
+                      placeholder="Any feedback for driver? (optional)"
+                      [ngModel]="feedbackDraftFor(item).feedbackText"
+                      (ngModelChange)="setDriverFeedbackText(item.id, $event)"
+                    ></textarea>
+
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-danger"
+                      [disabled]="feedbackDraftFor(item).captainRating < 1"
+                      (click)="submitDriverFeedback(item)"
+                    >
+                      Submit Feedback
+                    </button>
+                  </ng-container>
+                </div>
               </div>
             </div>
             <div class="text-muted small" *ngIf="bookingHistory.length > 0 && filteredBookingHistory.length === 0">
@@ -1512,6 +1568,49 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         border-radius: 10px;
         padding: 10px;
         background: #fff;
+      }
+
+      .feedback-card {
+        border-top: 1px dashed #d1d5db;
+        padding-top: 8px;
+      }
+
+      .feedback-stars {
+        display: flex;
+        gap: 6px;
+      }
+
+      .star-btn {
+        border: none;
+        background: transparent;
+        color: #cbd5e1;
+        font-size: 20px;
+        line-height: 1;
+        padding: 0;
+      }
+
+      .star-btn.active {
+        color: #f59e0b;
+      }
+
+      .love-btn {
+        border: 1px solid #fecaca;
+        background: #fff;
+        color: #b91c1c;
+        border-radius: 18px;
+        padding: 4px 10px;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .love-btn.active {
+        background: #fee2e2;
+      }
+
+      .feedback-thanks {
+        font-size: 12px;
+        color: #0f766e;
+        font-weight: 700;
       }
 
       .food-suggestion-box {
@@ -2035,6 +2134,8 @@ export class BookingComponent implements OnDestroy {
   bookingHistory: Booking[] = [];
   historyFilter: 'all' | 'completed' | 'cancelled' | 'scheduled' = 'all';
   historySearch = '';
+  readonly feedbackStars = [1, 2, 3, 4, 5];
+  private feedbackDrafts: Record<string, DriverFeedbackDraft> = {};
   private refreshHandle: ReturnType<typeof setInterval> | null = null;
   private nearbyHotelsRefreshHandle: ReturnType<typeof setInterval> | null = null;
   private liveTrackHandle: ReturnType<typeof setInterval> | null = null;
@@ -3708,6 +3809,72 @@ export class BookingComponent implements OnDestroy {
     this.historyFilter = filter;
   }
 
+  feedbackDraftFor(booking: Booking): DriverFeedbackDraft {
+    if (!this.feedbackDrafts[booking.id]) {
+      this.feedbackDrafts[booking.id] = {
+        captainRating: Number(booking.captainRating || 0),
+        feedbackText: String(booking.feedbackText || ''),
+        lovedCaptain: !!booking.lovedCaptain
+      };
+    }
+
+    return this.feedbackDrafts[booking.id];
+  }
+
+  private feedbackDraftById(bookingId: string): DriverFeedbackDraft {
+    if (!this.feedbackDrafts[bookingId]) {
+      this.feedbackDrafts[bookingId] = {
+        captainRating: 0,
+        feedbackText: '',
+        lovedCaptain: false
+      };
+    }
+
+    return this.feedbackDrafts[bookingId];
+  }
+
+  setDriverRating(bookingId: string, rating: number): void {
+    const draft = this.feedbackDraftById(bookingId);
+    draft.captainRating = Math.max(1, Math.min(5, Number(rating || 0)));
+  }
+
+  toggleDriverLove(bookingId: string): void {
+    const draft = this.feedbackDraftById(bookingId);
+    draft.lovedCaptain = !draft.lovedCaptain;
+  }
+
+  setDriverFeedbackText(bookingId: string, value: string): void {
+    const draft = this.feedbackDraftById(bookingId);
+    draft.feedbackText = String(value || '');
+  }
+
+  submitDriverFeedback(booking: Booking): void {
+    if (!booking?.id) {
+      return;
+    }
+
+    const draft = this.feedbackDraftFor(booking);
+    if (draft.captainRating < 1) {
+      this.notifications.push('Please rate driver before submitting feedback.', 'warning');
+      return;
+    }
+
+    const result = this.bookingService.submitRideFeedback(booking.id, {
+      rideRating: draft.captainRating,
+      captainRating: draft.captainRating,
+      feedbackText: draft.feedbackText,
+      lovedRide: draft.captainRating >= 4,
+      lovedCaptain: draft.lovedCaptain
+    });
+
+    if (!result.success) {
+      this.notifications.push(result.message, 'warning');
+      return;
+    }
+
+    this.notifications.push('Driver feedback submitted successfully.', 'success');
+  }
+
   get filteredBookingHistory(): Booking[] {
     const search = this.historySearch.trim().toLowerCase();
 
@@ -3732,6 +3899,11 @@ export class BookingComponent implements OnDestroy {
         String(item.recipientPhone || '').toLowerCase().includes(search)
       );
     });
+  }
+
+  get nextPendingFeedbackBookingId(): string {
+    const nextPending = this.filteredBookingHistory.find((item) => item.status === 'completed' && !item.feedbackSubmitted);
+    return nextPending?.id || '';
   }
 
   get pendingAcceptanceCount(): number {
