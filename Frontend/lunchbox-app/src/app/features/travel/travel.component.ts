@@ -593,7 +593,25 @@ export class TravelComponent implements OnInit, OnDestroy {
   }
 
   useMapForDrop(): void {
-    this.notifications.push('Tap on map to select drop point.', 'info' as any);
+    const hasDropText = !!this.dropQuery?.trim();
+    const dropText = encodeURIComponent(this.dropQuery.trim());
+    const origin = this.pickupLat && this.pickupLng
+      ? `${this.pickupLat},${this.pickupLng}`
+      : '';
+
+    const mapsUrl = hasDropText
+      ? (origin
+        ? `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${dropText}&travelmode=driving`
+        : `https://www.google.com/maps/search/?api=1&query=${dropText}`)
+      : (origin
+        ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(origin)}`
+        : 'https://www.google.com/maps');
+
+    if (typeof window !== 'undefined') {
+      window.open(mapsUrl, '_blank', 'noopener,noreferrer');
+    }
+
+    this.notifications.push('Google Maps opened. Choose the drop point there, then copy/search it here.', 'info' as any);
   }
 
   addStop(): void {
