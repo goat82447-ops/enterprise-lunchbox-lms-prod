@@ -5,7 +5,7 @@
 
 ## Related Issue / Ticket
 <!-- Link to the issue or task: Fixes #123 -->
-Fixes #
+Fixes #AB#001
 
 ---
 
