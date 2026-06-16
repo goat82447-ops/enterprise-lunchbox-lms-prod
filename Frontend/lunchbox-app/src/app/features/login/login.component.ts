@@ -51,9 +51,6 @@ import { LoginStartResponse, UserRole } from '../../core/models/delivery.models'
             </button>
 
             <button class="btn btn-danger w-100 auth-primary" [disabled]="loading" (click)="startLogin()">Start Login</button>
-            <button class="btn btn-outline-secondary w-100 mt-2 auth-secondary" [disabled]="loading" (click)="tryBiometricLogin()" *ngIf="biometricAvailable">
-              🔐 Login with Thumbprint
-            </button>
             <div *ngIf="errorMessage" class="alert alert-danger mt-3 mb-0">{{ errorMessage }}</div>
           </div>
         </div>
