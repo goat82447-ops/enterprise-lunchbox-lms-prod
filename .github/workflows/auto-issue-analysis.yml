@@ -2,7 +2,7 @@ name: Auto Issue Analysis
 
 on:
   issues:
-    types: [opened]
+    types: [opened, edited, reopened, labeled]
 
 jobs:
   analyze-issue:
@@ -20,13 +20,7 @@ jobs:
             }
 
             const labels = Array.isArray(issue.labels) ? issue.labels.map((label) => String(label.name || '').toLowerCase()) : [];
-            const isBug = labels.includes('bug');
 
-            if (!isBug) {
-              console.log('Skipping non-bug issue');
-              return;
-            }
-            
             // Skip if already has analysis comment
             const comments = await github.rest.issues.listComments({
               owner: context.repo.owner,
@@ -35,7 +29,7 @@ jobs:
             });
             
             const hasAnalysis = comments.data.some(c => 
-              c.body.includes('Bug Investigation Assistant') || c.body.includes('Issue Analysis')
+              c.body.includes('Issue Investigation Assistant') || c.body.includes('Bug Investigation Assistant') || c.body.includes('Issue Analysis')
             );
             
             if (hasAnalysis) {
@@ -102,7 +96,7 @@ jobs:
 
             // Build developer-focused analysis comment
             const analysisComment = [
-              '## Bug Investigation Assistant',
+              '## Issue Investigation Assistant',
               '',
               '**Quick Triage:**',
               `- Type: ${labelsText}`,
