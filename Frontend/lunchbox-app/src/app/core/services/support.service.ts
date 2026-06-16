@@ -31,8 +31,8 @@ export class SupportService {
     private authService: AuthService
   ) {}
 
-  submitComplaint(payload: ComplaintSubmissionPayload): Observable<{ message?: string }> {
-    return this.http.post<{ message?: string }>(
+  submitComplaint(payload: ComplaintSubmissionPayload): Observable<{ message?: string; issueNumber?: number; issueUrl?: string }> {
+    return this.http.post<{ message?: string; issueNumber?: number; issueUrl?: string }>(
       `${this.supportApi}/complaints`,
       payload,
       { headers: this.getSessionHeaders() }
