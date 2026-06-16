@@ -1,0 +1,153 @@
+name: Issue Auto Fix PR
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  autofix-from-issue:
+    if: github.event.label.name == 'autofix'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Apply fix from issue body
+        id: apply_fix
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+
+          const body = String(process.env.ISSUE_BODY || '');
+
+          function extract(name, nextNames = []) {
+            const escapedNext = nextNames.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+            const tail = escapedNext ? `\\n(?:${escapedNext}):` : '$';
+            const pattern = new RegExp(`${name}:\\s*([\\s\\S]*?)(?=${tail})`, 'i');
+            const match = body.match(pattern);
+            if (!match) return '';
+            return match[1].trim();
+          }
+
+          function normalizeBlock(text) {
+            const fenced = text.match(/^```[a-zA-Z0-9_-]*\n([\s\S]*?)\n```$/);
+            if (fenced) return fenced[1];
+            return text;
+          }
+
+          const fileRaw = extract('File', ['Find', 'Replace']);
+          const findRaw = extract('Find', ['Replace']);
+          const replaceRaw = extract('Replace');
+
+          const filePath = fileRaw.split('\n')[0].trim();
+          const findText = normalizeBlock(findRaw);
+          const replaceText = normalizeBlock(replaceRaw);
+
+          if (!filePath || !findText) {
+            throw new Error(
+              [
+                'Issue is missing required autofix format.',
+                'Expected format:',
+                'File: path/to/file.ext',
+                'Find:',
+                '```',
+                'old text',
+                '```',
+                'Replace:',
+                '```',
+                'new text',
+                '```'
+              ].join('\n')
+            );
+          }
+
+          const repoRoot = process.cwd();
+          const absPath = path.resolve(repoRoot, filePath);
+
+          if (!absPath.startsWith(repoRoot + path.sep)) {
+            throw new Error('Invalid file path. Path must stay inside repository.');
+          }
+
+          if (!fs.existsSync(absPath)) {
+            throw new Error(`File not found: ${filePath}`);
+          }
+
+          const original = fs.readFileSync(absPath, 'utf8');
+          if (!original.includes(findText)) {
+            throw new Error(`Find text not found in file: ${filePath}`);
+          }
+
+          const updated = original.replace(findText, replaceText);
+          if (updated === original) {
+            throw new Error('No changes were applied.');
+          }
+
+          fs.writeFileSync(absPath, updated, 'utf8');
+          console.log(`Applied autofix in ${filePath}`);
+          NODE
+
+      - name: Create pull request
+        id: cpr
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "fix: auto-fix from issue #${{ github.event.issue.number }}"
+          branch: "autofix/issue-${{ github.event.issue.number }}"
+          delete-branch: true
+          title: "Auto-fix: issue #${{ github.event.issue.number }}"
+          body: |
+            Auto-generated fix from issue #${{ github.event.issue.number }}.
+
+            Source issue: ${{ github.event.issue.html_url }}
+
+            This PR was created by `Issue Auto Fix PR` workflow.
+
+      - name: Comment issue with PR link
+        if: steps.cpr.outputs.pull-request-url != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.issue.number,
+              body: [
+                'Auto-fix PR created successfully.',
+                '',
+                `PR: ${'${{ steps.cpr.outputs.pull-request-url }}'}`
+              ].join('\n')
+            });
+
+      - name: Comment issue on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.issue.number,
+              body: [
+                'Auto-fix failed for this issue.',
+                '',
+                'Use this issue format and add label `autofix`:',
+                '',
+                'File: path/to/file.ext',
+                'Find:',
+                '```',
+                'old text',
+                '```',
+                'Replace:',
+                '```',
+                'new text',
+                '```'
+              ].join('\n')
+            });
