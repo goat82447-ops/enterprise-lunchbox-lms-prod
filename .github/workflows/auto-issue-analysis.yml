@@ -83,6 +83,23 @@ jobs:
               severity = 'Critical';
             }
 
+            let rootCause = 'The issue report does not include enough detail to confirm a single root cause yet.';
+            let fixRecommendation = 'Reproduce the issue, inspect the failing request or component, and add a regression test before shipping the fix.';
+
+            if (lowerText.includes('404') && lowerText.includes('login')) {
+              rootCause = 'The login flow is likely calling a route or backend URL that does not exist in the deployed environment, so the request fails before authentication completes.';
+              fixRecommendation = 'Verify the frontend login API base URL, confirm the backend route exists in the deployed service, and check any rewrite or proxy configuration that may be pointing to the wrong host.';
+            } else if (lowerText.includes('404')) {
+              rootCause = 'A route mismatch is likely: the UI is requesting an endpoint that is missing, renamed, or deployed in a different service.';
+              fixRecommendation = 'Compare the requested URL against the backend route table, then fix the service path, deployment target, or client base URL.';
+            } else if (lowerText.includes('auth') || lowerText.includes('otp') || lowerText.includes('token')) {
+              rootCause = 'The authentication state or session handling is likely failing before the user reaches the protected screen.';
+              fixRecommendation = 'Check token/session creation, authorization checks, and any guards that may reject the user before the login flow completes.';
+            } else if (lowerText.includes('booking') || lowerText.includes('captain')) {
+              rootCause = 'The booking/captain flow likely breaks because the client and backend are out of sync on state, permissions, or booking data shape.';
+              fixRecommendation = 'Inspect the request payload, response mapping, and state persistence logic for the booking flow and patch the failing step directly.';
+            }
+
             // Build developer-focused analysis comment
             const analysisComment = [
               '## Bug Investigation Assistant',
@@ -93,6 +110,12 @@ jobs:
               `- Likely area: ${likelyArea}`,
               `- Reporter: @${reporter}`,
               `- Created: ${createdAt}`,
+              '',
+              '**Root cause hypothesis:**',
+              rootCause,
+              '',
+              '**Suggested fix:**',
+              fixRecommendation,
               '',
               '**Likely investigation path:**',
               `- Check the ${likelyArea} code path first.`,
