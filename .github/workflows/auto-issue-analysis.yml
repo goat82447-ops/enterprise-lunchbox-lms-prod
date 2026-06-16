@@ -2,9 +2,7 @@ name: Auto Issue Analysis
 
 on:
   issues:
-    types: [opened, reopened]
-  schedule:
-    - cron: '0 */6 * * *'
+    types: [opened]
 
 jobs:
   analyze-issue:
@@ -20,6 +18,14 @@ jobs:
               console.log('No issue found');
               return;
             }
+
+            const labels = Array.isArray(issue.labels) ? issue.labels.map((label) => String(label.name || '').toLowerCase()) : [];
+            const isBug = labels.includes('bug');
+
+            if (!isBug) {
+              console.log('Skipping non-bug issue');
+              return;
+            }
             
             // Skip if already has analysis comment
             const comments = await github.rest.issues.listComments({
@@ -29,7 +35,7 @@ jobs:
             });
             
             const hasAnalysis = comments.data.some(c => 
-              c.body.includes('Issue Analysis')
+              c.body.includes('Bug Investigation Assistant') || c.body.includes('Issue Analysis')
             );
             
             if (hasAnalysis) {
@@ -37,52 +43,83 @@ jobs:
               return;
             }
 
-            // Extract issue details
-            const title = issue.title;
-            const labels = issue.labels.map(l => l.name).join(', ') || 'unclassified';
-            const isBug = issue.labels.some(l => l.name === 'bug');
+            const title = String(issue.title || '').trim();
+            const body = String(issue.body || '').trim();
+            const reporter = String(issue.user?.login || 'unknown');
             const createdAt = new Date(issue.created_at).toLocaleDateString();
-            
-            // Determine priority
-            let priority = 'Medium';
-            let severity = 'Standard';
-            if (isBug) {
-              if (title.includes('CRITICAL') || title.includes('admin') || title.includes('login')) {
-                priority = 'CRITICAL';
-                severity = 'Security/Blocking';
-              } else if (title.includes('ERROR') || title.includes('Broken')) {
-                priority = 'High';
-                severity = 'Major Issue';
-              }
+            const labelsText = labels.length ? labels.join(', ') : 'unclassified';
+
+            const lowerText = `${title}\n${body}`.toLowerCase();
+
+            let likelyArea = 'General app flow';
+            if (lowerText.includes('login') || lowerText.includes('auth') || lowerText.includes('otp') || lowerText.includes('token')) {
+              likelyArea = 'Authentication';
+            } else if (lowerText.includes('booking') || lowerText.includes('ride') || lowerText.includes('captain')) {
+              likelyArea = 'Booking / Captain workflow';
+            } else if (lowerText.includes('payment') || lowerText.includes('fare') || lowerText.includes('promo')) {
+              likelyArea = 'Payments / Pricing';
+            } else if (lowerText.includes('network') || lowerText.includes('fetch') || lowerText.includes('cors') || lowerText.includes('api')) {
+              likelyArea = 'API / network integration';
+            } else if (lowerText.includes('save') || lowerText.includes('refresh') || lowerText.includes('localstorage')) {
+              likelyArea = 'State persistence / local storage';
             }
 
-            // Build analysis comment
+            const hasSteps = /steps to reproduce|repro steps|reproduction steps/i.test(body);
+            const hasExpected = /expected/i.test(body);
+            const hasActual = /actual|what happened/i.test(body);
+            const hasEnv = /environment|browser|device|version/i.test(body);
+
+            const missingInfo = [];
+            if (!hasSteps) missingInfo.push('Steps to reproduce');
+            if (!hasExpected) missingInfo.push('Expected result');
+            if (!hasActual) missingInfo.push('Actual result');
+            if (!hasEnv) missingInfo.push('Environment details');
+
+            let severity = 'Medium';
+            if (/crash|broken|cannot|unable|blocked|security|data loss/i.test(lowerText)) {
+              severity = 'High';
+            }
+            if (/critical|production down|cannot login|payment failed/i.test(lowerText)) {
+              severity = 'Critical';
+            }
+
+            // Build developer-focused analysis comment
             const analysisComment = [
-              '## Issue Analysis',
+              '## Bug Investigation Assistant',
               '',
-              '**Classification:**',
-              `- Type: ${labels}`,
-              `- Priority: ${priority}`,
+              '**Quick Triage:**',
+              `- Type: ${labelsText}`,
               `- Severity: ${severity}`,
-              `- Reporter: @${issue.user.login}`,
+              `- Likely area: ${likelyArea}`,
+              `- Reporter: @${reporter}`,
               `- Created: ${createdAt}`,
               '',
-              '**Summary:**',
-              `${title}`,
+              '**Likely investigation path:**',
+              `- Check the ${likelyArea} code path first.`,
+              '- Compare the bug report against recent frontend and backend changes.',
+              '- Reproduce the issue with the same role, route, and saved state used by the reporter.',
               '',
-              '**Recommended Actions:**',
-              '- [ ] Assign to team member',
-              '- [ ] Add priority label',
-              '- [ ] Check for duplicates',
-              '- [ ] Link related issues',
-              '- [ ] Set milestone',
+              '**What to verify first:**',
+              '- API request and response in browser network tab',
+              '- Console errors and failed validation messages',
+              '- Authentication/session state if the issue affects protected screens',
+              '- Local storage or persisted profile/booking state if the issue survives refresh',
               '',
-              '**Reporter:**',
-              `- GitHub: @${issue.user.login}`,
-              `- Profile: ${issue.user.html_url}`,
+              '**Missing information:**',
+              ...(missingInfo.length ? missingInfo.map((item) => `- ${item}`) : ['- None; issue contains enough info to begin reproduction.']),
+              '',
+              '**Developer next steps:**',
+              '- [ ] Reproduce the issue locally or in staging',
+              '- [ ] Find the exact failing component, route, or API call',
+              '- [ ] Add or update a regression test',
+              '- [ ] Fix the root cause, not just the symptom',
+              '- [ ] Confirm the fix with a fresh session and a persisted session',
+              '',
+              '**Summary from issue:**',
+              title || 'No title provided',
               '',
               '---',
-              '*Auto-generated issue analysis. Please review and take action.*'
+              '*Auto-generated bug investigation note. Use this as a starting point for root-cause analysis.*'
             ].join('\n');
 
             // Post comment
