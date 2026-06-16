@@ -37,6 +37,15 @@ type NearbyHotel = {
   imageUrl?: string;
 };
 
+type NearbyShopOption = {
+  name: string;
+  locationLabel: string;
+  distanceKm: number;
+  etaMinutes: number;
+  lat?: number;
+  lng?: number;
+};
+
 type FoodMenuItem = {
   id: string;
   name: string;
@@ -874,16 +883,15 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
                 <div class="col-12" *ngIf="nearbyGeneralShops.length > 0">
                   <label class="svc-label">Nearby Grocery / Stores</label>
                   <div class="pickup-nearby-grid">
-                    <button
-                      type="button"
-                      class="pickup-nearby-card"
-                      *ngFor="let shop of nearbyGeneralShops"
-                      (click)="useNearbyGroceryShop(shop.name)"
-                    >
+                    <div class="pickup-nearby-card" *ngFor="let shop of nearbyGeneralShops">
                       <span class="pickup-nearby-name">{{ shop.name }}</span>
                       <span class="pickup-nearby-meta">{{ shop.locationLabel || 'Near your pickup' }}</span>
                       <span class="pickup-nearby-meta">{{ shop.distanceKm | number: '1.1-1' }} km • {{ shop.etaMinutes }} min</span>
-                    </button>
+                      <div class="pickup-nearby-actions">
+                        <button type="button" class="btn btn-outline-primary btn-sm" (click)="focusShopOnMap(shop)">Map</button>
+                        <button type="button" class="btn btn-primary btn-sm" (click)="useNearbyGroceryShop(shop.name)">Use Shop</button>
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <div class="col-12">
@@ -987,16 +995,15 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
                 <div class="col-12" *ngIf="nearbyMedicalShops.length > 0">
                   <label class="svc-label">Nearby Medical Shops</label>
                   <div class="pickup-nearby-grid">
-                    <button
-                      type="button"
-                      class="pickup-nearby-card"
-                      *ngFor="let shop of nearbyMedicalShops"
-                      (click)="useNearbyMedicineShop(shop.name)"
-                    >
+                    <div class="pickup-nearby-card" *ngFor="let shop of nearbyMedicalShops">
                       <span class="pickup-nearby-name">{{ shop.name }}</span>
                       <span class="pickup-nearby-meta">{{ shop.locationLabel || 'Near your pickup' }}</span>
                       <span class="pickup-nearby-meta">{{ shop.distanceKm | number: '1.1-1' }} km • {{ shop.etaMinutes }} min</span>
-                    </button>
+                      <div class="pickup-nearby-actions">
+                        <button type="button" class="btn btn-outline-primary btn-sm" (click)="focusShopOnMap(shop)">Map</button>
+                        <button type="button" class="btn btn-primary btn-sm" (click)="useNearbyMedicineShop(shop.name)">Use Shop</button>
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <div class="col-12">
@@ -1759,6 +1766,12 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
       .pickup-nearby-meta {
         font-size: 0.75rem;
         color: #64748b;
+      }
+
+      .pickup-nearby-actions {
+        display: flex;
+        gap: 6px;
+        margin-top: 6px;
       }
 
       .vehicle-map-card {
@@ -3201,7 +3214,7 @@ export class BookingComponent implements OnDestroy {
     return Array.from(new Set(names)).sort((a, b) => a.localeCompare(b));
   }
 
-  get nearbyPickupShops(): Array<{ name: string; locationLabel: string; distanceKm: number; etaMinutes: number }> {
+  get nearbyPickupShops(): NearbyShopOption[] {
     return this.nearbyHotels
       .filter((hotel) => !!hotel.name)
       .slice(0, 8)
@@ -3209,15 +3222,17 @@ export class BookingComponent implements OnDestroy {
         name: hotel.name,
         locationLabel: hotel.locationLabel || '',
         distanceKm: hotel.distanceKm,
-        etaMinutes: hotel.etaMinutes
+        etaMinutes: hotel.etaMinutes,
+        lat: hotel.lat,
+        lng: hotel.lng
       }));
   }
 
-  get nearbyGeneralShops(): Array<{ name: string; locationLabel: string; distanceKm: number; etaMinutes: number }> {
+  get nearbyGeneralShops(): NearbyShopOption[] {
     return this.nearbyPickupShops;
   }
 
-  get nearbyMedicalShops(): Array<{ name: string; locationLabel: string; distanceKm: number; etaMinutes: number }> {
+  get nearbyMedicalShops(): NearbyShopOption[] {
     const medicalKeywords = ['medical', 'pharmacy', 'pharma', 'apollo', 'medplus', 'clinic'];
     const filtered = this.nearbyHotels
       .filter((hotel) => {
@@ -3229,7 +3244,9 @@ export class BookingComponent implements OnDestroy {
         name: hotel.name,
         locationLabel: hotel.locationLabel || '',
         distanceKm: hotel.distanceKm,
-        etaMinutes: hotel.etaMinutes
+        etaMinutes: hotel.etaMinutes,
+        lat: hotel.lat,
+        lng: hotel.lng
       }));
 
     return filtered.length > 0 ? filtered : this.nearbyPickupShops.slice(0, 6);
@@ -3248,6 +3265,30 @@ export class BookingComponent implements OnDestroy {
   useNearbyMedicineShop(shopName: string): void {
     this.medicineShopName = shopName;
     this.notifications.push(`Selected medical shop: ${shopName}`, 'success');
+  }
+
+  async focusShopOnMap(shop: NearbyShopOption): Promise<void> {
+    const lat = Number(shop?.lat);
+    const lng = Number(shop?.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      this.notifications.push('Shop map location is not available yet.', 'warning');
+      return;
+    }
+
+    const mapCard = document.getElementById('booking-map-card');
+    if (mapCard) {
+      mapCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    await this.ensureLeafletMapReady();
+    if (!this.leafletMap) {
+      this.notifications.push('Live map is still loading. Please try again.', 'warning');
+      return;
+    }
+
+    this.leafletMap.setView([lat, lng], 15, { animate: true });
+    this.scheduleMapCenterPreview(lat, lng, 0);
+    this.notifications.push(`Map centered to ${shop.name}.`, 'info');
   }
 
   onPickupShopSelected(shopName: string): void {
