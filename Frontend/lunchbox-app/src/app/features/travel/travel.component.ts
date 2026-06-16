@@ -268,7 +268,27 @@ interface StopPoint {
         </div>
 
         <p class="text-muted small mb-3 text-center">Share this OTP with your captain when they arrive</p>
-        <button class="confirm-btn mb-2" (click)="trackRide()">📍 Track Ride</button>
+        <div class="cancel-card" *ngIf="!isRideCancelled">
+          <div class="cancel-title">Need to cancel this ride?</div>
+          <div class="cancel-sub">Select a reason so we can improve your experience.</div>
+          <select class="cancel-select" [(ngModel)]="cancelReason">
+            <option value="">Select cancel reason</option>
+            <option *ngFor="let reason of cancelReasonOptions" [value]="reason">{{ reason }}</option>
+          </select>
+          <input
+            *ngIf="cancelReason === 'Other'"
+            class="cancel-input"
+            placeholder="Type your cancel reason"
+            [(ngModel)]="cancelReasonOther"
+          />
+          <button class="cancel-btn" [disabled]="!canCancelRide" (click)="cancelBookedRide()">Cancel Ride</button>
+        </div>
+
+        <div class="cancelled-note" *ngIf="isRideCancelled">
+          Ride cancelled. Reason: {{ resolvedCancelReason }}
+        </div>
+
+        <button class="confirm-btn mb-2" [disabled]="isRideCancelled" (click)="trackRide()">📍 Track Ride</button>
         <button class="outline-btn" (click)="resetFlow()">Book Another Ride</button>
       </div>
 
@@ -356,6 +376,70 @@ interface StopPoint {
       width: 100%; padding: 14px; background: transparent;
       border: 2px solid #ddd; border-radius: 30px;
       font-weight: 600; font-size: 15px; cursor: pointer; color: #444;
+    }
+
+    .cancel-card {
+      width: 100%;
+      border: 1px solid #fee2e2;
+      background: #fff7f7;
+      border-radius: 14px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+
+    .cancel-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #991b1b;
+      margin-bottom: 2px;
+    }
+
+    .cancel-sub {
+      font-size: 12px;
+      color: #7f1d1d;
+      margin-bottom: 8px;
+    }
+
+    .cancel-select,
+    .cancel-input {
+      width: 100%;
+      border: 1px solid #fecaca;
+      border-radius: 10px;
+      padding: 9px 10px;
+      font-size: 13px;
+      margin-bottom: 8px;
+      background: #fff;
+      outline: none;
+    }
+
+    .cancel-btn {
+      width: 100%;
+      border: none;
+      border-radius: 10px;
+      padding: 10px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+      background: #dc2626;
+      cursor: pointer;
+    }
+
+    .cancel-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .cancelled-note {
+      width: 100%;
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #991b1b;
+      font-size: 12px;
+      font-weight: 600;
+      text-align: center;
     }
 
     /* STEP 2 DROP */
@@ -510,6 +594,11 @@ export class TravelComponent implements OnInit, OnDestroy {
   selectedVehicle: VehicleOption | null = null;
   booking = false;
   bookingOtp = '';
+  currentBookingId = '';
+  isRideCancelled = false;
+  cancelReason = '';
+  cancelReasonOther = '';
+  readonly cancelReasonOptions = ['Taking too long', 'Changed my mind', 'Wrong location selected', 'Driver not reachable', 'Other'];
 
   readonly vehicleOptions: VehicleOption[] = [
     { type: 'bike', icon: '🏍️', label: 'Bike', description: 'Quick Bike rides', farePerKm: 8, etaMin: 3, capacity: 1 },
@@ -798,6 +887,22 @@ export class TravelComponent implements OnInit, OnDestroy {
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
+  get canCancelRide(): boolean {
+    if (!this.cancelReason) {
+      return false;
+    }
+
+    if (this.cancelReason === 'Other') {
+      return this.cancelReasonOther.trim().length > 0;
+    }
+
+    return true;
+  }
+
+  get resolvedCancelReason(): string {
+    return this.cancelReason === 'Other' ? this.cancelReasonOther.trim() : this.cancelReason;
+  }
+
   bookRide(): void {
     if (!this.selectedVehicle) return;
     this.booking = true;
@@ -817,13 +922,43 @@ export class TravelComponent implements OnInit, OnDestroy {
         payload
       );
       this.booking = false;
+      this.currentBookingId = (booking as any)?.id || '';
       this.bookingOtp = (booking as any)?.otp || `${Math.floor(1000 + Math.random() * 9000)}`;
+      this.isRideCancelled = false;
+      this.cancelReason = '';
+      this.cancelReasonOther = '';
       this.step = 4;
     } catch {
       this.booking = false;
+      this.currentBookingId = '';
       this.bookingOtp = `${Math.floor(1000 + Math.random() * 9000)}`;
+      this.isRideCancelled = false;
+      this.cancelReason = '';
+      this.cancelReasonOther = '';
       this.step = 4;
     }
+  }
+
+  cancelBookedRide(): void {
+    if (!this.canCancelRide) {
+      this.notifications.push('Please select a cancel reason.', 'warning');
+      return;
+    }
+
+    if (!this.currentBookingId) {
+      this.notifications.push('Booking reference is not available to cancel this ride.', 'warning');
+      return;
+    }
+
+    const reason = this.resolvedCancelReason;
+    const result = this.bookingService.cancelRide(this.currentBookingId, 'customer');
+    if (!result.success) {
+      this.notifications.push(result.message, 'warning');
+      return;
+    }
+
+    this.isRideCancelled = true;
+    this.notifications.push(`Ride cancelled. Reason: ${reason}`, 'info');
   }
 
   trackRide(): void { this.router.navigate(['/tracking']); }
@@ -840,6 +975,10 @@ export class TravelComponent implements OnInit, OnDestroy {
     this.routeMapUrl = null;
     this.selectedVehicle = this.vehicleOptions[1];
     this.bookingOtp = '';
+    this.currentBookingId = '';
+    this.isRideCancelled = false;
+    this.cancelReason = '';
+    this.cancelReasonOther = '';
   }
 
   shortName(addr: string): string {
