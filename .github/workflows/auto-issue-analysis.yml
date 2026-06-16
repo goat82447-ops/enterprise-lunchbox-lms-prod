@@ -83,19 +83,54 @@ jobs:
 
             let rootCause = 'The issue report does not include enough detail to confirm a single root cause yet.';
             let fixRecommendation = 'Reproduce the issue, inspect the failing request or component, and add a regression test before shipping the fix.';
+            let issueToFixPlan = [
+              'Confirm exact reproduction steps in staging/local.',
+              'Identify the failing UI component and API request.',
+              'Patch the smallest possible code path causing failure.',
+              'Add a regression test for this scenario.',
+              'Verify fix for both fresh session and persisted session states.'
+            ];
 
             if (lowerText.includes('404') && lowerText.includes('login')) {
               rootCause = 'The login flow is likely calling a route or backend URL that does not exist in the deployed environment, so the request fails before authentication completes.';
               fixRecommendation = 'Verify the frontend login API base URL, confirm the backend route exists in the deployed service, and check any rewrite or proxy configuration that may be pointing to the wrong host.';
+              issueToFixPlan = [
+                'Check login request URL in browser Network tab (POST /api/auth/login).',
+                'Validate frontend API base config (environment.prod.ts and any rewrite/proxy settings).',
+                'Confirm deployed backend exposes /api/auth/login in the active environment.',
+                'Fix route/base URL mismatch and redeploy affected service.',
+                'Re-test Admin and Customer login and confirm dashboard redirect.'
+              ];
             } else if (lowerText.includes('404')) {
               rootCause = 'A route mismatch is likely: the UI is requesting an endpoint that is missing, renamed, or deployed in a different service.';
               fixRecommendation = 'Compare the requested URL against the backend route table, then fix the service path, deployment target, or client base URL.';
+              issueToFixPlan = [
+                'Capture failing request URL from browser/devtools.',
+                'Find matching backend route and verify deployed service path.',
+                'Update client path or rewrite/proxy configuration.',
+                'Redeploy service and validate endpoint returns expected status.',
+                'Add regression coverage for the same route.'
+              ];
             } else if (lowerText.includes('auth') || lowerText.includes('otp') || lowerText.includes('token')) {
               rootCause = 'The authentication state or session handling is likely failing before the user reaches the protected screen.';
               fixRecommendation = 'Check token/session creation, authorization checks, and any guards that may reject the user before the login flow completes.';
+              issueToFixPlan = [
+                'Trace token/session creation after login submit.',
+                'Verify auth guard logic for role and token validity checks.',
+                'Check token persistence and expiry handling.',
+                'Fix session/guard mismatch and retest full login flow.',
+                'Add tests for invalid, expired, and valid token scenarios.'
+              ];
             } else if (lowerText.includes('booking') || lowerText.includes('captain')) {
               rootCause = 'The booking/captain flow likely breaks because the client and backend are out of sync on state, permissions, or booking data shape.';
               fixRecommendation = 'Inspect the request payload, response mapping, and state persistence logic for the booking flow and patch the failing step directly.';
+              issueToFixPlan = [
+                'Reproduce with exact booking/captain role path.',
+                'Compare request/response payload fields against UI expectations.',
+                'Fix mapping or permission guard causing failure.',
+                'Validate with refresh and cross-role scenarios.',
+                'Add regression test for the reported booking path.'
+              ];
             }
 
             // Build developer-focused analysis comment
@@ -120,6 +155,9 @@ jobs:
               '- Compare the bug report against recent frontend and backend changes.',
               '- Reproduce the issue with the same role, route, and saved state used by the reporter.',
               '',
+              '**Issue-to-fix action plan:**',
+              ...issueToFixPlan.map((step, i) => `${i + 1}. ${step}`),
+              '',
               '**What to verify first:**',
               '- API request and response in browser network tab',
               '- Console errors and failed validation messages',
@@ -140,7 +178,7 @@ jobs:
               title || 'No title provided',
               '',
               '---',
-              '*Auto-generated bug investigation note. Use this as a starting point for root-cause analysis.*'
+              '*Auto-generated issue investigation and fix plan. This comment is posted by workflow automation, not manual reviewer action.*'
             ].join('\n');
 
             // Post comment
