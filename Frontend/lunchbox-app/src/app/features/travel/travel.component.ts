@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
-import { Subject, debounceTime, distinctUntilChanged, switchMap, of } from 'rxjs';
+import { Subject, debounceTime, distinctUntilChanged, switchMap, of, takeUntil } from 'rxjs';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { AuthService } from '../../core/services/auth.service';
 import { BookingService } from '../../core/services/booking.service';
@@ -41,6 +41,19 @@ interface TravelOfferRule {
   minFare: number;
   maxDiscount?: number;
 }
+
+type CaptainKycStatus = 'not_started' | 'pending' | 'verified' | 'rejected';
+
+type CaptainKycFormState = {
+  userId: string;
+  kycStatus: CaptainKycStatus;
+  kycDocumentType: string;
+  kycDocumentNumberMasked: string;
+  kycReferenceId: string;
+  kycUpdatedAt: string;
+};
+
+const CAPTAIN_KYC_STORAGE_KEY = 'delivery_captain_kyc_state';
 
 @Component({
   selector: 'app-travel',
@@ -265,6 +278,14 @@ interface TravelOfferRule {
         <div class="confirm-icon">🎉</div>
         <h4 class="confirm-title">Ride Booked!</h4>
         <p class="confirm-sub">Your {{ selectedVehicle?.label }} is on the way</p>
+
+        <div class="driver-verify-banner" *ngIf="assignedCaptainName">
+          <span class="driver-name">Captain: {{ assignedCaptainName }}</span>
+          <span class="driver-verified-pill" *ngIf="assignedCaptainKycStatus === 'verified'">Verified Driver</span>
+        </div>
+        <div class="driver-verify-note" *ngIf="assignedCaptainName && assignedCaptainKycStatus !== 'verified'">
+          Captain assigned. Verified badge will appear only after admin approval.
+        </div>
 
         <div class="confirm-card">
           <div class="confirm-row">
@@ -609,6 +630,43 @@ interface TravelOfferRule {
     .confirm-icon { font-size: 64px; margin-bottom: 8px; }
     .confirm-title { font-size: 24px; font-weight: 800; color: #111; margin-bottom: 4px; }
     .confirm-sub { font-size: 14px; color: #666; margin-bottom: 20px; }
+    .driver-verify-banner {
+      width: 100%;
+      border: 1px solid #e5e7eb;
+      background: #fff;
+      border-radius: 12px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    .driver-name { font-size: 12px; font-weight: 700; color: #1f2937; }
+    .driver-verified-pill {
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid #bbf7d0;
+      background: #ecfdf3;
+      color: #166534;
+      border-radius: 999px;
+      padding: 3px 9px;
+      font-size: 11px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .driver-verify-note {
+      width: 100%;
+      border-radius: 10px;
+      padding: 8px 10px;
+      margin-bottom: 10px;
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      color: #92400e;
+      font-size: 11px;
+      font-weight: 600;
+      text-align: center;
+    }
     .confirm-card {
       width: 100%; border: 1px solid #eee; border-radius: 16px;
       padding: 16px; margin-bottom: 16px; background: #fafafa;
@@ -657,6 +715,8 @@ export class TravelComponent implements OnInit, OnDestroy {
   isRideCancelled = false;
   cancelReason = '';
   cancelReasonOther = '';
+  assignedCaptainName = '';
+  assignedCaptainKycStatus: CaptainKycStatus | '' = '';
   showOffersPanel = false;
   appliedTravelOfferCode = '';
   readonly travelOfferRules: TravelOfferRule[] = [
@@ -711,6 +771,10 @@ export class TravelComponent implements OnInit, OnDestroy {
     this.stopSearch$
       .pipe(debounceTime(400), distinctUntilChanged(), switchMap(q => this.nominatimSearch(q)))
       .subscribe(results => this.zone.run(() => this.stopSuggestions = results));
+
+    this.bookingService.bookings$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => this.refreshAssignedCaptainState());
   }
 
   ngOnDestroy(): void {
@@ -1059,6 +1123,7 @@ export class TravelComponent implements OnInit, OnDestroy {
       this.cancelReason = '';
       this.cancelReasonOther = '';
       this.step = 4;
+      this.refreshAssignedCaptainState();
     } catch {
       this.booking = false;
       this.currentBookingId = '';
@@ -1067,6 +1132,7 @@ export class TravelComponent implements OnInit, OnDestroy {
       this.cancelReason = '';
       this.cancelReasonOther = '';
       this.step = 4;
+      this.refreshAssignedCaptainState();
     }
   }
 
@@ -1110,8 +1176,52 @@ export class TravelComponent implements OnInit, OnDestroy {
     this.isRideCancelled = false;
     this.cancelReason = '';
     this.cancelReasonOther = '';
+    this.assignedCaptainName = '';
+    this.assignedCaptainKycStatus = '';
     this.showOffersPanel = false;
     this.appliedTravelOfferCode = '';
+  }
+
+  private refreshAssignedCaptainState(): void {
+    if (!this.currentBookingId) {
+      this.assignedCaptainName = '';
+      this.assignedCaptainKycStatus = '';
+      return;
+    }
+
+    const booking = this.bookingService.getAllBookingsSnapshot().find((item) => item.id === this.currentBookingId);
+    if (!booking) {
+      this.assignedCaptainName = '';
+      this.assignedCaptainKycStatus = '';
+      return;
+    }
+
+    this.assignedCaptainName = booking.driverName || '';
+    if (!booking.captainId) {
+      this.assignedCaptainKycStatus = '';
+      return;
+    }
+
+    this.assignedCaptainKycStatus = this.readCaptainKycStatus(booking.captainId);
+  }
+
+  private readCaptainKycStatus(captainId: string): CaptainKycStatus {
+    const raw = localStorage.getItem(CAPTAIN_KYC_STORAGE_KEY);
+    if (!raw) {
+      return 'not_started';
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as Record<string, CaptainKycFormState> | CaptainKycFormState;
+      if ('userId' in (parsed as any)) {
+        const legacy = parsed as CaptainKycFormState;
+        return legacy.userId === captainId ? legacy.kycStatus : 'not_started';
+      }
+      const map = parsed as Record<string, CaptainKycFormState>;
+      return map[captainId]?.kycStatus || 'not_started';
+    } catch {
+      return 'not_started';
+    }
   }
 
   shortName(addr: string): string {
