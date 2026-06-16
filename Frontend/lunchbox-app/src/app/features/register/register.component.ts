@@ -111,17 +111,20 @@ import { RegisterResponse, UserRole, VehicleType } from '../../core/models/deliv
 
       .brand-strip {
         display: grid;
-        grid-template-columns: 170px 1fr;
-        gap: 12px;
+        grid-template-columns: 240px 1fr;
+        gap: 16px;
         align-items: center;
       }
 
       .brand-logo {
         width: 100%;
-        max-width: 170px;
-        border-radius: 10px;
+        max-width: 240px;
+        height: 120px;
+        object-fit: contain;
+        border-radius: 12px;
         border: 1px solid rgba(0, 0, 0, 0.08);
         background: #fff;
+        padding: 6px;
       }
 
       .mode-grid .btn {
