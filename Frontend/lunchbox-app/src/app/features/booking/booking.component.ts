@@ -183,6 +183,21 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
             <label class="form-label small mb-1">Or Enter Shop Name</label>
             <input class="form-control" placeholder="Type custom shop name" [(ngModel)]="pickupShopName" />
           </div>
+          <div class="col-12" *ngIf="nearbyPickupShops.length > 0">
+            <label class="form-label small mb-1">Nearby Shops by Location</label>
+            <div class="pickup-nearby-grid">
+              <button
+                type="button"
+                class="pickup-nearby-card"
+                *ngFor="let shop of nearbyPickupShops"
+                (click)="useNearbyPickupShop(shop.name)"
+              >
+                <span class="pickup-nearby-name">{{ shop.name }}</span>
+                <span class="pickup-nearby-meta">{{ shop.locationLabel || 'Near your pickup' }}</span>
+                <span class="pickup-nearby-meta">{{ shop.distanceKm | number: '1.1-1' }} km • {{ shop.etaMinutes }} min</span>
+              </button>
+            </div>
+          </div>
           <div class="col-md-6">
             <input class="form-control" placeholder="Shop contact" [(ngModel)]="pickupShopPhone" />
           </div>
@@ -551,8 +566,13 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
               <div class="small text-danger mt-1" *ngIf="promoStatusLevel === 'error'">{{ promoStatusMessage }}</div>
             </div>
             <h5 class="mb-2">Pickup</h5>
-            <div class="d-flex gap-2 mb-2 flex-wrap">
-              <button class="btn btn-outline-primary btn-sm" type="button" (click)="allowCurrentLocation('pickup')">Allow Current Location</button>
+            <div class="location-map-flow mb-4">
+              <div class="small text-muted mb-2">Current pickup</div>
+              <div class="location-chip mb-2">{{ pickupAddress || 'Pickup Point not selected' }}</div>
+              <div class="d-flex gap-2 mb-2 flex-wrap">
+                <button class="btn btn-outline-primary btn-sm" type="button" (click)="allowCurrentLocation('pickup')">Use Current Location</button>
+                <button class="btn btn-outline-success btn-sm" type="button" (click)="startMapSelection('pickup')">Select on Map</button>
+              </div>
               <input
                 class="form-control form-control-sm preset-select"
                 placeholder="Search pickup place (example: JBS)"
@@ -564,14 +584,14 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
                 <option *ngFor="let p of filteredPickupLocationSuggestions" [value]="p.name"></option>
               </datalist>
             </div>
-            <input class="form-control mb-2" placeholder="Pickup address" [(ngModel)]="pickupAddress" (ngModelChange)="onPickupLocationInputChanged()" />
-            <div class="row g-2 mb-4">
-              <div class="col"><input class="form-control" type="number" step="0.00001" placeholder="Pickup latitude" [(ngModel)]="pickupLat" (ngModelChange)="onPickupLocationInputChanged(true)" /></div>
-              <div class="col"><input class="form-control" type="number" step="0.00001" placeholder="Pickup longitude" [(ngModel)]="pickupLng" (ngModelChange)="onPickupLocationInputChanged(true)" /></div>
-            </div>
 
             <h5 class="mb-2">Drop Location</h5>
-            <div class="d-flex gap-2 mb-2 flex-wrap">
+            <div class="location-map-flow mb-3">
+              <div class="small text-muted mb-2">Current drop</div>
+              <div class="location-chip mb-2">{{ dropAddress || 'Drop Point not selected' }}</div>
+              <div class="d-flex gap-2 mb-2 flex-wrap">
+                <button class="btn btn-outline-success btn-sm" type="button" (click)="startMapSelection('drop')">Select on Map</button>
+              </div>
               <input
                 class="form-control form-control-sm preset-select"
                 placeholder="Search drop place (example: Ameerpet)"
@@ -582,11 +602,6 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
               <datalist id="drop-location-list">
                 <option *ngFor="let p of filteredDropLocationSuggestions" [value]="p.name"></option>
               </datalist>
-            </div>
-            <input class="form-control mb-2" placeholder="Drop address" [(ngModel)]="dropAddress" />
-            <div class="row g-2 mb-3">
-              <div class="col"><input class="form-control" type="number" step="0.00001" placeholder="Drop latitude" [(ngModel)]="dropLat" (ngModelChange)="onDropLocationInputChanged(true)" /></div>
-              <div class="col"><input class="form-control" type="number" step="0.00001" placeholder="Drop longitude" [(ngModel)]="dropLng" (ngModelChange)="onDropLocationInputChanged(true)" /></div>
             </div>
 
             <div class="trip-summary mb-3" *ngIf="hasRouteCoordinates">
@@ -712,7 +727,7 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
               Delivery captains are assigned automatically after order acceptance. Captain list is hidden for food mode.
             </div>
 
-            <div class="vehicle-map-card mb-4" *ngIf="serviceType !== 'food'">
+            <div class="vehicle-map-card mb-4" *ngIf="serviceType !== 'food'" id="booking-map-card">
               <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
                 <h5 class="mb-0">Vehicle Location Map</h5>
                 <div class="d-flex align-items-center gap-2">
@@ -729,7 +744,7 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
                 </div>
               </div>
               <div class="small text-muted mb-2">
-                Move map to your target place, keep the pin at center, then confirm pickup or drop.
+                Direct map mode: move the map, keep pin at center, then tap Set Pickup or Set Drop.
               </div>
               <div class="small text-primary mb-2" *ngIf="mapSelectionTarget">
                 {{ mapSelectionTargetLabel() }} selection mode active.
@@ -781,7 +796,7 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
                 <span class="svc-detail-icon">📦</span>
                 <div>
                   <div class="svc-detail-title">Parcel Details</div>
-                  <div class="svc-detail-sub">Tell us about what you are sending</div>
+                  <div class="svc-detail-sub">Basic details for quick parcel booking</div>
                 </div>
               </div>
               <div class="row g-3 mt-1">
@@ -790,12 +805,20 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
                   <input class="form-control" placeholder="Your name or business name" [(ngModel)]="parcelSenderName" />
                 </div>
                 <div class="col-md-6">
+                  <label class="svc-label">Sender Phone <span class="req">*</span></label>
+                  <input class="form-control" type="tel" placeholder="+91XXXXXXXXXX" [(ngModel)]="parcelSenderPhone" />
+                </div>
+                <div class="col-md-6">
                   <label class="svc-label">Recipient Name <span class="req">*</span></label>
                   <input class="form-control" placeholder="Who will receive?" [(ngModel)]="parcelRecipientName" />
                 </div>
                 <div class="col-md-6">
                   <label class="svc-label">Recipient Phone <span class="req">*</span></label>
                   <input class="form-control" type="tel" placeholder="+91XXXXXXXXXX" [(ngModel)]="parcelRecipientPhone" />
+                </div>
+                <div class="col-md-6">
+                  <label class="svc-label">Shop / Pickup Store <span class="req">*</span></label>
+                  <input class="form-control" placeholder="Parcel shop or pickup store name" [(ngModel)]="pickupShopName" />
                 </div>
                 <div class="col-md-6">
                   <label class="svc-label">Parcel Weight</label>
@@ -820,8 +843,16 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
                   </select>
                 </div>
                 <div class="col-12">
-                  <label class="svc-label">Description (optional)</label>
-                  <input class="form-control" placeholder="Brief description of parcel contents" [(ngModel)]="parcelDescription" />
+                  <label class="svc-label">Item Name <span class="req">*</span></label>
+                  <input class="form-control" placeholder="What item are you sending?" [(ngModel)]="parcelDescription" />
+                </div>
+                <div class="col-md-6">
+                  <label class="svc-label">Declared Value (optional)</label>
+                  <input class="form-control" type="number" min="0" placeholder="Estimated value in Rs" [(ngModel)]="parcelDeclaredValue" />
+                </div>
+                <div class="col-md-6">
+                  <label class="svc-label">Pickup Landmark (optional)</label>
+                  <input class="form-control" placeholder="Landmark near shop/pickup" [(ngModel)]="parcelPickupLandmark" />
                 </div>
               </div>
             </div>
@@ -840,6 +871,21 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
                   <label class="svc-label">Shop / Store Name <span class="req">*</span></label>
                   <input class="form-control" placeholder="e.g. DMart, Reliance Fresh, local kirana" [(ngModel)]="groceryShopName" />
                 </div>
+                <div class="col-12" *ngIf="nearbyGeneralShops.length > 0">
+                  <label class="svc-label">Nearby Grocery / Stores</label>
+                  <div class="pickup-nearby-grid">
+                    <button
+                      type="button"
+                      class="pickup-nearby-card"
+                      *ngFor="let shop of nearbyGeneralShops"
+                      (click)="useNearbyGroceryShop(shop.name)"
+                    >
+                      <span class="pickup-nearby-name">{{ shop.name }}</span>
+                      <span class="pickup-nearby-meta">{{ shop.locationLabel || 'Near your pickup' }}</span>
+                      <span class="pickup-nearby-meta">{{ shop.distanceKm | number: '1.1-1' }} km • {{ shop.etaMinutes }} min</span>
+                    </button>
+                  </div>
+                </div>
                 <div class="col-12">
                   <label class="svc-label">Grocery List <span class="req">*</span></label>
                   <textarea class="form-control" rows="4"
@@ -856,6 +902,13 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
                     <option value="captain">Captain pays, reimburse on delivery</option>
                     <option value="online">I will pay online to shop</option>
                     <option value="card">Swipe card on delivery</option>
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <label class="svc-label">Delivery Priority</label>
+                  <select class="form-select" [(ngModel)]="groceryPriority">
+                    <option value="normal">Normal</option>
+                    <option value="urgent">Urgent (ASAP)</option>
                   </select>
                 </div>
                 <div class="col-12">
@@ -931,11 +984,30 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
                   <label class="svc-label">Pharmacy / Medical Shop Name <span class="req">*</span></label>
                   <input class="form-control" placeholder="e.g. Apollo Pharmacy, local medical shop" [(ngModel)]="medicineShopName" />
                 </div>
+                <div class="col-12" *ngIf="nearbyMedicalShops.length > 0">
+                  <label class="svc-label">Nearby Medical Shops</label>
+                  <div class="pickup-nearby-grid">
+                    <button
+                      type="button"
+                      class="pickup-nearby-card"
+                      *ngFor="let shop of nearbyMedicalShops"
+                      (click)="useNearbyMedicineShop(shop.name)"
+                    >
+                      <span class="pickup-nearby-name">{{ shop.name }}</span>
+                      <span class="pickup-nearby-meta">{{ shop.locationLabel || 'Near your pickup' }}</span>
+                      <span class="pickup-nearby-meta">{{ shop.distanceKm | number: '1.1-1' }} km • {{ shop.etaMinutes }} min</span>
+                    </button>
+                  </div>
+                </div>
                 <div class="col-12">
                   <label class="svc-label">Medicine Names <span class="req">*</span></label>
                   <textarea class="form-control" rows="3"
                     placeholder="List each medicine on a new line&#10;e.g.&#10;Paracetamol 650mg x 10&#10;Azithromycin 500mg x 5"
                     [(ngModel)]="medicineNames"></textarea>
+                </div>
+                <div class="col-md-6">
+                  <label class="svc-label">Dosage / Frequency (optional)</label>
+                  <input class="form-control" placeholder="e.g. 1-0-1 after food" [(ngModel)]="medicineDosageNote" />
                 </div>
                 <div class="col-12">
                   <label class="svc-label">Patient Name</label>
@@ -1411,6 +1483,23 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         max-width: 320px;
       }
 
+      .location-map-flow {
+        border: 1px solid #e6eaef;
+        border-radius: 12px;
+        background: #fbfcfe;
+        padding: 10px;
+      }
+
+      .location-chip {
+        border: 1px dashed #c3d5ea;
+        border-radius: 10px;
+        background: #f3f8ff;
+        color: #0f2942;
+        font-size: 13px;
+        font-weight: 600;
+        padding: 8px 10px;
+      }
+
       .history-list {
         display: grid;
         gap: 10px;
@@ -1638,6 +1727,40 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         color: #64748b;
       }
 
+      .pickup-nearby-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 8px;
+      }
+
+      .pickup-nearby-card {
+        border: 1px solid #dbeafe;
+        border-radius: 10px;
+        background: #f8fbff;
+        padding: 8px;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 3px;
+        text-align: left;
+      }
+
+      .pickup-nearby-card:hover {
+        border-color: #93c5fd;
+        box-shadow: 0 0 0 2px rgba(147, 197, 253, 0.2);
+      }
+
+      .pickup-nearby-name {
+        font-size: 0.83rem;
+        font-weight: 700;
+        color: #0f172a;
+      }
+
+      .pickup-nearby-meta {
+        font-size: 0.75rem;
+        color: #64748b;
+      }
+
       .vehicle-map-card {
         border: 1px solid #dbeafe;
         border-radius: 12px;
@@ -1830,17 +1953,21 @@ export class BookingComponent implements OnDestroy {
 
   // Parcel service fields
   parcelSenderName = '';
+  parcelSenderPhone = '';
   parcelRecipientName = '';
   parcelRecipientPhone = '';
   parcelWeight = '';
   parcelType = 'normal';
   parcelDescription = '';
+  parcelDeclaredValue: number | null = null;
+  parcelPickupLandmark = '';
 
   // Grocery service fields
   groceryShopName = '';
   groceryList = '';
   groceryBudget: number | null = null;
   groceryShopPaymentBy = 'captain';
+  groceryPriority: 'normal' | 'urgent' = 'normal';
   groceryInstructions = '';
 
   // Document service fields
@@ -1855,6 +1982,7 @@ export class BookingComponent implements OnDestroy {
   // Medicine service extra fields
   medicineShopName = '';
   medicinePatientName = '';
+  medicineDosageNote = '';
   medicineInstructions = '';
   medicineNames = '';
   medicinePrescriptionFileName = '';
@@ -2451,8 +2579,27 @@ export class BookingComponent implements OnDestroy {
       return this.canDirectFoodBook;
     }
 
+    if (this.serviceType === 'parcel') {
+      const hasParcelBasics =
+        this.parcelSenderName.trim().length > 0 &&
+        this.parcelSenderPhone.trim().length > 0 &&
+        this.parcelRecipientName.trim().length > 0 &&
+        this.parcelRecipientPhone.trim().length > 0 &&
+        this.pickupShopName.trim().length > 0 &&
+        this.parcelDescription.trim().length > 0;
+
+      const hasPickupServiceDetails =
+        !this.pickupServiceMode || this.pickupItemDetails.trim().length > 0;
+
+      return hasParcelBasics && hasPickupServiceDetails;
+    }
+
     if (this.serviceType === 'medicine') {
-      return this.isMedicineBookingReady;
+      return this.isMedicineBookingReady && this.medicineShopName.trim().length > 0;
+    }
+
+    if (this.serviceType === 'grocery') {
+      return this.groceryShopName.trim().length > 0 && this.groceryList.trim().length > 0;
     }
 
     return true;
@@ -2534,6 +2681,18 @@ export class BookingComponent implements OnDestroy {
 
     this.mapSelectionTarget = target;
     this.applyMapPickToTarget(target, lat, lng);
+  }
+
+  startMapSelection(target: 'pickup' | 'drop'): void {
+    this.mapSelectionTarget = target;
+    void this.ensureLeafletMapReady();
+
+    const mapCard = document.getElementById('booking-map-card');
+    if (mapCard) {
+      mapCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    this.notifications.push(`${target === 'pickup' ? 'Pickup' : 'Drop'} map selection started. Move map and tap Set ${target === 'pickup' ? 'Pickup' : 'Drop'}.`, 'info');
   }
 
   private applyMapPickToTarget(target: 'pickup' | 'drop', lat: number, lng: number): void {
@@ -3042,6 +3201,55 @@ export class BookingComponent implements OnDestroy {
     return Array.from(new Set(names)).sort((a, b) => a.localeCompare(b));
   }
 
+  get nearbyPickupShops(): Array<{ name: string; locationLabel: string; distanceKm: number; etaMinutes: number }> {
+    return this.nearbyHotels
+      .filter((hotel) => !!hotel.name)
+      .slice(0, 8)
+      .map((hotel) => ({
+        name: hotel.name,
+        locationLabel: hotel.locationLabel || '',
+        distanceKm: hotel.distanceKm,
+        etaMinutes: hotel.etaMinutes
+      }));
+  }
+
+  get nearbyGeneralShops(): Array<{ name: string; locationLabel: string; distanceKm: number; etaMinutes: number }> {
+    return this.nearbyPickupShops;
+  }
+
+  get nearbyMedicalShops(): Array<{ name: string; locationLabel: string; distanceKm: number; etaMinutes: number }> {
+    const medicalKeywords = ['medical', 'pharmacy', 'pharma', 'apollo', 'medplus', 'clinic'];
+    const filtered = this.nearbyHotels
+      .filter((hotel) => {
+        const name = (hotel.name || '').toLowerCase();
+        return medicalKeywords.some((keyword) => name.includes(keyword));
+      })
+      .slice(0, 8)
+      .map((hotel) => ({
+        name: hotel.name,
+        locationLabel: hotel.locationLabel || '',
+        distanceKm: hotel.distanceKm,
+        etaMinutes: hotel.etaMinutes
+      }));
+
+    return filtered.length > 0 ? filtered : this.nearbyPickupShops.slice(0, 6);
+  }
+
+  useNearbyPickupShop(shopName: string): void {
+    this.onPickupShopSelected(shopName);
+    this.notifications.push(`Selected shop: ${shopName}`, 'success');
+  }
+
+  useNearbyGroceryShop(shopName: string): void {
+    this.groceryShopName = shopName;
+    this.notifications.push(`Selected grocery shop: ${shopName}`, 'success');
+  }
+
+  useNearbyMedicineShop(shopName: string): void {
+    this.medicineShopName = shopName;
+    this.notifications.push(`Selected medical shop: ${shopName}`, 'success');
+  }
+
   onPickupShopSelected(shopName: string): void {
     this.pickupSelectedShopName = shopName || '';
     if (!this.pickupSelectedShopName) {
@@ -3179,6 +3387,11 @@ export class BookingComponent implements OnDestroy {
     }
 
     if (this.serviceType === 'medicine') {
+      if (!this.medicineShopName.trim()) {
+        this.notifications.push('Please select nearby medical shop or enter pharmacy name.', 'warning');
+        return;
+      }
+
       if (!this.medicineNames.trim()) {
         this.notifications.push('Please enter medicine names to continue.', 'warning');
         return;
@@ -3195,6 +3408,13 @@ export class BookingComponent implements OnDestroy {
       }
     }
 
+    if (this.serviceType === 'grocery') {
+      if (!this.groceryShopName.trim() || !this.groceryList.trim()) {
+        this.notifications.push('Please enter grocery shop name and grocery list.', 'warning');
+        return;
+      }
+    }
+
     if (this.serviceType === 'food') {
       if (!this.selectedHotelForFood) {
         this.notifications.push('Please select a hotel from nearby list.', 'warning');
@@ -3206,6 +3426,25 @@ export class BookingComponent implements OnDestroy {
       }
       if (!this.foodCheckoutOpen) {
         this.notifications.push('Please proceed to payment before placing food order.', 'warning');
+        return;
+      }
+    }
+
+    if (this.serviceType === 'parcel') {
+      if (
+        !this.parcelSenderName.trim() ||
+        !this.parcelSenderPhone.trim() ||
+        !this.parcelRecipientName.trim() ||
+        !this.parcelRecipientPhone.trim() ||
+        !this.pickupShopName.trim() ||
+        !this.parcelDescription.trim()
+      ) {
+        this.notifications.push('Please enter sender name/phone, recipient name/phone, shop name, and item name for parcel.', 'warning');
+        return;
+      }
+
+      if (this.pickupServiceMode && !this.pickupItemDetails.trim()) {
+        this.notifications.push('Please enter pickup item details for Pickup Service mode.', 'warning');
         return;
       }
     }
@@ -5387,6 +5626,38 @@ export class BookingComponent implements OnDestroy {
       sections.push(pickupDetails.join(' | '));
     }
 
+    if (this.serviceType === 'parcel') {
+      const parcelDetails: string[] = ['Parcel Details'];
+      if (this.parcelSenderName.trim()) {
+        parcelDetails.push(`Sender: ${this.parcelSenderName.trim()}`);
+      }
+      if (this.parcelSenderPhone.trim()) {
+        parcelDetails.push(`Sender Phone: ${this.parcelSenderPhone.trim()}`);
+      }
+      if (this.parcelRecipientName.trim()) {
+        parcelDetails.push(`Recipient: ${this.parcelRecipientName.trim()}`);
+      }
+      if (this.parcelRecipientPhone.trim()) {
+        parcelDetails.push(`Recipient Phone: ${this.parcelRecipientPhone.trim()}`);
+      }
+      if (this.parcelDescription.trim()) {
+        parcelDetails.push(`Item: ${this.parcelDescription.trim()}`);
+      }
+      if (this.parcelWeight.trim()) {
+        parcelDetails.push(`Weight: ${this.parcelWeight.trim()}`);
+      }
+      if (this.parcelType.trim()) {
+        parcelDetails.push(`Type: ${this.parcelType.trim()}`);
+      }
+      if (this.parcelDeclaredValue !== null && Number.isFinite(Number(this.parcelDeclaredValue))) {
+        parcelDetails.push(`Declared Value: Rs ${this.parcelDeclaredValue}`);
+      }
+      if (this.parcelPickupLandmark.trim()) {
+        parcelDetails.push(`Pickup Landmark: ${this.parcelPickupLandmark.trim()}`);
+      }
+      sections.push(parcelDetails.join(' | '));
+    }
+
     if (this.lunchBoxDeliveryMode) {
       const lunchDetails: string[] = ['RouteX School Delivery Mode'];
       if (this.lunchStudentName.trim()) {
@@ -5426,14 +5697,35 @@ export class BookingComponent implements OnDestroy {
 
     if (this.serviceType === 'medicine') {
       const medicineDetails: string[] = ['Medicine Delivery Mode'];
+      if (this.medicineShopName.trim()) {
+        medicineDetails.push(`Medical Shop: ${this.medicineShopName.trim()}`);
+      }
       if (this.medicineNames.trim()) {
         medicineDetails.push(`Medicines: ${this.medicineNames.trim()}`);
+      }
+      if (this.medicineDosageNote.trim()) {
+        medicineDetails.push(`Dosage: ${this.medicineDosageNote.trim()}`);
       }
       if (this.medicinePrescriptionFileName.trim()) {
         medicineDetails.push(`Prescription: ${this.medicinePrescriptionFileName.trim()}`);
       }
       medicineDetails.push(`Prescription Status: ${this.medicinePrescriptionStatus}`);
       sections.push(medicineDetails.join(' | '));
+    }
+
+    if (this.serviceType === 'grocery') {
+      const groceryDetails: string[] = ['Grocery Delivery Mode'];
+      if (this.groceryShopName.trim()) {
+        groceryDetails.push(`Shop: ${this.groceryShopName.trim()}`);
+      }
+      if (this.groceryList.trim()) {
+        groceryDetails.push(`Items: ${this.groceryList.trim()}`);
+      }
+      if (this.groceryBudget !== null && Number.isFinite(Number(this.groceryBudget))) {
+        groceryDetails.push(`Budget: Rs ${this.groceryBudget}`);
+      }
+      groceryDetails.push(`Priority: ${this.groceryPriority}`);
+      sections.push(groceryDetails.join(' | '));
     }
 
     const modeNotes = sections.join(' | ');
