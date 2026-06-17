@@ -3,32 +3,31 @@ name: Agentic Workflow Compiler
 on:
   push:
     branches: [main]
-    paths: ['agents/**']
+    paths:
+      - '.github/workflows/*.md'
   workflow_dispatch:
 
 jobs:
   compile-agents:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Install GitHub CLI
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gh
-      
-      - name: Authenticate GitHub CLI
-        run: gh auth login --with-token <<< "${{ secrets.GITHUB_TOKEN }}"
-      
+
       - name: Install Agentic Workflow Extension
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh extension install github/gh-aw
-      
-      - name: Compile Healing Agents
+
+      - name: Compile workflows
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh aw compile
-      
-      - name: Upload Artifacts
+
+      - name: Upload compiled lock files
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: compiled-agents
-          path: dist/
+          name: compiled-workflows
+          path: .github/workflows/*.lock.yml
