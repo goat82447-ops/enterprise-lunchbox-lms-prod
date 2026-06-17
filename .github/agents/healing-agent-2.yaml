@@ -1,0 +1,36 @@
+# Healing Agent 2 - PR Reviewer
+name: "pr-reviewer"
+version: "1.0.0"
+description: "Automated pull request review and validation agent"
+
+triggers:
+  - type: "pull_request_opened"
+  - type: "pull_request_synchronize"
+
+actions:
+  - name: "code_review"
+    description: "Review code changes for quality and standards"
+    checks:
+      - lint_errors
+      - type_errors
+      - test_coverage
+      - security_vulnerabilities
+      - code_complexity
+  
+  - name: "validate_pr"
+    description: "Validate PR requirements"
+    validations:
+      - has_description
+      - targets_correct_branch
+      - no_hardcoded_secrets
+      - links_to_issue
+  
+  - name: "request_changes_or_approve"
+    description: "Submit review with findings"
+    conditions:
+      - all_checks_pass: "APPROVE"
+      - has_issues: "REQUEST_CHANGES"
+
+output:
+  format: "json"
+  store_in: "dist/reviews/"
