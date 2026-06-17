@@ -1,0 +1,34 @@
+name: Agentic Workflow Compiler
+
+on:
+  push:
+    branches: [main]
+    paths: ['agents/**']
+  workflow_dispatch:
+
+jobs:
+  compile-agents:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install GitHub CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gh
+      
+      - name: Authenticate GitHub CLI
+        run: gh auth login --with-token <<< "${{ secrets.GITHUB_TOKEN }}"
+      
+      - name: Install Agentic Workflow Extension
+        run: gh extension install github/gh-aw
+      
+      - name: Compile Healing Agents
+        run: gh aw compile
+      
+      - name: Upload Artifacts
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: compiled-agents
+          path: dist/
