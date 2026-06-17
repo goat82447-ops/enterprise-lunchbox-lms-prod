@@ -109,16 +109,3 @@ Do **not** create a PR if any of these are true:
 - There is already an active PR addressing the same issue.
 
 In those cases, use `add-comment` to post a short, specific explanation of the blocker and what information or scope change is needed next. Then use `noop`.
-
-## Area-specific validation
-
-- For `Frontend/lunchbox-app`, prefer `npm run build` and only use other existing scripts when they are relevant.
-- For `Backend/microservices`, use the existing npm scripts in the workspace you changed.
-- For `Backend/dotnet`, use `dotnet build` on the affected project.
-
-## Important guardrails
-
-- Do not invent product requirements that are not in the issue.
-- Do not make broad refactors just because you see cleanup opportunities.
-- Do not open a PR unless the code change is defensible and tied to the issue.
-- If the issue is edited and the new details make it actionable, proceed with a fix on that rerun.
