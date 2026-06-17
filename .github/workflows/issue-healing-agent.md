@@ -3,7 +3,6 @@ description: Automatically investigate actionable GitHub issues and open one ded
 on:
   issues:
     types: [opened, reopened, edited]
-    status-comment: true
 
 permissions:
   contents: write
