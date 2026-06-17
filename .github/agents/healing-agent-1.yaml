@@ -1,0 +1,32 @@
+# Healing Agent 1 - Issue Analyzer
+name: "issue-analyzer"
+version: "1.0.0"
+description: "Analyzes GitHub issues and suggests categorization and resolution"
+
+triggers:
+  - type: "issue_opened"
+  - type: "issue_commented"
+
+actions:
+  - name: "analyze_issue"
+    description: "Perform semantic analysis on issue content"
+    steps:
+      - extract_issue_metadata
+      - analyze_labels
+      - suggest_category
+      - check_duplicates
+  
+  - name: "add_labels"
+    description: "Automatically add appropriate labels"
+    labels:
+      - "bug"
+      - "enhancement"
+      - "documentation"
+  
+  - name: "post_comment"
+    description: "Post helpful comment with suggestions"
+    template: "analysis_result"
+
+output:
+  format: "json"
+  store_in: "dist/analysis/"

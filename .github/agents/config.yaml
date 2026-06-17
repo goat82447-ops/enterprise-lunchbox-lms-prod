@@ -1,0 +1,22 @@
+# Agentic Workflow Configuration
+version: "1.0"
+name: "Healing Agents Configuration"
+description: "Central configuration for all healing agents"
+
+agents:
+  - name: "issue-analyzer"
+    enabled: true
+    description: "Analyzes and categorizes GitHub issues"
+  
+  - name: "pr-reviewer"
+    enabled: true
+    description: "Automated pull request review agent"
+  
+  - name: "dependency-updater"
+    enabled: true
+    description: "Manages and updates dependencies"
+
+compilation:
+  output_dir: "dist/"
+  format: "json"
+  validate: true

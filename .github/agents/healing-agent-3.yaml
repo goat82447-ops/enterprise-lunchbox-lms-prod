@@ -1,0 +1,35 @@
+# Healing Agent 3 - Dependency Updater
+name: "dependency-updater"
+version: "1.0.0"
+description: "Manages dependencies and suggests updates"
+
+triggers:
+  - type: "scheduled"
+    cron: "0 0 * * 0"  # Weekly on Sunday
+  - type: "manual_trigger"
+
+actions:
+  - name: "scan_dependencies"
+    description: "Scan project dependencies for updates"
+    files:
+      - "package.json"
+      - "requirements.txt"
+      - "pom.xml"
+      - "go.mod"
+  
+  - name: "check_vulnerabilities"
+    description: "Check for security vulnerabilities"
+    services:
+      - "npm_audit"
+      - "snyk"
+  
+  - name: "create_update_pr"
+    description: "Create PR with dependency updates"
+    options:
+      group_by: "type"
+      auto_merge: false
+      require_tests: true
+
+output:
+  format: "json"
+  store_in: "dist/dependencies/"
