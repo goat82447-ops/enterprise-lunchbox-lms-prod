@@ -4,11 +4,7 @@ on:
   issues:
     types: [opened, reopened, edited]
 
-permissions:
-  contents: write
-  issues: write
-  pull-requests: write
-  copilot-requests: write
+permissions: read-all
 
 network: defaults
 
