@@ -82,25 +82,26 @@ import { SupportService } from '../../core/services/support.service';
     `
       .contact-page {
         min-height: calc(100vh - 64px);
-        background: radial-gradient(circle at 10% 10%, #e0f2fe 0%, transparent 34%),
-          radial-gradient(circle at 90% 0%, #ffe4e6 0%, transparent 30%),
-          #ffffff;
+        background: radial-gradient(circle at 12% 10%, rgba(234, 56, 76, 0.22) 0%, transparent 34%),
+          radial-gradient(circle at 88% 0%, rgba(56, 189, 248, 0.16) 0%, transparent 30%),
+          linear-gradient(140deg, #09101a 0%, #101827 48%, #0b1712 100%);
       }
 
       .contact-shell {
-        background: #ffffff;
-        border: 1px solid #e5e7eb;
+        background: linear-gradient(160deg, rgba(10, 14, 24, 0.92) 0%, rgba(16, 23, 36, 0.86) 100%);
+        border: 1px solid rgba(255,255,255,0.14);
         border-radius: 18px;
-        box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
+        box-shadow: 0 18px 38px rgba(2,6,14,0.38);
         padding: 24px;
+        color: #eef4fc;
       }
 
       .tag {
         display: inline-block;
         border-radius: 999px;
-        border: 1px solid #93c5fd;
-        background: #eff6ff;
-        color: #1d4ed8;
+        border: 1px solid rgba(56,189,248,0.34);
+        background: rgba(56,189,248,0.12);
+        color: #dbeafe;
         padding: 4px 10px;
         font-size: 0.72rem;
         font-weight: 700;
@@ -108,14 +109,14 @@ import { SupportService } from '../../core/services/support.service';
       }
 
       .lead-copy {
-        color: #4b5563;
+        color: #a7b7cc;
         margin-bottom: 14px;
       }
 
       .contact-card {
-        border: 1px solid #fda4af;
+        border: 1px solid rgba(234,56,76,0.28);
         border-radius: 14px;
-        background: #fff1f2;
+        background: rgba(234,56,76,0.08);
         padding: 14px;
         margin-bottom: 16px;
       }
@@ -124,14 +125,14 @@ import { SupportService } from '../../core/services/support.service';
         font-size: 0.78rem;
         text-transform: uppercase;
         letter-spacing: 0.06em;
-        color: #9f1239;
+        color: #fda4af;
         font-weight: 700;
       }
 
       .mail-link {
         font-size: 1.06rem;
         font-weight: 700;
-        color: #be123c;
+        color: #f8fbff;
         text-decoration: none;
       }
 
@@ -146,10 +147,10 @@ import { SupportService } from '../../core/services/support.service';
       }
 
       .contact-grid > div {
-        border: 1px solid #e5e7eb;
+        border: 1px solid rgba(255,255,255,0.14);
         border-radius: 12px;
         padding: 12px;
-        background: #f9fafb;
+        background: rgba(255,255,255,0.04);
       }
 
       .contact-grid h3 {
@@ -159,19 +160,36 @@ import { SupportService } from '../../core/services/support.service';
 
       .contact-grid p {
         margin: 0;
-        color: #4b5563;
+        color: #a7b7cc;
       }
 
       .report-card {
-        border: 1px solid #fecdd3;
+        border: 1px solid rgba(255,255,255,0.14);
         border-radius: 14px;
-        background: #fff7ed;
+        background: rgba(255,255,255,0.04);
         padding: 14px;
+      }
+
+      .report-card .form-control,
+      .report-card .form-select {
+        background: rgba(8, 13, 24, 0.82);
+        border: 1px solid rgba(255,255,255,0.18);
+        color: #f6f9ff;
+      }
+
+      .report-card .form-label,
+      .report-card .text-muted {
+        color: #9fb1c8 !important;
       }
 
       @media (max-width: 900px) {
         .contact-grid {
           grid-template-columns: 1fr;
+        }
+
+        .contact-shell {
+          padding: 16px;
+          border-radius: 16px;
         }
       }
     `
