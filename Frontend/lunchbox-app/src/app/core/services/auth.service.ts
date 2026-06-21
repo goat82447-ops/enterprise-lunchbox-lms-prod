@@ -138,7 +138,31 @@ export class AuthService {
   }
 
   isCaptain(): boolean {
-    return this.userSubject.value?.role === 'captain';
+    const role = this.userSubject.value?.role;
+    return role === 'captain' || role === 'driver';
+  }
+
+  isCustomerRole(): boolean {
+    const role = this.userSubject.value?.role;
+    return role === 'customer' || role === 'rider' || role === 'user';
+  }
+
+  isDriverRole(): boolean {
+    const role = this.userSubject.value?.role;
+    return role === 'captain' || role === 'driver';
+  }
+
+  isFleetOwner(): boolean {
+    return this.userSubject.value?.role === 'fleet_owner';
+  }
+
+  isSupportExecutive(): boolean {
+    return this.userSubject.value?.role === 'support_executive';
+  }
+
+  hasAnyRole(roles: UserRole[]): boolean {
+    const current = this.userSubject.value?.role;
+    return !!current && roles.includes(current);
   }
 
   updateProfileImage(profileImageUrl: string): Observable<{ message: string; profileImageUrl: string }> {
@@ -198,6 +222,22 @@ export class AuthService {
     this.userSubject.next(updated);
   }
 
+  updateLocalProfile(patch: Partial<Pick<AppUser, 'displayName' | 'email' | 'mobile'>>): void {
+    const user = this.userSubject.value;
+    if (!user) {
+      return;
+    }
+
+    const updated: AppUser = {
+      ...user,
+      ...patch
+    };
+
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    this.userSubject.next(updated);
+  }
+
   applyCaptainKycStatus(
     kycStatus: KycStatus,
     options?: { kycDocumentType?: string; kycReferenceId?: string; kycUpdatedAt?: string }
@@ -225,9 +265,16 @@ export class AuthService {
   }
 
   private setUser(user: AppUser): void {
+    const mappedRole: UserRole =
+      user.role === 'user'
+        ? 'customer'
+        : user.role === 'captain'
+          ? 'driver'
+          : user.role;
+
     const normalized: AppUser = {
       ...user,
-      role: user.role === 'user' ? 'customer' : user.role
+      role: mappedRole
     };
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
     localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
@@ -279,9 +326,15 @@ export class AuthService {
 
     try {
       const parsed = JSON.parse(raw) as AppUser;
+      const mappedRole: UserRole =
+        parsed.role === 'user'
+          ? 'customer'
+          : parsed.role === 'captain'
+            ? 'driver'
+            : parsed.role;
       return {
         ...parsed,
-        role: parsed.role === 'user' ? 'customer' : parsed.role
+        role: mappedRole
       };
     } catch {
       localStorage.removeItem(STORAGE_KEY);
