@@ -28,7 +28,7 @@ import { AuthService } from '../../core/services/auth.service';
               secure OTP starts, and real-time operations.
             </p>
             <div class="hero-actions">
-              <a routerLink="/travel" class="btn btn-danger btn-lg">Start Booking</a>
+              <a routerLink="/booking" class="btn btn-danger btn-lg">Start Booking</a>
               <a routerLink="/services" class="btn btn-outline-light btn-lg">Explore Services</a>
             </div>
             <div class="hero-tags">
@@ -696,13 +696,15 @@ export class HomeComponent {
       icon: '🛡️',
       title: 'Women Safety Mode',
       description: 'Trusted captains and priority routing for secure travel.',
-      route: '/travel'
+      route: '/booking',
+      queryParams: { womenSafety: 1 }
     },
     {
       icon: '🎓',
       title: 'School and Teen Rides',
       description: 'Assisted and parent-safe commute flows for students.',
-      route: '/travel'
+      route: '/booking',
+      queryParams: { teenRide: 1 }
     }
   ];
 
