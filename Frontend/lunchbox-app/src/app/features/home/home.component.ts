@@ -689,7 +689,8 @@ export class HomeComponent {
       icon: '📦',
       title: 'Pickup Service',
       description: 'Pickup item from any shop to your destination.',
-      route: '/travel'
+      route: '/booking',
+      queryParams: { service: 'parcel', pickupService: 1 }
     },
     {
       icon: '🛡️',
