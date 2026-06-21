@@ -11,13 +11,16 @@ import { RegisterResponse, UserRole, VehicleType } from '../../core/models/deliv
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink],
   template: `
-    <div class="container py-5" style="max-width: 720px;">
+    <section class="register-page">
+      <div class="register-noise"></div>
+      <div class="container py-4 py-md-5" style="max-width: 780px; position: relative; z-index: 1;">
       <div class="card p-4 p-md-5 auth-shell">
         <div class="brand-strip mb-3">
           <img [src]="registerLogoSrc" (error)="onRegisterLogoError($event)" alt="RouteX logo" class="brand-logo" />
           <div>
+            <div class="register-kicker">RouteX Onboarding</div>
             <h2 class="mb-1">Create Account</h2>
-            <p class="text-muted mb-0">Choose mode and register. Captains must select vehicle.</p>
+            <p class="text-muted mb-0">Choose mode and register. Drivers must select vehicle type.</p>
           </div>
         </div>
 
@@ -26,9 +29,11 @@ import { RegisterResponse, UserRole, VehicleType } from '../../core/models/deliv
         <div class="mb-4">
           <label class="form-label">Register Mode</label>
           <div class="mode-grid">
-            <button class="btn" [class.mode-active]="role === 'customer'" (click)="setRole('customer')" type="button">Customer</button>
+            <button class="btn" [class.mode-active]="role === 'rider'" (click)="setRole('rider')" type="button">Customer/Rider</button>
+            <button class="btn" [class.mode-active]="role === 'driver'" (click)="setRole('driver')" type="button">Driver</button>
             <button class="btn" [class.mode-active]="role === 'admin'" (click)="setRole('admin')" type="button">Admin</button>
-            <button class="btn" [class.mode-active]="role === 'captain'" (click)="setRole('captain')" type="button">Captain</button>
+            <button class="btn" [class.mode-active]="role === 'fleet_owner'" (click)="setRole('fleet_owner')" type="button">Fleet Owner</button>
+            <button class="btn" [class.mode-active]="role === 'support_executive'" (click)="setRole('support_executive')" type="button">Support Exec</button>
           </div>
         </div>
 
@@ -58,8 +63,8 @@ import { RegisterResponse, UserRole, VehicleType } from '../../core/models/deliv
             <input type="password" class="form-control" [(ngModel)]="password" />
           </div>
 
-          <div class="col-12" *ngIf="role === 'captain'">
-            <label class="form-label">Captain Vehicle</label>
+          <div class="col-12" *ngIf="role === 'driver' || role === 'captain'">
+            <label class="form-label">Driver Vehicle</label>
             <select class="form-select" [(ngModel)]="captainVehicle">
               <option value="bike">Bike</option>
               <option value="auto">Auto</option>
@@ -96,52 +101,119 @@ import { RegisterResponse, UserRole, VehicleType } from '../../core/models/deliv
         <div *ngIf="errorMessage" class="alert alert-danger mt-3 mb-0">{{ errorMessage }}</div>
       </div>
     </div>
+    </section>
   `,
   styles: [
     `
+      .register-page {
+        position: relative;
+        min-height: calc(100vh - 56px);
+        padding: 8px 0 24px;
+        background:
+          radial-gradient(circle at 14% 12%, rgba(234, 56, 76, 0.2), transparent 36%),
+          radial-gradient(circle at 86% 14%, rgba(56, 189, 248, 0.14), transparent 34%),
+          linear-gradient(140deg, #0a0f19 0%, #121a2a 52%, #0a1410 100%);
+      }
+
+      .register-noise {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background-image: radial-gradient(rgba(255, 255, 255, 0.06) 0.6px, transparent 0.6px);
+        background-size: 3px 3px;
+        opacity: 0.06;
+      }
+
       .auth-shell {
-        border: 1px solid var(--border-color);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        background: linear-gradient(165deg, rgba(8, 12, 22, 0.95) 0%, rgba(16, 23, 36, 0.9) 100%);
+        box-shadow: 0 24px 56px rgba(0, 0, 0, 0.42);
+        color: #eef3fb;
+      }
+
+      .register-kicker {
+        display: inline-block;
+        border: 1px solid rgba(255, 255, 255, 0.24);
+        border-radius: 999px;
+        padding: 3px 10px;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #dbeafe;
       }
 
       .mode-grid {
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 8px;
       }
 
       .brand-strip {
         display: grid;
-        grid-template-columns: 240px 1fr;
+        grid-template-columns: 120px 1fr;
         gap: 16px;
         align-items: center;
       }
 
       .brand-logo {
         width: 100%;
-        max-width: 240px;
+        max-width: 120px;
         height: 120px;
         object-fit: contain;
-        border-radius: 12px;
-        border: 1px solid rgba(0, 0, 0, 0.08);
-        background: #fff;
-        padding: 6px;
+        border-radius: 14px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: rgba(255, 255, 255, 0.06);
+        padding: 8px;
       }
 
       .mode-grid .btn {
-        border: 1px solid #adb5bd;
-        background: #f8f9fa;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: rgba(255, 255, 255, 0.07);
+        color: #dbe5f5;
+        font-weight: 600;
       }
 
       .mode-grid .mode-active {
-        border-color: #dc3545;
-        background: #fde7ea;
-        color: #a4133c;
+        border-color: rgba(234, 56, 76, 0.74);
+        background: linear-gradient(130deg, #ea384c 0%, #f9734f 100%);
+        color: #ffffff;
         font-weight: 600;
+        box-shadow: 0 10px 20px rgba(234, 56, 76, 0.3);
+      }
+
+      .form-control,
+      .form-select {
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: rgba(8, 13, 24, 0.82);
+        color: #f6f9ff;
+      }
+
+      .form-control:focus,
+      .form-select:focus {
+        border-color: #38bdf8;
+        box-shadow: 0 0 0 0.2rem rgba(56, 189, 248, 0.2);
+        background: #0b1321;
+        color: #ffffff;
+      }
+
+      .btn.btn-danger {
+        background: linear-gradient(130deg, #ea384c 0%, #f9734f 100%);
+        border: none;
+      }
+
+      .btn.btn-outline-secondary {
+        border-color: rgba(255, 255, 255, 0.36);
+        color: #e5edf9;
       }
 
       @media (max-width: 768px) {
         .brand-strip {
           grid-template-columns: 1fr;
+        }
+
+        .brand-logo {
+          max-width: 92px;
+          height: 92px;
         }
       }
     `
@@ -158,7 +230,7 @@ export class RegisterComponent {
   email = '';
   mobile = '';
   password = '';
-  role: Exclude<UserRole, 'user'> = 'customer';
+  role: Exclude<UserRole, 'user'> = 'rider';
   captainVehicle: VehicleType = 'bike';
   tempToken = '';
   emailOtp = '';
@@ -200,7 +272,7 @@ export class RegisterComponent {
       mobile: this.mobile.trim(),
       password: this.password,
       role: this.role,
-      captainVehicle: this.role === 'captain' ? this.captainVehicle : undefined
+      captainVehicle: this.role === 'driver' || this.role === 'captain' ? this.captainVehicle : undefined
     };
 
     if (!payload.username || !payload.displayName || !payload.email || !payload.mobile || !payload.password) {
@@ -208,8 +280,8 @@ export class RegisterComponent {
       return;
     }
 
-    if (this.role === 'captain' && !payload.captainVehicle) {
-      this.errorMessage = 'Captain vehicle is required.';
+    if ((this.role === 'driver' || this.role === 'captain') && !payload.captainVehicle) {
+      this.errorMessage = 'Driver vehicle is required.';
       return;
     }
 

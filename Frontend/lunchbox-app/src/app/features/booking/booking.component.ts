@@ -81,7 +81,7 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <div class="container py-4" [class.lunchbox-theme-page]="isLunchboxDeliveryPage">
+    <div class="container py-4 booking-page" [class.lunchbox-theme-page]="isLunchboxDeliveryPage">
       <div class="card p-3 mb-3 border-primary" *ngIf="isSchoolBookingPage">
         <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
           <div>

@@ -358,28 +358,29 @@ import { NotificationService } from '../../core/services/notification.service';
     /* ────────────── Page Shell ────────────── */
     .profile-page {
       min-height: 100vh;
-      background: #f5f5f5;
+      background: linear-gradient(140deg, #09101a 0%, #101827 48%, #0b1712 100%);
       padding-bottom: 40px;
     }
 
     .profile-page-header {
-      background: #fff;
+      background: rgba(10, 14, 24, 0.88);
       padding: 18px 20px 14px;
-      border-bottom: 1px solid #ebebeb;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     }
 
     .profile-page-title {
       font-size: 1.35rem;
       font-weight: 800;
-      color: #111;
+      color: #f8fbff;
       margin: 0;
     }
 
     /* ────────────── Info Card ────────────── */
     .profile-info-card {
-      background: #fff;
+      background: linear-gradient(160deg, rgba(10, 14, 24, 0.92) 0%, rgba(16, 23, 36, 0.86) 100%);
       border-radius: 16px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+      box-shadow: 0 18px 38px rgba(2,6,14,0.38);
+      border: 1px solid rgba(255,255,255,0.14);
       margin: 16px 16px 10px;
       overflow: hidden;
     }
@@ -398,7 +399,7 @@ import { NotificationService } from '../../core/services/notification.service';
       color: inherit;
       transition: background 0.12s ease;
     }
-    .profile-info-row:hover { background: #fafafa; }
+    .profile-info-row:hover { background: rgba(255,255,255,0.05); }
 
     .profile-avatar-wrap {
       flex-shrink: 0;
@@ -410,7 +411,7 @@ import { NotificationService } from '../../core/services/notification.service';
       height: 48px;
       border-radius: 50%;
       object-fit: cover;
-      background: #e2e8f0;
+      background: rgba(255,255,255,0.08);
     }
 
     .profile-avatar-camera {
@@ -471,34 +472,35 @@ import { NotificationService } from '../../core/services/notification.service';
     .profile-info-name {
       font-size: 0.97rem;
       font-weight: 700;
-      color: #111;
+      color: #f8fbff;
       line-height: 1.3;
     }
 
     .profile-info-sub {
       font-size: 0.82rem;
-      color: #888;
+      color: #9fb1c8;
       margin-top: 2px;
     }
 
     .profile-chevron {
       width: 18px;
       height: 18px;
-      color: #b0b0b0;
+      color: #7f93b0;
       flex-shrink: 0;
     }
 
     .profile-row-divider {
       height: 1px;
-      background: #f0f0f0;
+      background: rgba(255,255,255,0.08);
       margin: 0 18px;
     }
 
     /* ────────────── Menu Card ────────────── */
     .profile-menu-card {
-      background: #fff;
+      background: linear-gradient(160deg, rgba(10, 14, 24, 0.92) 0%, rgba(16, 23, 36, 0.86) 100%);
       border-radius: 16px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+      box-shadow: 0 18px 38px rgba(2,6,14,0.38);
+      border: 1px solid rgba(255,255,255,0.14);
       margin: 0 16px 10px;
       overflow: hidden;
     }
@@ -514,10 +516,10 @@ import { NotificationService } from '../../core/services/notification.service';
       text-align: left;
       cursor: pointer;
       text-decoration: none;
-      color: #111;
+      color: #eef4fc;
       transition: background 0.12s ease;
     }
-    .profile-menu-row:hover { background: #fafafa; }
+    .profile-menu-row:hover { background: rgba(255,255,255,0.05); }
     .profile-menu-row:disabled { cursor: default; opacity: 1; }
     .profile-menu-row:disabled:hover { background: none; }
 
@@ -525,18 +527,18 @@ import { NotificationService } from '../../core/services/notification.service';
       width: 36px;
       height: 36px;
       border-radius: 50%;
-      border: 1.5px solid #e0e0e0;
+      border: 1.5px solid rgba(255,255,255,0.16);
       display: flex;
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
-      background: #fff;
+      background: rgba(255,255,255,0.05);
     }
 
     .profile-menu-icon svg {
       width: 18px;
       height: 18px;
-      color: #444;
+      color: #dbe7f8;
     }
 
     .profile-menu-content { flex: 1; min-width: 0; }
@@ -544,12 +546,12 @@ import { NotificationService } from '../../core/services/notification.service';
     .profile-menu-label {
       font-size: 0.93rem;
       font-weight: 600;
-      color: #111;
+      color: #f8fbff;
     }
 
     .profile-menu-sub {
       font-size: 0.77rem;
-      color: #888;
+      color: #9fb1c8;
       margin-top: 1px;
     }
 
@@ -567,17 +569,18 @@ import { NotificationService } from '../../core/services/notification.service';
       z-index: 900; display: flex; align-items: center; justify-content: center; padding: 20px;
     }
     .acc-modal {
-      background: #fff; border-radius: 22px; padding: 28px 24px;
+      background: linear-gradient(160deg, rgba(10, 14, 24, 0.96) 0%, rgba(16, 23, 36, 0.92) 100%); border-radius: 22px; padding: 28px 24px;
       max-width: 340px; width: 100%; text-align: center;
       animation: slideUp .22s ease;
+      border: 1px solid rgba(255,255,255,0.14);
     }
     @keyframes slideUp { from { transform: translateY(30px); opacity: .5; } to { transform: translateY(0); opacity: 1; } }
     .acc-modal-icon { font-size: 48px; margin-bottom: 10px; }
-    .acc-modal-title { font-size: 18px; font-weight: 900; color: #111; margin: 0 0 8px; }
-    .acc-modal-sub { font-size: 13px; color: #666; margin: 0 0 20px; line-height: 1.6; }
+    .acc-modal-title { font-size: 18px; font-weight: 900; color: #f8fbff; margin: 0 0 8px; }
+    .acc-modal-sub { font-size: 13px; color: #9fb1c8; margin: 0 0 20px; line-height: 1.6; }
     .acc-modal-error { background: #fdeaea; color: #c62828; border-radius: 10px; padding: 10px; font-size: 12px; margin-bottom: 14px; }
     .acc-modal-actions { display: flex; gap: 12px; }
-    .acc-modal-cancel { flex: 1; background: #f0f0f0; color: #444; border: none; border-radius: 14px; padding: 13px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .acc-modal-cancel { flex: 1; background: rgba(255,255,255,0.08); color: #eef4fc; border: none; border-radius: 14px; padding: 13px; font-size: 14px; font-weight: 600; cursor: pointer; }
     .acc-modal-confirm { flex: 1; border: none; border-radius: 14px; padding: 13px; font-size: 14px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
     .acc-modal-confirm-red { background: #e53935; color: #fff; }
     .acc-modal-confirm:disabled, .acc-modal-cancel:disabled { opacity: .5; cursor: not-allowed; }
@@ -609,7 +612,7 @@ import { NotificationService } from '../../core/services/notification.service';
       bottom: 0;
       left: 0;
       right: 0;
-      background: #fff;
+      background: linear-gradient(160deg, rgba(10, 14, 24, 0.96) 0%, rgba(16, 23, 36, 0.92) 100%);
       border-radius: 22px 22px 0 0;
       z-index: 501;
       padding: 10px 20px 36px;
@@ -618,7 +621,8 @@ import { NotificationService } from '../../core/services/notification.service';
       align-items: center;
       transform: translateY(100%);
       transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
-      box-shadow: 0 -6px 30px rgba(0,0,0,0.14);
+      box-shadow: 0 -6px 30px rgba(0,0,0,0.24);
+      border: 1px solid rgba(255,255,255,0.14);
       max-width: 520px;
       margin: 0 auto;
     }
@@ -630,7 +634,7 @@ import { NotificationService } from '../../core/services/notification.service';
     .av-handle {
       width: 38px;
       height: 4px;
-      background: #e2e8f0;
+      background: rgba(255,255,255,0.16);
       border-radius: 2px;
       margin-bottom: 18px;
     }
@@ -638,14 +642,14 @@ import { NotificationService } from '../../core/services/notification.service';
     .av-sheet-title {
       font-size: 1.05rem;
       font-weight: 800;
-      color: #111;
+      color: #f8fbff;
       margin-bottom: 4px;
       align-self: flex-start;
     }
 
     .av-sheet-sub {
       font-size: 0.8rem;
-      color: #888;
+      color: #9fb1c8;
       margin-bottom: 18px;
       align-self: flex-start;
     }
@@ -664,7 +668,7 @@ import { NotificationService } from '../../core/services/notification.service';
       align-items: center;
       gap: 6px;
       background: none;
-      border: 2px solid #f0f0f0;
+      border: 2px solid rgba(255,255,255,0.12);
       border-radius: 14px;
       padding: 8px 4px;
       cursor: pointer;
@@ -673,7 +677,7 @@ import { NotificationService } from '../../core/services/notification.service';
 
     .av-item:hover {
       border-color: #ef233c;
-      background: #fff5f6;
+      background: rgba(255,255,255,0.06);
     }
 
     .av-item.av-selected {
@@ -686,13 +690,13 @@ import { NotificationService } from '../../core/services/notification.service';
       height: 64px;
       border-radius: 50%;
       object-fit: cover;
-      background: #f1f5f9;
+      background: rgba(255,255,255,0.08);
     }
 
     .av-label {
       font-size: 0.68rem;
       font-weight: 600;
-      color: #555;
+      color: #c6d3e6;
       text-align: center;
       line-height: 1.2;
     }
@@ -702,8 +706,8 @@ import { NotificationService } from '../../core/services/notification.service';
       height: 46px;
       border: 1.5px dashed #cbd5e1;
       border-radius: 12px;
-      background: #f8fafc;
-      color: #475569;
+      background: rgba(255,255,255,0.08);
+      color: #dbe7f8;
       font-size: 0.9rem;
       font-weight: 600;
       cursor: pointer;
@@ -733,7 +737,7 @@ import { NotificationService } from '../../core/services/notification.service';
       bottom: 0;
       left: 0;
       right: 0;
-      background: #fff;
+      background: linear-gradient(160deg, rgba(10, 14, 24, 0.96) 0%, rgba(16, 23, 36, 0.92) 100%);
       border-radius: 20px 20px 0 0;
       z-index: 401;
       max-height: 70vh;
@@ -741,7 +745,8 @@ import { NotificationService } from '../../core/services/notification.service';
       flex-direction: column;
       transform: translateY(100%);
       transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
-      box-shadow: 0 -4px 24px rgba(0,0,0,0.12);
+      box-shadow: 0 -4px 24px rgba(0,0,0,0.24);
+      border: 1px solid rgba(255,255,255,0.14);
     }
     .notif-panel-open { transform: translateY(0); }
 
@@ -749,14 +754,41 @@ import { NotificationService } from '../../core/services/notification.service';
       display: flex;
       align-items: center;
       padding: 18px 20px 14px;
-      border-bottom: 1px solid #f0f0f0;
+      border-bottom: 1px solid rgba(255,255,255,0.12);
     }
 
     .notif-panel-title {
       flex: 1;
       font-size: 1rem;
       font-weight: 700;
-      color: #111;
+      color: #f8fbff;
+
+    }
+
+    @media (max-width: 768px) {
+      .profile-page {
+        padding-bottom: 96px;
+      }
+
+      .profile-page-header,
+      .profile-info-card,
+      .profile-menu-card {
+        margin-left: 10px;
+        margin-right: 10px;
+      }
+
+      .profile-info-row,
+      .profile-menu-row {
+        padding: 14px;
+      }
+
+      .av-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .acc-modal-actions {
+        flex-direction: column;
+      }
     }
 
     .notif-panel-close {

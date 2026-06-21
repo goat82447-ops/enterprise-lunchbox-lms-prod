@@ -6,8 +6,7 @@ export const customerGuard: CanActivateFn = () => {
   const auth = inject(AuthService);
   const router = inject(Router);
 
-  const user = auth.getCurrentUser();
-  if (user && (user.role === 'customer' || user.role === 'user' || user.role === 'admin')) {
+  if (auth.hasAnyRole(['customer', 'rider', 'user', 'admin'])) {
     return true;
   }
 

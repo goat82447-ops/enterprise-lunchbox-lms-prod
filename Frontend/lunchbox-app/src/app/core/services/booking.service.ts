@@ -436,6 +436,29 @@ export class BookingService {
     return { success: true, message: 'Tracking closed and moved to history.' };
   }
 
+  updateRideStatus(bookingId: string, status: BookingStatus, notification?: string): { success: boolean; message: string } {
+    const bookings = [...this.bookingsSubject.value];
+    const index = bookings.findIndex((booking) => booking.id === bookingId);
+
+    if (index === -1) {
+      return { success: false, message: 'Booking not found.' };
+    }
+
+    bookings[index] = {
+      ...bookings[index],
+      status,
+      notification: notification || bookings[index].notification,
+      updatedAt: new Date().toISOString()
+    };
+
+    this.persist(bookings);
+    this.http
+      .post<Booking>(`${BOOKINGS_API}/${bookingId}/status`, { status }, { headers: this.getSessionHeaders() })
+      .subscribe({ next: (serverBooking) => this.upsertBooking(serverBooking), error: () => void 0 });
+
+    return { success: true, message: `Ride status updated to ${status}.` };
+  }
+
   private tickBookings(): void {
     const before = this.bookingsSubject.value;
     const changed = before.map((booking) => this.progressBooking(booking));

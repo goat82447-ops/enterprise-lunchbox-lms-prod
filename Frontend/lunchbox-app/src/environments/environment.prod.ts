@@ -1,6 +1,6 @@
 export const environment = {
  production: true,
-  appVersion: '1.0.3',
+  appVersion: '1.0.8',
   // ForNode Prod
   // authApiBase: 'https://ekart-backend-buwi.onrender.com',
   // parcelApiBase: 'https://ekart-backend-buwi.onrender.com',
