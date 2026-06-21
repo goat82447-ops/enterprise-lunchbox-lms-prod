@@ -89,17 +89,6 @@ import { Router } from '@angular/router';
           </button>
         </div>
       </div>
-
-      <div class="svc-section">
-        <div class="svc-section-label">More</div>
-        <div class="svc-grid">
-          // <button class="svc-tile" type="button" (click)="openActivity()">
-          //   <div class="svc-icon-wrap">🧾</div>
-          //   <div class="svc-name">Activity</div>
-          // </button>
-        </div>
-      </div>
-    </div>
   `,
   styles: [`
     .svc-page {
