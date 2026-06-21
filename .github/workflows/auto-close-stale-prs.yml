@@ -21,7 +21,7 @@ jobs:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const cutoffMs = 24 * 60 * 60 * 1000;
+            const cutoffMs = 10 * 60 * 60 * 1000;
             const now = Date.now();
 
             const prs = await github.paginate(github.rest.pulls.list, {
@@ -48,7 +48,7 @@ jobs:
             for (const pr of stalePrs) {
               const commentBody = [
                 '🤖 Proxima Bot:',
-                `This pull request has been open for more than 24 hours without merging, so it is being closed automatically.`,
+                `This pull request has been open for more than 10 hours without merging, so it is being closed automatically.`,
                 'If you still need this change, please reopen the PR and try again.'
               ].join('\n\n');
 
