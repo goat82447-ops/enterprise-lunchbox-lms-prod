@@ -10,9 +10,7 @@ on:
 
 permissions:
   contents: write
-  checks: read
   pull-requests: write
-  statuses: read
 
 jobs:
   enable-auto-merge:
@@ -25,6 +23,7 @@ jobs:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
+            const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
             async function getOpenPrsFromEvent() {
               if (context.payload.pull_request) {
@@ -47,36 +46,23 @@ jobs:
                 .map((pr) => pr.number);
             }
 
-            async function allChecksSuccessful(headSha) {
-              const checks = await github.rest.checks.listForRef({
-                owner,
-                repo,
-                ref: headSha,
-                per_page: 100
-              });
+            async function getReadyPr(prNumber) {
+              for (let attempt = 1; attempt <= 4; attempt += 1) {
+                const prResponse = await github.rest.pulls.get({ owner, repo, pull_number: prNumber });
+                const pr = prResponse.data;
 
-              const combined = await github.rest.repos.getCombinedStatusForRef({
-                owner,
-                repo,
-                ref: headSha
-              });
+                if (!pr.draft && pr.mergeable !== null && pr.mergeable_state !== 'unknown') {
+                  return pr;
+                }
 
-              const allCheckRunsDone = checks.data.check_runs.every((run) => run.status === 'completed');
-              const allCheckRunsGreen = checks.data.check_runs.every((run) =>
-                ['success', 'neutral', 'skipped'].includes(String(run.conclusion || ''))
-              );
+                if (attempt < 4) {
+                  core.info(`Waiting for GitHub to finish calculating mergeability for PR #${pr.number} (attempt ${attempt}/4).`);
+                  await wait(2500);
+                }
+              }
 
-              const allStatusesDone = combined.data.statuses.every((status) => status.state !== 'pending');
-              const allStatusesGreen = combined.data.statuses.every((status) =>
-                ['success'].includes(String(status.state || ''))
-              );
-
-              const combinedStateGreen = ['success'].includes(String(combined.data.state || ''));
-
-              const checksOk = checks.data.total_count === 0 || (allCheckRunsDone && allCheckRunsGreen);
-              const statusesOk = combined.data.total_count === 0 || (allStatusesDone && allStatusesGreen && combinedStateGreen);
-
-              return checksOk && statusesOk;
+              const finalResponse = await github.rest.pulls.get({ owner, repo, pull_number: prNumber });
+              return finalResponse.data;
             }
 
             const prNumbers = await getOpenPrsFromEvent();
@@ -86,8 +72,7 @@ jobs:
             }
 
             for (const prNumber of prNumbers) {
-              const prResponse = await github.rest.pulls.get({ owner, repo, pull_number: prNumber });
-              const pr = prResponse.data;
+              const pr = await getReadyPr(prNumber);
 
               if (pr.draft) {
                 core.info(`Skipping draft PR #${pr.number}.`);
@@ -99,9 +84,9 @@ jobs:
                 continue;
               }
 
-              const checksPassed = await allChecksSuccessful(pr.head.sha);
-              if (!checksPassed) {
-                core.info(`Checks are not complete/successful yet for PR #${pr.number}. Waiting for next check event.`);
+              const readyForMerge = pr.mergeable === true && pr.mergeable_state === 'clean';
+              if (!readyForMerge) {
+                core.info(`PR #${pr.number} is not ready for auto-merge yet. mergeable_state=${pr.mergeable_state}, mergeable=${pr.mergeable}`);
                 continue;
               }
 
