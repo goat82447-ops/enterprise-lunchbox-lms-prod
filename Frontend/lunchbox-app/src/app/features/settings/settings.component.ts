@@ -4,191 +4,614 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 
+type PaymentPreference = 'upi' | 'card' | 'wallet' | 'cash' | 'auto';
+
+interface AddressItem {
+  id: string;
+  label: string;
+  address: string;
+}
+
+interface ContactItem {
+  id: string;
+  name: string;
+  phone: string;
+}
+
 @Component({
   selector: 'app-settings',
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <div style="max-width:600px;margin:0 auto;padding:16px 12px 80px;">
-      <!-- Header -->
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
-        <button (click)="router.navigate(['/account'])" style="background:none;border:none;cursor:pointer;padding:4px;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2.5" width="24" height="24"><polyline points="15 18 9 12 15 6"/></svg>
-        </button>
-        <h2 style="margin:0;font-size:1.4rem;font-weight:700;color:#1a1a1a;">Settings ⚙️</h2>
-      </div>
+    <div class="settings-shell">
+      <header class="settings-header">
+        <button type="button" class="back-btn" (click)="router.navigate(['/account'])">←</button>
+        <h2>Settings</h2>
+      </header>
 
-      <!-- Saved Places -->
-      <div style="background:#fff;border-radius:16px;padding:20px;margin-bottom:16px;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
-        <h3 style="font-size:1rem;font-weight:700;color:#475569;margin:0 0 16px;">📍 Saved Places</h3>
-        <div style="margin-bottom:14px;">
-          <label style="font-size:0.85rem;font-weight:600;color:#444;display:block;margin-bottom:6px;">🏠 Home</label>
-          <div style="display:flex;gap:8px;">
-            <input [(ngModel)]="homeAddress" placeholder="Enter home address" style="flex:1;border:1px solid #e5e7eb;border-radius:10px;padding:10px 14px;font-size:0.9rem;outline:none;">
-            <button (click)="saveHome()" style="background:#475569;color:#fff;border:none;border-radius:10px;padding:10px 16px;cursor:pointer;font-size:0.85rem;font-weight:600;">Save</button>
+      <section class="card">
+        <h3>Profile</h3>
+        <div class="profile-row">
+          <img [src]="avatarPreview" class="avatar" alt="Profile" />
+          <div class="profile-actions">
+            <input #fileInput type="file" accept="image/*" class="hidden-input" (change)="onAvatarSelected($event)" />
+            <button type="button" class="btn" (click)="fileInput.click()">Upload Profile Picture</button>
+            <button type="button" class="btn btn-light" (click)="saveProfile()">Save Profile</button>
+          </div>
+        </div>
+
+        <div class="grid two">
+          <div>
+            <label>Display Name</label>
+            <input [(ngModel)]="profile.displayName" placeholder="Your name" />
+          </div>
+          <div>
+            <label>Email</label>
+            <input [(ngModel)]="profile.email" placeholder="you@mail.com" />
           </div>
         </div>
         <div>
-          <label style="font-size:0.85rem;font-weight:600;color:#444;display:block;margin-bottom:6px;">💼 Work</label>
-          <div style="display:flex;gap:8px;">
-            <input [(ngModel)]="workAddress" placeholder="Enter work address" style="flex:1;border:1px solid #e5e7eb;border-radius:10px;padding:10px 14px;font-size:0.9rem;outline:none;">
-            <button (click)="saveWork()" style="background:#475569;color:#fff;border:none;border-radius:10px;padding:10px 16px;cursor:pointer;font-size:0.85rem;font-weight:600;">Save</button>
+          <label>Mobile</label>
+          <input [(ngModel)]="profile.mobile" placeholder="+91..." />
+        </div>
+      </section>
+
+      <section class="card">
+        <h3>Addresses</h3>
+        <div class="grid two">
+          <input [(ngModel)]="newAddressLabel" placeholder="Label (Home, Work, Gym...)" />
+          <input [(ngModel)]="newAddressText" placeholder="Full address" />
+        </div>
+        <button class="btn" (click)="addAddress()">Add Multiple Address</button>
+        <div class="list" *ngIf="addresses.length">
+          <div class="list-item" *ngFor="let item of addresses">
+            <div>
+              <div class="item-title">{{ item.label }}</div>
+              <div class="item-sub">{{ item.address }}</div>
+            </div>
+            <button class="icon-btn" (click)="removeAddress(item.id)">✕</button>
           </div>
         </div>
-      </div>
+      </section>
 
-      <!-- Preferences -->
-      <div style="background:#fff;border-radius:16px;padding:20px;margin-bottom:16px;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
-        <h3 style="font-size:1rem;font-weight:700;color:#475569;margin:0 0 16px;">⚙️ Preferences</h3>
+      <section class="card">
+        <h3>Emergency Contacts</h3>
+        <div class="grid two">
+          <input [(ngModel)]="newEmergencyName" placeholder="Name" />
+          <input [(ngModel)]="newEmergencyPhone" placeholder="Phone" />
+        </div>
+        <button class="btn" (click)="addEmergencyContact()">Add Emergency Contact</button>
 
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid #f0f0f0;">
-          <div>
-            <div style="font-size:0.9rem;font-weight:600;color:#1a1a1a;">Theme</div>
-            <div style="font-size:0.75rem;color:#999;margin-top:2px;">{{ isDark ? 'Dark Mode' : 'Light Mode' }}</div>
+        <h3 class="sub-title">Trusted Contacts</h3>
+        <div class="grid two">
+          <input [(ngModel)]="newTrustedName" placeholder="Name" />
+          <input [(ngModel)]="newTrustedPhone" placeholder="Phone" />
+        </div>
+        <button class="btn" (click)="addTrustedContact()">Add Trusted Contact</button>
+
+        <div class="list" *ngIf="emergencyContacts.length || trustedContacts.length">
+          <div class="item-group" *ngIf="emergencyContacts.length">
+            <div class="item-group-title">Emergency</div>
+            <div class="list-item" *ngFor="let item of emergencyContacts">
+              <div>
+                <div class="item-title">{{ item.name }}</div>
+                <div class="item-sub">{{ item.phone }}</div>
+              </div>
+              <button class="icon-btn" (click)="removeEmergencyContact(item.id)">✕</button>
+            </div>
           </div>
-          <div style="display:flex;gap:8px;">
-            <button (click)="setTheme('light')" [style.background]="!isDark ? '#1a1a1a' : '#e5e7eb'" [style.color]="!isDark ? '#fff' : '#444'" style="border:none;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:0.8rem;font-weight:600;">Light</button>
-            <button (click)="setTheme('dark')" [style.background]="isDark ? '#1a1a1a' : '#e5e7eb'" [style.color]="isDark ? '#fff' : '#444'" style="border:none;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:0.8rem;font-weight:600;">Dark</button>
+          <div class="item-group" *ngIf="trustedContacts.length">
+            <div class="item-group-title">Trusted</div>
+            <div class="list-item" *ngFor="let item of trustedContacts">
+              <div>
+                <div class="item-title">{{ item.name }}</div>
+                <div class="item-sub">{{ item.phone }}</div>
+              </div>
+              <button class="icon-btn" (click)="removeTrustedContact(item.id)">✕</button>
+            </div>
           </div>
         </div>
+      </section>
 
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid #f0f0f0;">
-          <div>
-            <div style="font-size:0.9rem;font-weight:600;color:#1a1a1a;">Notifications</div>
-            <div style="font-size:0.75rem;color:#999;margin-top:2px;">{{ notificationsOn ? 'Enabled' : 'Disabled' }}</div>
-          </div>
-          <button (click)="toggleNotifications()" [style.background]="notificationsOn ? '#22c55e' : '#e5e7eb'" style="border:none;border-radius:30px;padding:8px 20px;cursor:pointer;color:#fff;font-weight:700;font-size:0.8rem;transition:all 0.3s;">
-            {{ notificationsOn ? 'On' : 'Off' }}
-          </button>
-        </div>
+      <section class="card">
+        <h3>Language Selection</h3>
+        <select [(ngModel)]="selectedLanguage" (ngModelChange)="saveAll()">
+          <option value="English">English</option>
+          <option value="Hindi">Hindi</option>
+          <option value="Telugu">Telugu</option>
+        </select>
 
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;">
-          <div>
-            <div style="font-size:0.9rem;font-weight:600;color:#1a1a1a;">Language</div>
-          </div>
-          <select [(ngModel)]="selectedLanguage" (ngModelChange)="saveLanguage()" style="border:1px solid #e5e7eb;border-radius:8px;padding:8px 14px;font-size:0.85rem;outline:none;background:#fff;">
-            <option value="English">English</option>
-            <option value="Hindi">Hindi</option>
-            <option value="Telugu">Telugu</option>
+        <h3 class="sub-title">Payment Preferences</h3>
+        <div class="grid two">
+          <select [(ngModel)]="paymentPreference" (ngModelChange)="saveAll()">
+            <option value="upi">UPI</option>
+            <option value="card">Credit/Debit Cards</option>
+            <option value="wallet">Wallet</option>
+            <option value="cash">Cash</option>
+            <option value="auto">Auto Payment</option>
           </select>
+          <label class="toggle-row">
+            <span>Auto Payment</span>
+            <input type="checkbox" [(ngModel)]="autoPaymentEnabled" (ngModelChange)="saveAll()" />
+          </label>
         </div>
-      </div>
+      </section>
 
-      <!-- App Shortcuts -->
-      <div style="background:#fff;border-radius:16px;padding:20px;margin-bottom:16px;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
-        <h3 style="font-size:1rem;font-weight:700;color:#475569;margin:0 0 16px;">⚡ App Shortcuts</h3>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
-          <button *ngFor="let shortcut of shortcuts" (click)="router.navigate([shortcut.route])"
-            style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:14px 8px;text-align:center;cursor:pointer;">
-            <div style="font-size:1.4rem;">{{ shortcut.icon }}</div>
-            <div style="font-size:0.75rem;color:#475569;font-weight:600;margin-top:4px;">{{ shortcut.label }}</div>
-          </button>
+      <section class="card">
+        <h3>Notifications</h3>
+        <div class="toggle-grid">
+          <label class="toggle-row"><span>SMS Notifications</span><input type="checkbox" [(ngModel)]="notificationPrefs.sms" (ngModelChange)="saveAll()" /></label>
+          <label class="toggle-row"><span>Email Notifications</span><input type="checkbox" [(ngModel)]="notificationPrefs.email" (ngModelChange)="saveAll()" /></label>
+          <label class="toggle-row"><span>Push Notifications</span><input type="checkbox" [(ngModel)]="notificationPrefs.push" (ngModelChange)="saveAll()" /></label>
+          <label class="toggle-row"><span>Ride Updates</span><input type="checkbox" [(ngModel)]="notificationPrefs.rideUpdates" (ngModelChange)="saveAll()" /></label>
+          <label class="toggle-row"><span>Payment Alerts</span><input type="checkbox" [(ngModel)]="notificationPrefs.paymentAlerts" (ngModelChange)="saveAll()" /></label>
         </div>
-      </div>
+      </section>
 
-      <!-- Account Info -->
-      <div style="background:#fff;border-radius:16px;padding:20px;margin-bottom:16px;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
-        <h3 style="font-size:1rem;font-weight:700;color:#475569;margin:0 0 14px;">ℹ️ About</h3>
-        <div style="font-size:0.9rem;color:#666;">App Version: <strong>RouteX v2.4.1 (Build 2024)</strong></div>
-      </div>
+      <section class="card">
+        <h3>Safety Features</h3>
+        <div class="toggle-grid">
+          <label class="toggle-row"><span>SOS Button</span><input type="checkbox" [(ngModel)]="safetyPrefs.sosEnabled" (ngModelChange)="saveAll()" /></label>
+          <label class="toggle-row"><span>Share Live Location</span><input type="checkbox" [(ngModel)]="safetyPrefs.shareLiveLocation" (ngModelChange)="saveAll()" /></label>
+          <label class="toggle-row"><span>Emergency Calling</span><input type="checkbox" [(ngModel)]="safetyPrefs.emergencyCalling" (ngModelChange)="saveAll()" /></label>
+          <label class="toggle-row"><span>Driver Verification</span><input type="checkbox" [(ngModel)]="safetyPrefs.driverVerification" (ngModelChange)="saveAll()" /></label>
+          <label class="toggle-row"><span>Trip Recording</span><input type="checkbox" [(ngModel)]="safetyPrefs.tripRecording" (ngModelChange)="saveAll()" /></label>
+        </div>
+      </section>
 
-      <!-- Delete Account -->
-      <button (click)="showDeleteModal = true" style="width:100%;background:#fff;color:#e53935;border:2px solid #e53935;border-radius:14px;padding:14px;font-size:0.95rem;font-weight:700;cursor:pointer;">
-        🗑️ Delete Account
-      </button>
+      <button class="btn btn-danger full" (click)="showDeleteModal = true">Delete Account</button>
+      <div class="toast" *ngIf="toastMsg">{{ toastMsg }}</div>
 
-      <!-- Delete Modal -->
-      <div *ngIf="showDeleteModal" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9998;display:flex;align-items:center;justify-content:center;padding:20px;">
-        <div style="background:#fff;border-radius:20px;padding:28px;max-width:340px;width:100%;text-align:center;">
-          <div style="font-size:2.5rem;margin-bottom:12px;">⚠️</div>
-          <h3 style="font-size:1.1rem;font-weight:700;color:#1a1a1a;margin:0 0 10px;">Delete Account?</h3>
-          <p style="font-size:0.85rem;color:#666;margin:0 0 16px;line-height:1.6;">This action is <strong>irreversible</strong>. Your account, ride history, coins, and passes will be permanently deleted from our servers.</p>
-          <div *ngIf="deleteError" style="background:#fdeaea;color:#c62828;border-radius:10px;padding:10px;font-size:0.82rem;margin-bottom:14px;">{{ deleteError }}</div>
-          <div style="display:flex;gap:12px;">
-            <button (click)="showDeleteModal = false" [disabled]="deletingAccount" style="flex:1;background:#f0f0f0;color:#444;border:none;border-radius:12px;padding:12px;font-weight:600;cursor:pointer;">Cancel</button>
-            <button (click)="confirmDeleteAccount()" [disabled]="deletingAccount"
-              style="flex:1;background:#e53935;color:#fff;border:none;border-radius:12px;padding:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
-              <span *ngIf="deletingAccount" style="width:14px;height:14px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;display:inline-block;animation:spin .7s linear infinite;"></span>
-              {{ deletingAccount ? 'Deleting…' : 'Delete' }}
-            </button>
+      <div class="modal-backdrop" *ngIf="showDeleteModal" (click)="showDeleteModal = false">
+        <div class="modal" (click)="$event.stopPropagation()">
+          <h4>Delete Account?</h4>
+          <p>This action is irreversible.</p>
+          <p class="error" *ngIf="deleteError">{{ deleteError }}</p>
+          <div class="modal-actions">
+            <button class="btn btn-light" (click)="showDeleteModal = false">Cancel</button>
+            <button class="btn btn-danger" (click)="confirmDeleteAccount()" [disabled]="deletingAccount">{{ deletingAccount ? 'Deleting...' : 'Delete' }}</button>
           </div>
         </div>
       </div>
-
-      <!-- Toast -->
-      <div *ngIf="toastMsg" style="position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 20px;border-radius:30px;font-size:0.85rem;z-index:9999;">{{ toastMsg }}</div>
     </div>
-  `
+  `,
+  styles: [
+    `
+      .settings-shell {
+        max-width: 920px;
+        margin: 0 auto;
+        padding: 14px 12px 90px;
+        background: #f4f6f8;
+        min-height: 100vh;
+      }
+
+      .settings-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+
+      .settings-header h2 {
+        margin: 0;
+        font-size: 1.35rem;
+      }
+
+      .back-btn {
+        border: 0;
+        background: #e7ebef;
+        border-radius: 10px;
+        width: 34px;
+        height: 34px;
+        cursor: pointer;
+      }
+
+      .card {
+        background: #fff;
+        border: 1px solid #e7ebef;
+        border-radius: 14px;
+        padding: 14px;
+        margin-bottom: 12px;
+      }
+
+      h3 {
+        margin: 0 0 10px;
+        font-size: 1rem;
+      }
+
+      .sub-title {
+        margin-top: 14px;
+      }
+
+      .profile-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 10px;
+      }
+
+      .avatar {
+        width: 74px;
+        height: 74px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 2px solid #e2e8f0;
+      }
+
+      .profile-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .hidden-input {
+        display: none;
+      }
+
+      .grid {
+        display: grid;
+        gap: 8px;
+      }
+
+      .grid.two {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      input,
+      select {
+        width: 100%;
+        border: 1px solid #d1d9e0;
+        border-radius: 10px;
+        padding: 9px 10px;
+        font-size: 14px;
+      }
+
+      label {
+        display: block;
+        font-size: 12px;
+        color: #475569;
+        margin-bottom: 4px;
+      }
+
+      .btn {
+        border: 1px solid #c6d0da;
+        background: #1f2937;
+        color: #fff;
+        border-radius: 10px;
+        padding: 8px 12px;
+        cursor: pointer;
+        font-size: 13px;
+      }
+
+      .btn-light {
+        background: #e5e7eb;
+        color: #111827;
+      }
+
+      .btn-danger {
+        background: #dc2626;
+        border-color: #dc2626;
+      }
+
+      .btn.full {
+        width: 100%;
+      }
+
+      .list {
+        margin-top: 10px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .item-group {
+        border: 1px solid #edf2f7;
+        border-radius: 10px;
+        padding: 8px;
+      }
+
+      .item-group-title {
+        font-size: 12px;
+        font-weight: 700;
+        color: #334155;
+        margin-bottom: 6px;
+      }
+
+      .list-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid #edf2f7;
+        border-radius: 10px;
+        padding: 8px;
+      }
+
+      .item-title {
+        font-weight: 600;
+        font-size: 13px;
+      }
+
+      .item-sub {
+        font-size: 12px;
+        color: #64748b;
+      }
+
+      .icon-btn {
+        border: 0;
+        background: #f1f5f9;
+        border-radius: 8px;
+        width: 28px;
+        height: 28px;
+        cursor: pointer;
+      }
+
+      .toggle-grid {
+        display: grid;
+        gap: 6px;
+      }
+
+      .toggle-row {
+        border: 1px solid #e7ebef;
+        border-radius: 10px;
+        padding: 8px 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .toggle-row span {
+        font-size: 13px;
+      }
+
+      .toast {
+        position: fixed;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: 88px;
+        background: #111827;
+        color: #fff;
+        border-radius: 999px;
+        padding: 9px 14px;
+        font-size: 12px;
+        z-index: 1200;
+      }
+
+      .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.4);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        z-index: 1200;
+      }
+
+      .modal {
+        width: 100%;
+        max-width: 360px;
+        background: #fff;
+        border-radius: 14px;
+        padding: 14px;
+      }
+
+      .modal h4 {
+        margin: 0 0 8px;
+      }
+
+      .modal p {
+        margin: 0 0 8px;
+      }
+
+      .modal .error {
+        color: #b91c1c;
+        font-size: 13px;
+      }
+
+      .modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+
+      @media (max-width: 720px) {
+        .grid.two {
+          grid-template-columns: 1fr;
+        }
+      }
+    `
+  ]
 })
 export class SettingsComponent implements OnInit {
-  homeAddress = '';
-  workAddress = '';
-  isDark = false;
-  notificationsOn = true;
-  selectedLanguage = 'English';
+  profile = {
+    displayName: '',
+    email: '',
+    mobile: ''
+  };
+
+  avatarPreview = '/assets/rider-dummy.svg';
   showDeleteModal = false;
+  deletingAccount = false;
+  deleteError = '';
   toastMsg = '';
 
-  shortcuts = [
-    { icon: '🚗', label: 'Book Ride', route: '/booking' },
-    { icon: '📋', label: 'My Rides', route: '/activity' },
-    { icon: '🎁', label: 'Offers', route: '/rewards' },
-    { icon: '📍', label: 'Track Ride', route: '/tracking' },
-    { icon: '💳', label: 'Payment', route: '/payment' },
-    { icon: '🛡️', label: 'Safety', route: '/safety' }
-  ];
+  addresses: AddressItem[] = [];
+  emergencyContacts: ContactItem[] = [];
+  trustedContacts: ContactItem[] = [];
+
+  newAddressLabel = '';
+  newAddressText = '';
+  newEmergencyName = '';
+  newEmergencyPhone = '';
+  newTrustedName = '';
+  newTrustedPhone = '';
+
+  selectedLanguage = 'English';
+  paymentPreference: PaymentPreference = 'upi';
+  autoPaymentEnabled = false;
+
+  notificationPrefs = {
+    sms: true,
+    email: true,
+    push: true,
+    rideUpdates: true,
+    paymentAlerts: true
+  };
+
+  safetyPrefs = {
+    sosEnabled: true,
+    shareLiveLocation: true,
+    emergencyCalling: true,
+    driverVerification: true,
+    tripRecording: false
+  };
 
   constructor(public router: Router, private auth: AuthService) {}
 
-  ngOnInit() {
-    this.homeAddress = localStorage.getItem('rx_home_address') || '';
-    this.workAddress = localStorage.getItem('rx_work_address') || '';
-    this.isDark = localStorage.getItem('rx_theme') === 'dark';
-    this.notificationsOn = localStorage.getItem('rx_notifications') !== 'false';
+  ngOnInit(): void {
+    const user = this.auth.getCurrentUser();
+    this.profile.displayName = user?.displayName || '';
+    this.profile.email = user?.email || '';
+    this.profile.mobile = user?.mobile || '';
+    this.avatarPreview = user?.profileImageUrl || '/assets/rider-dummy.svg';
+
+    this.addresses = this.readArray<AddressItem>('rx_multi_addresses');
+    this.emergencyContacts = this.readArray<ContactItem>('rx_emergency_contacts');
+    this.trustedContacts = this.readArray<ContactItem>('rx_trusted_contacts');
+
     this.selectedLanguage = localStorage.getItem('rx_language') || 'English';
-    this.applyTheme();
+    this.paymentPreference = (localStorage.getItem('rx_payment_preference') as PaymentPreference) || 'upi';
+    this.autoPaymentEnabled = localStorage.getItem('rx_auto_payment') === 'true';
+
+    this.notificationPrefs = {
+      sms: localStorage.getItem('rx_notif_sms') !== 'false',
+      email: localStorage.getItem('rx_notif_email') !== 'false',
+      push: localStorage.getItem('rx_notif_push') !== 'false',
+      rideUpdates: localStorage.getItem('rx_notif_ride_updates') !== 'false',
+      paymentAlerts: localStorage.getItem('rx_notif_payment_alerts') !== 'false'
+    };
+
+    this.safetyPrefs = {
+      sosEnabled: localStorage.getItem('rx_safety_sos') !== 'false',
+      shareLiveLocation: localStorage.getItem('rx_safety_live_location') !== 'false',
+      emergencyCalling: localStorage.getItem('rx_safety_emergency_call') !== 'false',
+      driverVerification: localStorage.getItem('rx_safety_driver_verify') !== 'false',
+      tripRecording: localStorage.getItem('rx_safety_trip_recording') === 'true'
+    };
   }
 
-  saveHome() {
-    localStorage.setItem('rx_home_address', this.homeAddress);
-    this.showToast('🏠 Home address saved!');
-  }
-
-  saveWork() {
-    localStorage.setItem('rx_work_address', this.workAddress);
-    this.showToast('💼 Work address saved!');
-  }
-
-  setTheme(theme: 'light' | 'dark') {
-    this.isDark = theme === 'dark';
-    localStorage.setItem('rx_theme', theme);
-    this.applyTheme();
-    this.showToast(this.isDark ? '🌙 Dark mode enabled' : '☀️ Light mode enabled');
-  }
-
-  private applyTheme() {
-    if (this.isDark) {
-      document.body.classList.add('dark-mode');
-    } else {
-      document.body.classList.remove('dark-mode');
+  onAvatarSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) {
+      return;
     }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const value = String(reader.result || '');
+      if (!value) {
+        return;
+      }
+
+      this.avatarPreview = value;
+      this.auth.applyProfileImage(value);
+      this.showToast('Profile picture updated');
+    };
+    reader.readAsDataURL(file);
   }
 
-  toggleNotifications() {
-    this.notificationsOn = !this.notificationsOn;
-    localStorage.setItem('rx_notifications', String(this.notificationsOn));
-    this.showToast(this.notificationsOn ? '🔔 Notifications enabled' : '🔕 Notifications disabled');
+  saveProfile(): void {
+    this.auth.updateLocalProfile({
+      displayName: this.profile.displayName.trim(),
+      email: this.profile.email.trim(),
+      mobile: this.profile.mobile.trim()
+    });
+    this.showToast('Profile saved');
   }
 
-  saveLanguage() {
+  addAddress(): void {
+    const label = this.newAddressLabel.trim();
+    const address = this.newAddressText.trim();
+    if (!label || !address) {
+      this.showToast('Enter address label and value');
+      return;
+    }
+
+    this.addresses = [{ id: this.makeId(), label, address }, ...this.addresses];
+    this.newAddressLabel = '';
+    this.newAddressText = '';
+    this.saveAll();
+  }
+
+  removeAddress(id: string): void {
+    this.addresses = this.addresses.filter((x) => x.id !== id);
+    this.saveAll();
+  }
+
+  addEmergencyContact(): void {
+    const name = this.newEmergencyName.trim();
+    const phone = this.newEmergencyPhone.trim();
+    if (!name || !phone) {
+      this.showToast('Enter emergency contact details');
+      return;
+    }
+
+    this.emergencyContacts = [{ id: this.makeId(), name, phone }, ...this.emergencyContacts];
+    this.newEmergencyName = '';
+    this.newEmergencyPhone = '';
+    this.saveAll();
+  }
+
+  removeEmergencyContact(id: string): void {
+    this.emergencyContacts = this.emergencyContacts.filter((x) => x.id !== id);
+    this.saveAll();
+  }
+
+  addTrustedContact(): void {
+    const name = this.newTrustedName.trim();
+    const phone = this.newTrustedPhone.trim();
+    if (!name || !phone) {
+      this.showToast('Enter trusted contact details');
+      return;
+    }
+
+    this.trustedContacts = [{ id: this.makeId(), name, phone }, ...this.trustedContacts];
+    this.newTrustedName = '';
+    this.newTrustedPhone = '';
+    this.saveAll();
+  }
+
+  removeTrustedContact(id: string): void {
+    this.trustedContacts = this.trustedContacts.filter((x) => x.id !== id);
+    this.saveAll();
+  }
+
+  saveAll(): void {
+    localStorage.setItem('rx_multi_addresses', JSON.stringify(this.addresses));
+    localStorage.setItem('rx_emergency_contacts', JSON.stringify(this.emergencyContacts));
+    localStorage.setItem('rx_trusted_contacts', JSON.stringify(this.trustedContacts));
+
     localStorage.setItem('rx_language', this.selectedLanguage);
-    this.showToast('🌐 Language set to ' + this.selectedLanguage);
+    localStorage.setItem('rx_payment_preference', this.paymentPreference);
+    localStorage.setItem('rx_auto_payment', String(this.autoPaymentEnabled));
+
+    localStorage.setItem('rx_notif_sms', String(this.notificationPrefs.sms));
+    localStorage.setItem('rx_notif_email', String(this.notificationPrefs.email));
+    localStorage.setItem('rx_notif_push', String(this.notificationPrefs.push));
+    localStorage.setItem('rx_notif_ride_updates', String(this.notificationPrefs.rideUpdates));
+    localStorage.setItem('rx_notif_payment_alerts', String(this.notificationPrefs.paymentAlerts));
+
+    localStorage.setItem('rx_safety_sos', String(this.safetyPrefs.sosEnabled));
+    localStorage.setItem('rx_safety_live_location', String(this.safetyPrefs.shareLiveLocation));
+    localStorage.setItem('rx_safety_emergency_call', String(this.safetyPrefs.emergencyCalling));
+    localStorage.setItem('rx_safety_driver_verify', String(this.safetyPrefs.driverVerification));
+    localStorage.setItem('rx_safety_trip_recording', String(this.safetyPrefs.tripRecording));
+
+    this.showToast('Preferences saved');
   }
 
-  deletingAccount = false;
-  deleteError = '';
-
-  confirmDeleteAccount() {
+  confirmDeleteAccount(): void {
     this.deletingAccount = true;
     this.deleteError = '';
     this.auth.deleteAccount().subscribe({
@@ -204,9 +627,23 @@ export class SettingsComponent implements OnInit {
     });
   }
 
-  private showToast(msg: string) {
+  private readArray<T>(key: string): T[] {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? (JSON.parse(raw) as T[]) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private makeId(): string {
+    return `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  private showToast(msg: string): void {
     this.toastMsg = msg;
-    setTimeout(() => this.toastMsg = '', 3000);
+    setTimeout(() => {
+      this.toastMsg = '';
+    }, 2200);
   }
 }
-
