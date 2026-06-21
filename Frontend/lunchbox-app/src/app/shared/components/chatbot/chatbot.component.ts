@@ -25,7 +25,7 @@ interface ChatIntent {
 
     <section *ngIf="isOpen" class="chat-panel card">
       <header class="chat-header">
-        <div class="assistant-avatar">AI</div>
+        <div class="assistant-avatar">🤖</div>
         <div>
           <h6 class="mb-0">Routie</h6>
           <small class="assistant-subtitle">Routie helps with booking, tracking, services, and account support</small>
@@ -33,7 +33,7 @@ interface ChatIntent {
       </header>
 
       <div class="chat-body">
-        <div class="chat-hint">Try asking: "pickup service", "women safety", "referral cashback"</div>
+        <div class="chat-hint">Try asking: "end to end booking", "pickup service", "women safety", "referral cashback"</div>
         <div *ngFor="let msg of messages; let i = index" class="chat-row" [ngClass]="msg.from">
           <span class="bubble">{{ msg.text }}</span>
           <span class="typing-cursor" *ngIf="isTypingMessage(msg, i)"></span>
@@ -170,6 +170,7 @@ interface ChatIntent {
         max-width: 88%;
         line-height: 1.35;
         font-size: 13px;
+        white-space: pre-line;
       }
 
       .chat-row.bot .bubble {
@@ -345,15 +346,21 @@ export class ChatbotComponent implements OnDestroy {
   isThinking = false;
   isTyping = false;
   readonly quickPrompts = [
-    'How to book?',
+    'End to end booking steps',
     'Pickup service help',
+    'Medicine delivery flow',
     'Women safety mode',
     'Referral cashback',
     'Insurance enable',
-    'OTP issue'
+    'OTP issue',
+    'Payment failed'
   ];
 
   private readonly intents: ChatIntent[] = [
+    {
+      keywords: ['end to end', 'step by step', 'full flow', 'complete flow', 'how to book', 'start to end'],
+      answer: 'End-to-end RouteX booking flow:\n1. Open Booking and choose service (Food/Parcel/Grocery/Medicine/Documents).\n2. Select pickup and drop locations on map.\n3. Fill required service details section-wise.\n4. Choose payment method (Cash/Card/UPI/Wallet).\n5. Review fare and tap Book Now.\n6. Track captain live in Activity/Tracking.\n7. Share OTP at pickup/start when asked.\n8. Complete trip and rate captain.'
+    },
     {
       keywords: ['register', 'signup', 'sign up', 'create account'],
       answer: 'Open Register, fill your details, then login and verify OTP. After first successful verification, your account is ready for booking.'
@@ -368,7 +375,7 @@ export class ChatbotComponent implements OnDestroy {
     },
     {
       keywords: ['book', 'booking', 'book delivery', 'new order'],
-      answer: 'Go to Booking, choose service type, set pickup/drop, select vehicle and captain, then confirm Book Now. You can also schedule for later.'
+      answer: 'Go to Booking, choose service type, set pickup/drop, complete required details, select payment method, and confirm Book Now. You can also schedule for later.'
     },
     {
       keywords: ['food', 'hotel', 'restaurant'],
@@ -376,7 +383,15 @@ export class ChatbotComponent implements OnDestroy {
     },
     {
       keywords: ['pickup service', 'pickup item', 'shop pickup'],
-      answer: 'Use Pickup Service from Services page. Add shop name, contact, item details, and pickup instructions. The app sends this in ride notes.'
+      answer: 'Use Pickup Service from Services page. Fill: shop name, shop contact, sender/recipient details, pickup item details, and pickup instructions. Then confirm booking.'
+    },
+    {
+      keywords: ['medicine', 'pharmacy', 'prescription', 'medical'],
+      answer: 'Medicine booking flow:\n1. Select pickup and drop locations.\n2. Add pharmacy name and medicine names.\n3. Upload doctor prescription.\n4. Wait for prescription verification.\n5. Confirm booking and track captain live.'
+    },
+    {
+      keywords: ['document', 'documents', 'confidential file', 'paper delivery'],
+      answer: 'Document delivery flow:\n1. Select pickup and drop locations.\n2. Select document type and copies.\n3. Add sender and recipient name/phone.\n4. Mark confidential if needed.\n5. Confirm booking and track in Activity.'
     },
     {
       keywords: ['women safety', 'safety mode', 'safe ride'],
@@ -403,6 +418,10 @@ export class ChatbotComponent implements OnDestroy {
       answer: 'Supported payment options are Cash, Card, UPI, and Wallet. Choose payment method in the Booking screen before confirming.'
     },
     {
+      keywords: ['payment failed', 'upi failed', 'transaction failed', 'money debited'],
+      answer: 'If payment fails:\n1. Check network and retry once.\n2. Try another method (UPI/Card/Cash/Wallet).\n3. Open Activity to confirm booking/payment status.\n4. If debited but not confirmed, share booking ID with support from Contact page.'
+    },
+    {
       keywords: ['captain', 'driver', 'nearby captain'],
       answer: 'Booking shows nearby captains by selected vehicle with ETA, distance, rating, and live map positions. You can refresh and select preferred captain.'
     },
@@ -421,7 +440,7 @@ export class ChatbotComponent implements OnDestroy {
   ];
 
   messages: ChatMessage[] = [
-    { from: 'bot', text: "Hi! I'm Routie, your RouteX assistant. I can help with rides, food, groceries, courier deliveries, and tracking." }
+    { from: 'bot', text: "Hi! I'm Routie 🤖, your RouteX assistant. I can guide complete end-to-end booking, tracking, payments, and service-specific questions." }
   ];
 
   private thinkingTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -475,7 +494,7 @@ export class ChatbotComponent implements OnDestroy {
       return best.answer;
     }
 
-    return 'I can help with booking, food hotels, pickup service, OTP, referral, insurance, women safety mode, teen mode, captain selection, payment, and history. Please type a keyword like booking, pickup, referral, or insurance.';
+    return 'I can help with end-to-end booking, pickup service, medicine/documents flow, OTP, payment issues, referral, insurance, women safety mode, teen mode, captain selection, and tracking.\n\nTry one of these: "end to end booking", "medicine delivery flow", "payment failed", "pickup service help".';
   }
 
   private findBestIntent(normalizedInput: string): ChatIntent | null {
