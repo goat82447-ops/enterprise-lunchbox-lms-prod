@@ -234,7 +234,7 @@ export class RoleDashboardComponent {
 
     return [
       { title: 'Home', subtitle: 'Discover services and offers', route: '/home', color: '#fb7185' },
-      { title: 'Book Ride', subtitle: 'Pickup and destination booking', route: '/booking', color: '#2dd4bf' },
+      { title: 'Book Ride', subtitle: 'Pickup and destination booking', route: '/travel', color: '#2dd4bf' },
       { title: 'Orders', subtitle: 'Track active and completed orders', route: '/order-tracking', color: '#93c5fd' }
     ];
   }
