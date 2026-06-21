@@ -104,6 +104,17 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         </div>
       </div>
 
+      <div class="card p-3 mb-3 border-info" *ngIf="isQuickBookPage">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <div>
+            <div class="small text-info fw-semibold">QUICK BOOK GUIDE PAGE</div>
+            <h4 class="mb-1">QuickBook Video Guide</h4>
+            <div class="small text-muted">Watch this guide and then continue to booking form.</div>
+          </div>
+          <button class="btn btn-outline-primary btn-sm" type="button" (click)="openMainBookingPage()">Open Booking Form</button>
+        </div>
+      </div>
+
       <div class="card p-3 mb-3 focused-mode-card" *ngIf="focusedMode !== 'all'">
         <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
           <div class="d-flex align-items-center gap-2">
@@ -168,7 +179,7 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         </div>
       </div>
 
-      <div class="card p-3 mb-3 lunchbox-mode-card" *ngIf="focusedMode === 'all'">
+      <div class="card p-3 mb-3 lunchbox-mode-card" id="pickup-service-mode-card" *ngIf="focusedMode === 'all'">
         <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
           <div>
             <h5 class="mb-1">Pickup Service Mode</h5>
@@ -236,6 +247,42 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
             <input class="form-control" placeholder="Pickup instructions (counter/gate/token)" [(ngModel)]="pickupShopInstructions" />
           </div>
         </div>
+      </div>
+
+      <div class="card p-3 mb-3 required-questions-card" id="required-questions-card" *ngIf="showSectionWiseQuestions">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+          <div>
+            <h5 class="mb-1">Required Questions - {{ sectionWiseQuestionTitle }}</h5>
+            <div class="small text-muted">Complete these in order to continue booking.</div>
+          </div>
+          <span class="required-progress-chip">{{ completedSectionWiseQuestions }}/{{ sectionWiseQuestions.length }} done</span>
+        </div>
+
+        <div class="required-step-grid">
+          <button
+            type="button"
+            class="required-step-chip"
+            *ngFor="let step of requiredQuestionSteps"
+            [class.active]="isRequiredStepOpen(step.id)"
+            [class.complete]="step.done === step.total"
+            (click)="toggleRequiredStep(step.id)">
+            <div class="required-step-chip-title">Step {{ step.id }} - {{ step.title }}</div>
+            <div class="required-step-chip-meta">{{ step.done }}/{{ step.total }} done</div>
+          </button>
+        </div>
+
+        <ng-container *ngFor="let step of requiredQuestionSteps">
+          <div class="required-step-detail mt-2" *ngIf="isRequiredStepOpen(step.id)">
+            <div class="small text-muted mb-2">{{ step.hint }}</div>
+            <div class="required-question-list">
+              <div class="required-question-item" *ngFor="let item of step.items; index as i" [class.complete]="item.done">
+                <span class="required-question-index">{{ i + 1 }}</span>
+                <div class="required-question-copy">{{ item.label }}</div>
+                <span class="required-question-state">{{ item.done ? 'Done' : 'Required' }}</span>
+              </div>
+            </div>
+          </div>
+        </ng-container>
       </div>
 
       <h2 class="mb-3">{{ isLunchboxDeliveryPage ? 'RouteX LunchBox Booking' : (isSchoolBookingPage ? 'RouteX School Booking' : 'Book Delivery') }}</h2>
@@ -327,7 +374,7 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         <div class="small mt-2" *ngIf="voiceSupported && voiceTranscript">Heard: {{ voiceTranscript }}</div>
       </div>
 
-      <div class="card p-3 mb-4 how-to-book-card" *ngIf="showGeneralBookingSections">
+      <div class="card p-3 mb-4 how-to-book-card" *ngIf="isQuickBookPage">
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
           <h5 class="mb-0">How to Book (Video Guide)</h5>
           <small class="text-muted">Watch before your first booking</small>
@@ -335,7 +382,7 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         <div class="how-to-book-frame-wrap">
           <iframe
             class="how-to-book-frame"
-            src="https://www.youtube.com/watch?v=lu-Zu8nADOg"
+            src="https://www.youtube.com/embed/lu-Zu8nADOg"
             title="RouteX booking video guide"
             loading="lazy"
             referrerpolicy="strict-origin-when-cross-origin"
@@ -345,7 +392,7 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         </div>
         <small class="text-muted d-block mt-2">
           Video source: your uploaded YouTube guide.
-          <a href="https://www.youtube.com/watch?v=lu-Zu8nADOg" target="_blank" rel="noopener noreferrer"></a>
+          <a href="https://www.youtube.com/watch?v=lu-Zu8nADOg" target="_blank" rel="noopener noreferrer">Open on YouTube</a>
         </small>
       </div>
 
@@ -774,8 +821,9 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
 
             <div class="vehicle-map-card mb-4" *ngIf="serviceType !== 'food'" id="booking-map-card">
               <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-                <h5 class="mb-0">Vehicle Location Map</h5>
+                <h5 class="mb-0">Live GPS Smart Map</h5>
                 <div class="d-flex align-items-center gap-2">
+                  <button class="btn btn-outline-primary btn-sm" type="button" (click)="focusCurrentGpsOnMap()">Use My GPS on Map</button>
                   <span class="small text-muted">Live Track</span>
                   <div class="form-check form-switch m-0">
                     <input
@@ -789,7 +837,7 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
                 </div>
               </div>
               <div class="small text-muted mb-2">
-                Direct map mode: move the map, keep pin at center, then tap Set Pickup or Set Drop.
+                Move map with GPS view, keep pin at center, then tap Set Pickup or Set Drop.
               </div>
               <div class="small text-primary mb-2" *ngIf="mapSelectionTarget">
                 {{ mapSelectionTargetLabel() }} selection mode active.
@@ -1816,6 +1864,115 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%);
       }
 
+      .required-questions-card {
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        background: linear-gradient(135deg, #f8fbff 0%, #ffffff 100%);
+      }
+
+      .required-progress-chip {
+        border-radius: 999px;
+        background: #eef2ff;
+        color: #3730a3;
+        border: 1px solid #c7d2fe;
+        font-size: 12px;
+        font-weight: 700;
+        padding: 4px 10px;
+      }
+
+      .required-step-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .required-step-chip {
+        border: 1px solid #dbeafe;
+        border-radius: 12px;
+        background: #f8fbff;
+        text-align: left;
+        padding: 10px;
+      }
+
+      .required-step-chip.active {
+        border-color: #93c5fd;
+        background: #eff6ff;
+      }
+
+      .required-step-chip.complete {
+        border-color: #86efac;
+        background: #f0fdf4;
+      }
+
+      .required-step-chip-title {
+        font-size: 12px;
+        font-weight: 700;
+        color: #0f172a;
+      }
+
+      .required-step-chip-meta {
+        font-size: 11px;
+        color: #475569;
+      }
+
+      .required-step-detail {
+        border: 1px solid #dbeafe;
+        border-radius: 12px;
+        background: #ffffff;
+        padding: 10px;
+      }
+
+      .required-question-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .required-question-item {
+        display: grid;
+        grid-template-columns: 28px 1fr auto;
+        align-items: center;
+        gap: 10px;
+        border: 1px solid #dbeafe;
+        border-radius: 12px;
+        background: #f8fbff;
+        padding: 9px 10px;
+      }
+
+      .required-question-item.complete {
+        border-color: #86efac;
+        background: #f0fdf4;
+      }
+
+      .required-question-index {
+        width: 24px;
+        height: 24px;
+        border-radius: 999px;
+        border: 1px solid #93c5fd;
+        color: #1d4ed8;
+        font-size: 12px;
+        font-weight: 700;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .required-question-copy {
+        font-size: 13px;
+        color: #0f172a;
+      }
+
+      .required-question-state {
+        font-size: 11px;
+        font-weight: 700;
+        color: #475569;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
+
+      .required-question-item.complete .required-question-state {
+        color: #166534;
+      }
+
       .focused-mode-avatar {
         width: 42px;
         height: 42px;
@@ -1954,6 +2111,10 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
       }
 
       @media (max-width: 576px) {
+        .required-step-grid {
+          grid-template-columns: 1fr;
+        }
+
         .captain-grid {
           grid-template-columns: 1fr;
           max-height: 320px;
@@ -2037,6 +2198,7 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
 export class BookingComponent implements OnDestroy {
   isSchoolBookingPage = false;
   isLunchboxDeliveryPage = false;
+  isQuickBookPage = false;
   currentUser: AppUser | null = null;
   profileImageUrl = 'https://ui-avatars.com/api/?name=User&background=f0f4ff&color=0f172a&size=128';
   selectedProfileImage = '';
@@ -2162,6 +2324,7 @@ export class BookingComponent implements OnDestroy {
   private medicinePrescriptionVerifyHandle: ReturnType<typeof setTimeout> | null = null;
   lunchBoxDeliveryMode = false;
   pickupServiceMode = false;
+  expandedRequiredStep = 0;
   pickupSelectedShopName = '';
   pickupShopName = '';
   pickupShopPhone = '';
@@ -2341,6 +2504,11 @@ export class BookingComponent implements OnDestroy {
 
       if (service && this.serviceTypes.includes(service as ServiceType)) {
         this.onServiceTypeChange(service as ServiceType);
+
+        if (service === 'parcel' || service === 'grocery' || service === 'medicine' || service === 'documents') {
+          this.notifications.push(`Please fill required ${service} details section-wise.`, 'info');
+          setTimeout(() => this.scrollToSectionWiseQuestions(), 80);
+        }
       }
 
       if (vehicle && this.bookingVehicleOptions.some((option) => option.type === vehicle)) {
@@ -2374,9 +2542,16 @@ export class BookingComponent implements OnDestroy {
         this.activateFocusedMode('school');
       }
 
-      if (pickupService === '1' && !this.pickupServiceMode) {
-        this.pickupServiceMode = true;
-        this.onPickupServiceModeChange();
+      if (pickupService === '1') {
+        if (!this.pickupServiceMode) {
+          this.pickupServiceMode = true;
+          this.onPickupServiceModeChange();
+        }
+
+        this.onServiceTypeChange('parcel');
+        this.notifications.push('Pickup Service: Select Pickup and Drop location, then fill sender/recipient details, shop name, item name, and pickup item details.', 'info');
+        setTimeout(() => this.scrollToSectionWiseQuestions(), 80);
+        setTimeout(() => this.scrollToPickupServiceCard(), 80);
       }
 
       if (bookingFor === 'others') {
@@ -2685,6 +2860,7 @@ export class BookingComponent implements OnDestroy {
 
   onServiceTypeChange(serviceType: ServiceType): void {
     this.serviceType = serviceType;
+    this.expandedRequiredStep = 0;
     this.showAllHotels = false;
 
     // Auto-select bike for delivery services (no vehicle picker shown)
@@ -2865,6 +3041,34 @@ export class BookingComponent implements OnDestroy {
     }
 
     this.notifications.push(`${target === 'pickup' ? 'Pickup' : 'Drop'} map selection started. Move map and tap Set ${target === 'pickup' ? 'Pickup' : 'Drop'}.`, 'info');
+  }
+
+  focusCurrentGpsOnMap(): void {
+    if (!navigator.geolocation) {
+      this.notifications.push('Geolocation is not supported in this browser.', 'warning');
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = this.round(position.coords.latitude);
+        const lng = this.round(position.coords.longitude);
+        await this.ensureLeafletMapReady();
+
+        if (!this.leafletMap) {
+          this.notifications.push('Live GPS map is still loading. Please try again.', 'warning');
+          return;
+        }
+
+        this.leafletMap.setView([lat, lng], 16, { animate: true });
+        this.scheduleMapCenterPreview(lat, lng, 0);
+        this.notifications.push('Map centered to your live GPS location.', 'success');
+      },
+      () => {
+        this.notifications.push('Unable to fetch GPS location. Please allow location permission.', 'error');
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
   }
 
   private applyMapPickToTarget(target: 'pickup' | 'drop', lat: number, lng: number): void {
@@ -3791,6 +3995,162 @@ export class BookingComponent implements OnDestroy {
     section.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
+  private scrollToPickupServiceCard(): void {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    const section = document.getElementById('pickup-service-mode-card');
+    if (!section) {
+      return;
+    }
+
+    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  private scrollToSectionWiseQuestions(): void {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    const section = document.getElementById('required-questions-card');
+    if (!section) {
+      return;
+    }
+
+    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  get showSectionWiseQuestions(): boolean {
+    return this.serviceType === 'parcel' || this.serviceType === 'grocery' || this.serviceType === 'medicine' || this.serviceType === 'documents';
+  }
+
+  get sectionWiseQuestionTitle(): string {
+    if (this.pickupServiceMode) {
+      return 'Pickup Service';
+    }
+
+    if (this.serviceType === 'grocery') {
+      return 'Grocery Delivery';
+    }
+
+    if (this.serviceType === 'medicine') {
+      return 'Medicine Delivery';
+    }
+
+    if (this.serviceType === 'documents') {
+      return 'Document Delivery';
+    }
+
+    return 'Parcel Delivery';
+  }
+
+  get sectionWiseQuestions(): Array<{ label: string; done: boolean }> {
+    const pickupSelected = this.pickupAddress.trim().length > 0 && this.pickupAddress !== 'Pickup Point';
+    const dropSelected = this.dropAddress.trim().length > 0 && this.dropAddress !== 'Drop Point';
+
+    if (this.serviceType === 'grocery') {
+      return [
+        { label: 'Select pickup location.', done: pickupSelected },
+        { label: 'Select drop location.', done: dropSelected },
+        { label: 'Enter grocery shop/store name.', done: this.groceryShopName.trim().length > 0 },
+        { label: 'Enter grocery item list.', done: this.groceryList.trim().length > 0 }
+      ];
+    }
+
+    if (this.serviceType === 'medicine') {
+      return [
+        { label: 'Select pickup location.', done: pickupSelected },
+        { label: 'Select drop location.', done: dropSelected },
+        { label: 'Enter pharmacy/medical shop name.', done: this.medicineShopName.trim().length > 0 },
+        { label: 'Enter medicine names.', done: this.medicineNames.trim().length > 0 },
+        { label: 'Upload doctor prescription.', done: this.medicinePrescriptionPayload.trim().length > 0 },
+        { label: 'Wait for prescription verification.', done: this.medicinePrescriptionStatus === 'verified' }
+      ];
+    }
+
+    if (this.serviceType === 'documents') {
+      return [
+        { label: 'Select pickup location.', done: pickupSelected },
+        { label: 'Select drop location.', done: dropSelected },
+        { label: 'Select document type.', done: this.documentType.trim().length > 0 },
+        { label: 'Enter recipient name and phone.', done: this.documentRecipientName.trim().length > 0 && this.documentRecipientPhone.trim().length > 0 },
+        { label: 'Enter sender/organisation name.', done: this.documentSenderName.trim().length > 0 }
+      ];
+    }
+
+    const parcelBase = [
+      { label: 'Select pickup location.', done: pickupSelected },
+      { label: 'Select drop location.', done: dropSelected },
+      { label: 'Enter sender name and phone.', done: this.parcelSenderName.trim().length > 0 && this.parcelSenderPhone.trim().length > 0 },
+      { label: 'Enter recipient name and phone.', done: this.parcelRecipientName.trim().length > 0 && this.parcelRecipientPhone.trim().length > 0 },
+      { label: 'Enter shop/pickup store name.', done: this.pickupShopName.trim().length > 0 },
+      { label: 'Enter item name/details.', done: this.parcelDescription.trim().length > 0 }
+    ];
+
+    if (this.pickupServiceMode) {
+      parcelBase.push({ label: 'Enter pickup item details.', done: this.pickupItemDetails.trim().length > 0 });
+    }
+
+    return parcelBase;
+  }
+
+  get completedSectionWiseQuestions(): number {
+    return this.sectionWiseQuestions.filter((item) => item.done).length;
+  }
+
+  get requiredQuestionSteps(): Array<{ id: number; title: string; hint: string; items: Array<{ label: string; done: boolean }>; done: number; total: number }> {
+    const allQuestions = this.sectionWiseQuestions;
+    const step1Items = allQuestions.slice(0, 2);
+
+    let step2Items = allQuestions.slice(2);
+    let step3Items: Array<{ label: string; done: boolean }> = [];
+
+    if (this.serviceType === 'medicine' && allQuestions.length >= 6) {
+      step2Items = allQuestions.slice(2, 5);
+      step3Items = allQuestions.slice(5);
+    }
+
+    step3Items = [
+      ...step3Items,
+      {
+        label: 'Review summary and tap Book Now.',
+        done: this.completedSectionWiseQuestions === allQuestions.length
+      }
+    ];
+
+    const steps = [
+      { id: 1, title: 'Location', hint: 'Choose pickup and drop on the map first.', items: step1Items },
+      { id: 2, title: 'Details', hint: 'Fill service-specific required details.', items: step2Items },
+      { id: 3, title: 'Confirm', hint: 'Do final check and submit booking.', items: step3Items }
+    ];
+
+    return steps.map((step) => {
+      const total = step.items.length;
+      const done = step.items.filter((item) => item.done).length;
+
+      return {
+        ...step,
+        done,
+        total
+      };
+    });
+  }
+
+  toggleRequiredStep(stepId: number): void {
+    this.expandedRequiredStep = this.expandedRequiredStep === stepId ? 0 : stepId;
+  }
+
+  isRequiredStepOpen(stepId: number): boolean {
+    const activeStep = this.expandedRequiredStep === 0 ? this.nextIncompleteRequiredStep : this.expandedRequiredStep;
+    return activeStep === stepId;
+  }
+
+  private get nextIncompleteRequiredStep(): number {
+    const nextStep = this.requiredQuestionSteps.find((step) => step.done < step.total);
+    return nextStep?.id ?? 3;
+  }
+
   openLunchboxBookingsPage(): void {
     this.activateFocusedMode('school');
     this.notifications.push('RouteX LunchBox Delivery page opened.', 'info');
@@ -3800,6 +4160,10 @@ export class BookingComponent implements OnDestroy {
         service: 'food'
       }
     });
+  }
+
+  openMainBookingPage(): void {
+    this.router.navigate(['/booking']);
   }
 
   get focusedModeTitle(): string {
@@ -5820,6 +6184,7 @@ export class BookingComponent implements OnDestroy {
   private syncPageFlagsFromRoute(path: string): void {
     this.isSchoolBookingPage = path === 'school-booking';
     this.isLunchboxDeliveryPage = path === 'lunchbox-delivery';
+    this.isQuickBookPage = path === 'booking/quickbook';
   }
 
   private syncFoodRouteState(): void {
