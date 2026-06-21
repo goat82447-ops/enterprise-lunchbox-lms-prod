@@ -1,4 +1,12 @@
-export type UserRole = 'customer' | 'admin' | 'captain' | 'user';
+export type UserRole =
+  | 'customer'
+  | 'rider'
+  | 'driver'
+  | 'captain'
+  | 'admin'
+  | 'fleet_owner'
+  | 'support_executive'
+  | 'user';
 export type KycStatus = 'not_started' | 'pending' | 'verified' | 'rejected';
 
 export interface AppUser {
