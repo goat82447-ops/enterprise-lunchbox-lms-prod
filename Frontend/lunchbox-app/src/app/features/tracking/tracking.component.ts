@@ -14,7 +14,7 @@ import { SafeResourceUrlPipe } from '../../shared/pipes/safe-resource-url.pipe';
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, SafeResourceUrlPipe],
   template: `
-    <div class="container py-4">
+    <div class="container py-4 tracking-page">
       <h2 class="mb-2">Activity Center</h2>
       <p class="text-muted mb-3">Live tracking and past ride details in one place.</p>
 
@@ -279,6 +279,21 @@ import { SafeResourceUrlPipe } from '../../shared/pipes/safe-resource-url.pipe';
               <div class="small text-muted mb-2">Amount is calculated dynamically at ₹{{ getRatePerKm() }}/km.</div>
               <div class="fw-semibold mb-2">Amount to pay: ₹{{ payableAmount | number: '1.0-0' }}</div>
               <button type="button" class="btn btn-sm btn-success" (click)="completePayment(booking)">Pay Now</button>
+            </div>
+
+            <div class="card p-3 mt-3" *ngIf="(booking.status === 'completed' || booking.status === 'delivered') && isCustomer()">
+              <h6 class="mb-2">Ride Management</h6>
+              <div class="d-flex gap-2 flex-wrap">
+                <button type="button" class="btn btn-sm btn-outline-primary" (click)="downloadInvoice(booking)">Download Invoice</button>
+                <button type="button" class="btn btn-sm btn-outline-warning" [disabled]="isRefundRequested(booking.id)" (click)="requestRefund(booking)">
+                  {{ isRefundRequested(booking.id) ? 'Refund Requested' : 'Request Refund' }}
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" (click)="toggleFavoriteDriver(booking)">
+                  {{ isFavoriteDriver(booking.driverPhone) ? 'Remove Favorite Driver' : 'Add Favorite Driver' }}
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-danger" (click)="reportIssue(booking)">Report Issue</button>
+              </div>
+              <div class="small text-muted mt-2" *ngIf="isRefundRequested(booking.id)">Refund status: {{ getRefundStatus(booking.id) }}</div>
             </div>
 
             <div class="card p-3 mt-3 feedback-card" *ngIf="booking.status === 'completed' && isCustomer() && booking.paymentDone && !booking.trackingClosed">
@@ -902,6 +917,8 @@ import { SafeResourceUrlPipe } from '../../shared/pipes/safe-resource-url.pipe';
   `]
 })
 export class TrackingComponent implements OnInit, OnDestroy {
+  private static readonly REFUND_STORE_KEY = 'rx_refund_requests';
+  private static readonly FAVORITE_DRIVER_STORE_KEY = 'rx_favorite_drivers';
   private static readonly AUTO_CLOSE_DELAY_MS = 5 * 60 * 1000;
   private static readonly RATE_PER_KM_RS = 10;
   private static readonly MIN_RIDE_END_MINUTES = 2;
@@ -974,6 +991,8 @@ export class TrackingComponent implements OnInit, OnDestroy {
   private nowTickMs = Date.now();
   private captainPaymentRedirectHandled = false;
   private statusRedirectHandled = false;
+  private refundRequests: Record<string, string> = {};
+  private favoriteDrivers = new Set<string>();
   /** True only when the booking was in a live/active state when first opened this session */
   private bookingOpenedAsLive = false;
   /** Tracks booking IDs for which recordUserAction('tracking_viewed') has already been sent */
@@ -990,6 +1009,9 @@ export class TrackingComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
+    this.refundRequests = this.readRefundRequests();
+    this.favoriteDrivers = this.readFavoriteDrivers();
+
     this.foodCountdownIntervalId = setInterval(() => {
       this.nowTickMs = Date.now();
     }, 1000);
@@ -1641,11 +1663,102 @@ export class TrackingComponent implements OnInit, OnDestroy {
     return TrackingComponent.RATE_PER_KM_RS;
   }
 
+  downloadInvoice(booking: Booking): void {
+    const amount = booking.finalAmount && booking.finalAmount > 0 ? booking.finalAmount : this.calculatePayableAmount(booking);
+    const invoiceText = [
+      'RouteX Ride Invoice',
+      `Booking ID: ${booking.id}`,
+      `Service: ${booking.serviceType}`,
+      `Vehicle: ${booking.vehicleType}`,
+      `Driver: ${booking.driverName} (${booking.driverPhone})`,
+      `Pickup: ${booking.pickup.address}`,
+      `Drop: ${booking.drop.address}`,
+      `Amount: INR ${Math.round(amount)}`,
+      `Payment Method: ${booking.paymentMethod}`,
+      `Generated At: ${new Date().toISOString()}`
+    ].join('\n');
+
+    const blob = new Blob([invoiceText], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `invoice_${booking.id}.txt`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+
+    this.notifications.push('Invoice downloaded.', 'success');
+  }
+
+  requestRefund(booking: Booking): void {
+    if (this.refundRequests[booking.id]) {
+      this.notifications.push('Refund already requested for this booking.', 'info');
+      return;
+    }
+
+    this.refundRequests[booking.id] = 'Under Review';
+    localStorage.setItem(TrackingComponent.REFUND_STORE_KEY, JSON.stringify(this.refundRequests));
+    this.notifications.push('Refund request submitted. Status: Under Review', 'success');
+  }
+
+  isRefundRequested(bookingId: string): boolean {
+    return !!this.refundRequests[bookingId];
+  }
+
+  getRefundStatus(bookingId: string): string {
+    return this.refundRequests[bookingId] || 'Not requested';
+  }
+
+  toggleFavoriteDriver(booking: Booking): void {
+    const key = this.normalizePhone(booking.driverPhone);
+    if (this.favoriteDrivers.has(key)) {
+      this.favoriteDrivers.delete(key);
+      this.notifications.push('Driver removed from favorites.', 'info');
+    } else {
+      this.favoriteDrivers.add(key);
+      this.notifications.push('Driver added to favorites.', 'success');
+    }
+
+    localStorage.setItem(TrackingComponent.FAVORITE_DRIVER_STORE_KEY, JSON.stringify(Array.from(this.favoriteDrivers)));
+  }
+
+  isFavoriteDriver(phone: string): boolean {
+    return this.favoriteDrivers.has(this.normalizePhone(phone));
+  }
+
+  reportIssue(booking: Booking): void {
+    this.router.navigate(['/contact'], {
+      queryParams: {
+        bookingId: booking.id,
+        context: 'ride'
+      }
+    });
+    this.notifications.push('Redirected to issue reporting with booking context.', 'info');
+  }
+
   formatAutoCloseCountdown(): string {
     const total = Math.max(0, this.autoCloseRemainingSeconds);
     const minutes = Math.floor(total / 60);
     const seconds = total % 60;
     return `${minutes}:${String(seconds).padStart(2, '0')}`;
+  }
+
+  private readRefundRequests(): Record<string, string> {
+    try {
+      const raw = localStorage.getItem(TrackingComponent.REFUND_STORE_KEY);
+      return raw ? (JSON.parse(raw) as Record<string, string>) : {};
+    } catch {
+      return {};
+    }
+  }
+
+  private readFavoriteDrivers(): Set<string> {
+    try {
+      const raw = localStorage.getItem(TrackingComponent.FAVORITE_DRIVER_STORE_KEY);
+      const entries = raw ? (JSON.parse(raw) as string[]) : [];
+      return new Set(entries.map((x) => this.normalizePhone(x)));
+    } catch {
+      return new Set<string>();
+    }
   }
 
   private syncAutoCloseTracking(booking: Booking): void {
