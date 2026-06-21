@@ -104,6 +104,17 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         </div>
       </div>
 
+      <div class="card p-3 mb-3 border-info" *ngIf="isQuickBookPage">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <div>
+            <div class="small text-info fw-semibold">QUICK BOOK GUIDE PAGE</div>
+            <h4 class="mb-1">QuickBook Video Guide</h4>
+            <div class="small text-muted">Watch this guide and then continue to booking form.</div>
+          </div>
+          <button class="btn btn-outline-primary btn-sm" type="button" (click)="openMainBookingPage()">Open Booking Form</button>
+        </div>
+      </div>
+
       <div class="card p-3 mb-3 focused-mode-card" *ngIf="focusedMode !== 'all'">
         <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
           <div class="d-flex align-items-center gap-2">
@@ -363,7 +374,7 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
         <div class="small mt-2" *ngIf="voiceSupported && voiceTranscript">Heard: {{ voiceTranscript }}</div>
       </div>
 
-      <div class="card p-3 mb-4 how-to-book-card" *ngIf="showGeneralBookingSections">
+      <div class="card p-3 mb-4 how-to-book-card" *ngIf="isQuickBookPage">
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
           <h5 class="mb-0">How to Book (Video Guide)</h5>
           <small class="text-muted">Watch before your first booking</small>
@@ -2187,6 +2198,7 @@ const WOMEN_SAFETY_MODE_KEY_PREFIX = 'delivery_women_safety_mode';
 export class BookingComponent implements OnDestroy {
   isSchoolBookingPage = false;
   isLunchboxDeliveryPage = false;
+  isQuickBookPage = false;
   currentUser: AppUser | null = null;
   profileImageUrl = 'https://ui-avatars.com/api/?name=User&background=f0f4ff&color=0f172a&size=128';
   selectedProfileImage = '';
@@ -4148,6 +4160,10 @@ export class BookingComponent implements OnDestroy {
         service: 'food'
       }
     });
+  }
+
+  openMainBookingPage(): void {
+    this.router.navigate(['/booking']);
   }
 
   get focusedModeTitle(): string {
@@ -6168,6 +6184,7 @@ export class BookingComponent implements OnDestroy {
   private syncPageFlagsFromRoute(path: string): void {
     this.isSchoolBookingPage = path === 'school-booking';
     this.isLunchboxDeliveryPage = path === 'lunchbox-delivery';
+    this.isQuickBookPage = path === 'booking/quickbook';
   }
 
   private syncFoodRouteState(): void {
