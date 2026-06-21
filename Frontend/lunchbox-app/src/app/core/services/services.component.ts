@@ -89,6 +89,7 @@ import { Router } from '@angular/router';
           </button>
         </div>
       </div>
+
   `,
   styles: [`
     .svc-page {
@@ -174,23 +175,23 @@ export class ServicesComponent {
   }
 
   openVehicleRide(vehicleType: string): void {
-    this.router.navigate(['/travel'], { queryParams: { vehicle: vehicleType } });
+    this.router.navigate(['/booking'], { queryParams: { vehicle: vehicleType } });
   }
 
   openWomenSafetyMode(): void {
-    this.router.navigate(['/travel'], { queryParams: { mode: 'women' } });
+    this.router.navigate(['/booking'], { queryParams: { womenSafety: 1 } });
   }
 
   openTeenageRideMode(): void {
-    this.router.navigate(['/travel'], { queryParams: { mode: 'teen' } });
+    this.router.navigate(['/booking'], { queryParams: { teenRide: 1 } });
   }
 
   openScheduledRideMode(): void {
-    this.router.navigate(['/travel'], { queryParams: { mode: 'later' } });
+    this.router.navigate(['/booking'], { queryParams: { rideMode: 'later' } });
   }
 
   openBookingForOthersMode(): void {
-    this.router.navigate(['/travel'], { queryParams: { mode: 'others' } });
+    this.router.navigate(['/booking'], { queryParams: { bookingFor: 'others' } });
   }
 
   openLunchBox(): void {
