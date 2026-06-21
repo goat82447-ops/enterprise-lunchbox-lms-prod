@@ -126,7 +126,7 @@ import { SupportService } from './core/services/support.service';
 
             <!-- Quick action button -->
             <li class="nav-item" *ngIf="(isLoggedIn$ | async) && !(isCaptain$ | async)">
-              <button class="btn btn-brand-action btn-sm ms-2" routerLink="/booking/quickbook" (click)="handleNavLinkClick()">Quick Book</button>
+              <button class="btn btn-brand-action btn-sm ms-2" routerLink="/booking" (click)="handleNavLinkClick()">Quick Book</button>
             </li>
 
             <!-- Notification center -->

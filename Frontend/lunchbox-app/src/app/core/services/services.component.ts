@@ -90,6 +90,16 @@ import { Router } from '@angular/router';
         </div>
       </div>
 
+      <div class="svc-section">
+        <div class="svc-section-label">More</div>
+        <div class="svc-grid">
+          // <button class="svc-tile" type="button" (click)="openActivity()">
+          //   <div class="svc-icon-wrap">🧾</div>
+          //   <div class="svc-name">Activity</div>
+          // </button>
+        </div>
+      </div>
+    </div>
   `,
   styles: [`
     .svc-page {
@@ -175,23 +185,23 @@ export class ServicesComponent {
   }
 
   openVehicleRide(vehicleType: string): void {
-    this.router.navigate(['/booking'], { queryParams: { vehicle: vehicleType } });
+    this.router.navigate(['/travel'], { queryParams: { vehicle: vehicleType } });
   }
 
   openWomenSafetyMode(): void {
-    this.router.navigate(['/booking'], { queryParams: { womenSafety: 1 } });
+    this.router.navigate(['/travel'], { queryParams: { mode: 'women' } });
   }
 
   openTeenageRideMode(): void {
-    this.router.navigate(['/booking'], { queryParams: { teenRide: 1 } });
+    this.router.navigate(['/travel'], { queryParams: { mode: 'teen' } });
   }
 
   openScheduledRideMode(): void {
-    this.router.navigate(['/booking'], { queryParams: { rideMode: 'later' } });
+    this.router.navigate(['/travel'], { queryParams: { mode: 'later' } });
   }
 
   openBookingForOthersMode(): void {
-    this.router.navigate(['/booking'], { queryParams: { bookingFor: 'others' } });
+    this.router.navigate(['/travel'], { queryParams: { mode: 'others' } });
   }
 
   openLunchBox(): void {
