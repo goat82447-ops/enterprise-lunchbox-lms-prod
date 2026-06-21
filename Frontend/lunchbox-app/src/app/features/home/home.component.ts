@@ -17,602 +17,655 @@ import { AuthService } from '../../core/services/auth.service';
   standalone: true,
   imports: [CommonModule, RouterLink],
   template: `
-    <div class="container py-4 py-md-5">
-      <section class="hero-card">
-        <div class="hero-brand">
-          <img
-            [src]="homeLogoSrc"
-            (error)="onHomeLogoError($event)"
-            alt="RouteX logo"
-            class="hero-logo"
-          />
+    <div class="home-page">
+      <div class="container py-4 py-md-5">
+        <section class="hero-shell">
+          <div class="hero-copy">
+            <span class="hero-kicker">RouteX Forward Mobility</span>
+            <h1>One platform for every urban move.</h1>
+            <p>
+              Book rides, food, pickups, safety travel and deliveries with cinematic live tracking,
+              secure OTP starts, and real-time operations.
+            </p>
+            <div class="hero-actions">
+              <a routerLink="/travel" class="btn btn-danger btn-lg">Start Booking</a>
+              <a routerLink="/services" class="btn btn-outline-light btn-lg">Explore Services</a>
+            </div>
+            <div class="hero-tags">
+              <span>Live Captains</span>
+              <span>Secure OTP</span>
+              <span>24x7 Support</span>
+              <span>Instant Dispatch</span>
+            </div>
+          </div>
+
+          <div class="hero-visual">
+            <div class="hero-brand-row">
+              <img [src]="homeLogoSrc" (error)="onHomeLogoError($event)" alt="RouteX logo" class="hero-logo" />
+            </div>
+            <div class="metric-grid">
+              <article>
+                <strong>2 min</strong>
+                <small>Avg Assignment</small>
+              </article>
+              <article>
+                <strong>4.9</strong>
+                <small>Rider Trust</small>
+              </article>
+              <article>
+                <strong>99%</strong>
+                <small>Route Accuracy</small>
+              </article>
+              <article>
+                <strong>24x7</strong>
+                <small>Support Desk</small>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="services-shell mt-4">
+          <div class="section-head">
+            <h2>Core Services</h2>
+            <small>Fast access to your most-used flows</small>
+          </div>
+          <div class="services-grid">
+            <a
+              class="service-tile"
+              *ngFor="let service of serviceHighlights; index as i"
+              [routerLink]="service.route"
+              [queryParams]="service.queryParams || null"
+            >
+              <div class="service-main">
+                <div class="service-icon" [attr.aria-label]="service.iconAlt || service.title">
+                  <img *ngIf="service.iconImage; else serviceTextIcon" [src]="service.iconImage" [alt]="service.iconAlt || service.title" class="service-icon-logo" />
+                  <ng-template #serviceTextIcon>{{ service.icon }}</ng-template>
+                </div>
+                <h4>{{ service.title }}</h4>
+                <p>{{ service.description }}</p>
+              </div>
+              <span class="service-arrow">-></span>
+            </a>
+          </div>
+        </section>
+
+        <section class="features-shell mt-4">
+          <div class="section-head">
+            <h2>Designed To Stand Out</h2>
+            <small>Operational modules for customers, drivers, and admins</small>
+          </div>
+          <div class="features-grid">
+            <article class="feature-tile" *ngFor="let feature of featureCards">
+              <span class="feature-id">{{ feature.icon }}</span>
+              <h4>{{ feature.title }}</h4>
+              <p>{{ feature.description }}</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="flash-shell mt-4">
+          <img src="assets/rider-dummy.svg" alt="RouteX promo" class="flash-photo" />
           <div>
-            <div class="brand-pill">ROUTEX SUPER APP</div>
-            <h1 class="display-5 fw-bold mb-2 mt-2 hero-headline">One App. Every Journey 🚀</h1>
-            <p class="lead mb-4">Book food, parcel, pickup service, women safety rides, and more with live captain tracking.</p>
-            <div class="d-grid d-md-flex gap-2 flex-wrap">
-              <a routerLink="/travel" class="btn btn-danger btn-lg">{{ t('bookDelivery') }}</a>
-              <a routerLink="/services" class="btn btn-outline-light btn-lg fw-semibold">Explore Services</a>
+            <span class="flash-kicker">Limited User Offer</span>
+            <h3>Unlock 50% OFF on first booking</h3>
+            <p>Apply code <span>FIRST50</span> and move faster from day one.</p>
+            <small>Live update: {{ updatedAt$ | async | date: 'mediumTime' }}</small>
+          </div>
+        </section>
+
+        <section class="operations-shell mt-4" *ngIf="isAdmin">
+          <div class="section-head">
+            <h2>System Integrations</h2>
+            <small>Real-time status across critical platform connectors</small>
+          </div>
+          <div class="integration-grid">
+            <article class="integration-tile" *ngFor="let integration of integrationCards">
+              <div class="integration-top">
+                <span class="integration-icon">{{ integration.icon }}</span>
+                <span
+                  class="integration-state"
+                  [class.live]="integration.statusColor === 'green'"
+                  [class.down]="integration.statusColor === 'red'"
+                >
+                  {{ integration.statusLabel }}
+                </span>
+              </div>
+              <h4>{{ integration.name }}</h4>
+              <p>{{ integration.description }}</p>
+              <small>{{ integration.details }}</small>
+            </article>
+          </div>
+          <small class="integration-time">Checked: {{ integrationCheckedAt | date: 'mediumTime' }}</small>
+        </section>
+
+        <section class="content-grid mt-4">
+          <div class="offers-shell" *ngIf="offers$ | async as offers">
+            <div class="section-head mb-2">
+              <h2>Latest Drops</h2>
+              <small>Updated: {{ updatedAt$ | async | date: 'mediumTime' }}</small>
+            </div>
+            <div class="offer-list">
+              <article class="offer-tile" *ngFor="let offer of offers">
+                <span class="offer-badge">{{ offer.badge }}</span>
+                <h4>{{ offer.title }}</h4>
+                <p>{{ offer.subtitle }}</p>
+                <div class="offer-meta">
+                  <strong>{{ offer.discountPercent }}% OFF</strong>
+                  <span>{{ offer.promoCode }}</span>
+                </div>
+                <small>Ends: {{ offer.expiresAt | date: 'short' }}</small>
+              </article>
             </div>
           </div>
-        </div>
 
-        <div class="hero-metrics">
-          <div class="metric-card">
-            <div class="metric-value">24x7</div>
-            <div class="metric-label">Live Support</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-value">Live</div>
-            <div class="metric-label">Captain Tracking</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-value">OTP</div>
-            <div class="metric-label">Secure Ride Start</div>
-          </div>
-        </div>
-      </section>
-
-      <section class="service-showcase mt-3">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-          <h3 class="mb-0">Popular Services</h3>
-          <small class="text-muted">Tap and start in seconds</small>
-        </div>
-        <div class="service-showcase-grid">
-          <a
-            class="service-showcase-card"
-            *ngFor="let service of serviceHighlights"
-            [routerLink]="service.route"
-            [queryParams]="service.queryParams || null"
-          >
-            <div class="service-card-glow"></div>
-            <div class="service-showcase-icon">{{ service.icon }}</div>
-            <span class="service-showcase-label">{{ service.title }}</span>
-          </a>
-        </div>
-      </section>
-
-      <section class="integration-panel mt-3" *ngIf="isAdmin">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-          <h3 class="mb-0">Integrations</h3>
-          <small class="text-muted">Connected services and platform modules</small>
-        </div>
-        <div class="integration-grid">
-          <div class="integration-card" *ngFor="let integration of integrationCards">
-            <div class="integration-icon">{{ integration.icon }}</div>
-            <div>
-              <h6 class="mb-1">{{ integration.name }}</h6>
-              <p class="mb-1 text-muted small">{{ integration.description }}</p>
-              <span
-                class="integration-status"
-                [class.integration-status-live]="integration.statusColor === 'green'"
-                [class.integration-status-down]="integration.statusColor === 'red'"
-              >
-                {{ integration.statusLabel }}
-              </span>
-              <div class="text-muted small mt-1">{{ integration.details }}</div>
+          <div class="news-shell" *ngIf="news$ | async as news">
+            <div class="section-head mb-2">
+              <h2>News and Alerts</h2>
+              <small>Mobility + delivery feed</small>
+            </div>
+            <div class="news-list">
+              <article class="news-tile" *ngFor="let item of news">
+                <span>{{ item.tag | uppercase }}</span>
+                <div>
+                  <h4>{{ item.title }}</h4>
+                  <p>{{ item.summary }}</p>
+                  <small>{{ item.publishedAt | date: 'medium' }}</small>
+                </div>
+              </article>
             </div>
           </div>
-        </div>
-        <small class="text-muted d-block mt-2">Checked: {{ integrationCheckedAt | date: 'mediumTime' }}</small>
-      </section>
-
-      <section class="feature-panel mt-3">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-          <h3 class="mb-0">Features You Can Use Instantly</h3>
-          <small class="text-muted">Designed for customers, captains, and admins</small>
-        </div>
-        <div class="feature-grid">
-          <div class="feature-card" *ngFor="let feature of featureCards">
-            <div class="feature-icon">{{ feature.icon }}</div>
-            <h5 class="mb-1">{{ feature.title }}</h5>
-            <p class="mb-0 text-muted">{{ feature.description }}</p>
-          </div>
-        </div>
-      </section>
-
-      <section class="flash-banner mt-3">
-        <img src="assets/rider-dummy.svg" alt="Rider promo" class="flash-photo" />
-        <div>
-          <div class="flash-chip">NEW USER OFFER</div>
-          <h4 class="mb-1">Get 50% OFF on your first trip</h4>
-          <p class="mb-2">Apply code <span class="flash-code">FIRST50</span> at checkout.</p>
-          <small class="text-muted">Live update: {{ updatedAt$ | async | date: 'mediumTime' }}</small>
-        </div>
-      </section>
-
-      <div class="row g-3 mt-3" *ngIf="offers$ | async as offers">
-        <div class="col-12 d-flex justify-content-between align-items-center flex-wrap gap-2">
-          <h3 class="mb-0">Latest Offers</h3>
-          <small class="text-muted">Updated: {{ updatedAt$ | async | date: 'mediumTime' }}</small>
-        </div>
-        <div class="col-12 col-md-6 col-xl-3" *ngFor="let offer of offers">
-          <div class="offer-card h-100">
-            <div class="badge-chip">{{ offer.badge }}</div>
-            <div class="discount-pill">{{ offer.discountPercent }}% OFF</div>
-            <h5 class="mb-1">{{ offer.title }}</h5>
-            <p class="text-muted small mb-3">{{ offer.subtitle }}</p>
-            <div class="small mb-1"><strong>Code:</strong> {{ offer.promoCode }}</div>
-            <div class="small text-muted">Ends: {{ offer.expiresAt | date: 'short' }}</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="row g-3 mt-1" *ngIf="news$ | async as news">
-        <div class="col-12">
-          <h3 class="mb-0">News and Discounts</h3>
-        </div>
-        <div class="col-12" *ngFor="let item of news">
-          <div class="news-card">
-            <span class="tag-pill">{{ item.tag | uppercase }}</span>
-            <div>
-              <h6 class="mb-1">{{ item.title }}</h6>
-              <p class="mb-1 text-muted">{{ item.summary }}</p>
-              <small class="text-muted">{{ item.publishedAt | date: 'medium' }}</small>
-            </div>
-          </div>
-        </div>
+        </section>
       </div>
     </div>
   `,
   styles: [
     `
-      .hero-card {
-        background: linear-gradient(145deg, #0b2239 0%, #13416a 55%, #1d5f8f 100%);
-        color: #fff;
-        border: 1px solid rgba(255, 255, 255, 0.2);
+      :host {
+        display: block;
+      }
+
+      .home-page {
+        position: relative;
+        min-height: 100%;
+      }
+
+      .hero-shell,
+      .services-shell,
+      .features-shell,
+      .flash-shell,
+      .operations-shell,
+      .offers-shell,
+      .news-shell {
+        border: 1px solid rgba(255, 255, 255, 0.14);
         border-radius: 20px;
-        padding: 24px;
+        background: linear-gradient(150deg, rgba(10, 14, 23, 0.9) 0%, rgba(17, 24, 38, 0.82) 100%);
+        box-shadow: 0 20px 44px rgba(3, 6, 14, 0.38);
       }
 
-      .hero-brand {
+      .hero-shell {
+        padding: 1.35rem;
         display: grid;
-        grid-template-columns: minmax(104px, 128px) 1fr;
-        gap: 18px;
-        align-items: center;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: 1rem;
+        overflow: hidden;
+        position: relative;
       }
 
-      .hero-brand > div {
-        min-width: 0;
+      .hero-shell::after {
+        content: '';
+        position: absolute;
+        right: -110px;
+        top: -110px;
+        width: 280px;
+        height: 280px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(234, 56, 76, 0.3), transparent 70%);
+        pointer-events: none;
       }
 
-      .hero-logo {
-        width: 100%;
-        max-width: 128px;
-        aspect-ratio: 1 / 1;
-        object-fit: contain;
-        border-radius: 14px;
-        border: 1px solid rgba(255, 255, 255, 0.26);
-        background: rgba(255, 255, 255, 0.08);
-        padding: 6px;
-      }
-
-      .hero-headline {
-        font-size: clamp(2.05rem, 1.3rem + 2.2vw, 3.2rem);
-        line-height: 1.1;
-        letter-spacing: 0.01em;
-      }
-
-      .brand-pill {
+      .hero-kicker {
         display: inline-block;
-        background: rgba(255, 255, 255, 0.16);
         border: 1px solid rgba(255, 255, 255, 0.28);
-        color: #dbeafe;
         border-radius: 999px;
-        padding: 5px 12px;
-        font-size: 11px;
-        font-weight: 700;
+        color: #d5e4ff;
+        padding: 0.22rem 0.75rem;
+        text-transform: uppercase;
+        font-size: 0.74rem;
         letter-spacing: 0.08em;
       }
 
-      .hero-metrics {
-        margin-top: 18px;
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 12px;
+      h1,
+      h2,
+      h3,
+      h4 {
+        margin: 0;
       }
 
-      .metric-card {
-        background: rgba(255, 255, 255, 0.12);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        border-radius: 12px;
-        padding: 12px;
+      .hero-copy h1 {
+        margin-top: 0.6rem;
+        font-size: clamp(2rem, 1.7rem + 2vw, 3.6rem);
+        line-height: 1;
+        color: #ffffff;
       }
 
-      .metric-value {
-        font-size: 22px;
-        font-weight: 700;
+      .hero-copy p {
+        margin: 0.7rem 0 1rem;
+        color: #b6c3d6;
+        max-width: 52ch;
       }
 
-      .metric-label {
-        font-size: 13px;
-        opacity: 0.9;
-      }
-
-      .feature-panel {
-        border: 1px solid rgba(0, 0, 0, 0.08);
-        border-radius: 16px;
-        background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
-        padding: 16px;
-      }
-
-      .service-showcase {
-        border: 1px solid rgba(0, 0, 0, 0.08);
-        border-radius: 16px;
-        background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
-        padding: 16px;
-      }
-
-      .service-showcase-grid {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 14px;
-      }
-
-      .service-showcase-card {
-        text-decoration: none;
-        color: inherit;
-        border: 1px solid rgba(0, 0, 0, 0.07);
-        border-radius: 18px;
-        background: var(--surface);
-        padding: 20px 10px 16px;
+      .hero-actions {
         display: flex;
-        flex-direction: column;
-        align-items: center;
-        text-align: center;
-        gap: 10px;
-        position: relative;
-        overflow: hidden;
-        transition: transform 0.24s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.24s ease, border-color 0.24s ease;
+        gap: 0.65rem;
+        flex-wrap: wrap;
       }
 
-      .service-card-glow {
-        position: absolute;
-        inset: 0;
-        background: radial-gradient(ellipse at 50% 0%, rgba(239, 35, 60, 0.1) 0%, transparent 65%);
-        opacity: 0;
-        transition: opacity 0.28s ease;
-        pointer-events: none;
-        border-radius: inherit;
-      }
-
-      .service-showcase-card:hover {
-        transform: translateY(-6px) scale(1.04);
-        border-color: rgba(239, 35, 60, 0.38);
-        box-shadow: 0 16px 32px rgba(2, 6, 23, 0.12), 0 0 0 1px rgba(239, 35, 60, 0.15);
-      }
-
-      .service-showcase-card:hover .service-card-glow {
-        opacity: 1;
-      }
-
-      .service-showcase-card:active {
-        transform: translateY(-2px) scale(1.01);
-      }
-
-      .service-showcase-icon {
-        width: 64px;
-        height: 64px;
-        border-radius: 18px;
-        background: linear-gradient(145deg, #fff1f2 0%, #ffe4e6 100%);
-        border: 1px solid rgba(239, 35, 60, 0.12);
+      .hero-tags {
+        margin-top: 1rem;
         display: flex;
-        align-items: center;
+        flex-wrap: wrap;
+        gap: 0.45rem;
+      }
+
+      .hero-tags span {
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        color: #e7edf8;
+        padding: 0.25rem 0.62rem;
+        font-size: 0.73rem;
+      }
+
+      .hero-visual {
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 16px;
+        background: rgba(10, 14, 24, 0.6);
+        padding: 0.8rem;
+      }
+
+      .hero-brand-row {
+        display: flex;
         justify-content: center;
-        font-size: 28px;
-        flex-shrink: 0;
-        transition: transform 0.24s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.24s ease;
+        align-items: center;
+        margin-bottom: 0.8rem;
       }
 
-      .service-showcase-card:hover .service-showcase-icon {
-        transform: scale(1.14) rotate(-5deg);
-        box-shadow: 0 8px 20px rgba(239, 35, 60, 0.22);
+      .hero-logo {
+        width: 152px;
+        height: 152px;
+        object-fit: contain;
+        border-radius: 14px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: rgba(255, 255, 255, 0.06);
+        padding: 0.5rem;
       }
 
-      .service-showcase-label {
-        font-size: 11.5px;
-        font-weight: 600;
-        color: #1e293b;
-        line-height: 1.3;
-        text-align: center;
-        word-break: break-word;
-        letter-spacing: 0.01em;
-      }
-
-      .integration-panel {
-        border: 1px solid rgba(0, 0, 0, 0.08);
-        border-radius: 16px;
-        background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
-        padding: 16px;
-      }
-
-      .integration-grid {
+      .metric-grid {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 12px;
+        gap: 0.55rem;
       }
 
-      .integration-card {
-        border: 1px solid rgba(0, 0, 0, 0.08);
+      .metric-grid article {
+        border: 1px solid rgba(255, 255, 255, 0.12);
         border-radius: 12px;
-        padding: 12px;
-        display: grid;
-        grid-template-columns: 38px 1fr;
-        gap: 10px;
-        align-items: start;
-        background: var(--surface);
+        background: rgba(255, 255, 255, 0.05);
+        padding: 0.65rem;
       }
 
-      .integration-icon {
-        width: 38px;
-        height: 38px;
-        border-radius: 10px;
-        background: #ecf2ff;
+      .metric-grid strong {
+        display: block;
+        font-size: 1.2rem;
+        color: #f6f9ff;
+      }
+
+      .metric-grid small {
+        color: #a9b7cb;
+      }
+
+      .section-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.6rem;
+        margin-bottom: 0.95rem;
+      }
+
+      .section-head h2 {
+        color: #f8fbff;
+        font-size: clamp(1.7rem, 1.4rem + 1vw, 2.4rem);
+      }
+
+      .section-head small {
+        color: #9fb1c9;
+      }
+
+      .services-shell,
+      .features-shell,
+      .operations-shell,
+      .offers-shell,
+      .news-shell {
+        padding: 1rem;
+      }
+
+      .services-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.75rem;
+      }
+
+      .service-tile {
+        text-decoration: none;
+        color: inherit;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.03);
+        padding: 0.72rem;
+        display: flex;
+        justify-content: space-between;
+        gap: 0.75rem;
+        align-items: center;
+        transition: transform 0.24s ease, border-color 0.24s ease, box-shadow 0.24s ease;
+      }
+
+      .service-tile:hover {
+        transform: translateY(-2px);
+        border-color: rgba(234, 56, 76, 0.5);
+        box-shadow: 0 14px 30px rgba(234, 56, 76, 0.16);
+      }
+
+      .service-icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 11px;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 16px;
+        background: linear-gradient(145deg, rgba(234, 56, 76, 0.18), rgba(249, 115, 79, 0.12));
+        border: 1px solid rgba(234, 56, 76, 0.32);
+        margin-bottom: 0.36rem;
+        font-size: 1.15rem;
       }
 
-      .integration-status {
-        display: inline-block;
-        border-radius: 999px;
-        padding: 3px 8px;
-        font-size: 11px;
-        font-weight: 700;
-        background: #fff4e5;
-        color: #8a5200;
+      .service-icon-logo {
+        width: 30px;
+        height: 30px;
+        object-fit: contain;
       }
 
-      .integration-status-live {
-        background: #e9f7ef;
-        color: #146c43;
+      .service-main h4 {
+        color: #f9fbff;
+        font-size: 1.45rem;
       }
 
-      .integration-status-down {
-        background: #fdeaea;
-        color: #9f1239;
+      .service-main p {
+        margin: 0;
+        color: #a8b7ca;
+        font-size: 0.86rem;
       }
 
-      .feature-grid {
+      .service-arrow {
+        color: #c4d1e6;
+        font-size: 1.2rem;
+      }
+
+      .features-grid {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 12px;
+        gap: 0.7rem;
       }
 
-      .feature-card {
-        border: 1px solid rgba(0, 0, 0, 0.08);
-        border-radius: 12px;
-        padding: 20px 14px;
-        background: var(--surface);
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        text-align: center;
-        min-height: 160px;
-      }
-
-      .feature-icon {
-        width: 48px;
-        height: 48px;
+      .feature-tile {
+        border: 1px solid rgba(255, 255, 255, 0.14);
         border-radius: 14px;
-        background: #e8f3ff;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 22px;
-        margin-bottom: 12px;
-        flex-shrink: 0;
+        background: rgba(255, 255, 255, 0.04);
+        padding: 0.85rem;
       }
 
-      .flash-banner {
-        border: 1px solid rgba(220, 53, 69, 0.25);
-        border-radius: 16px;
-        padding: 12px;
+      .feature-id {
+        display: inline-block;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.24);
+        color: #f2f7ff;
+        padding: 0.18rem 0.52rem;
+        font-size: 0.72rem;
+        margin-bottom: 0.45rem;
+      }
+
+      .feature-tile h4 {
+        font-size: 1.32rem;
+        color: #f8fbff;
+      }
+
+      .feature-tile p {
+        margin: 0;
+        color: #9fb0c7;
+        font-size: 0.86rem;
+      }
+
+      .flash-shell {
+        padding: 0.8rem;
         display: grid;
         grid-template-columns: 140px 1fr;
-        gap: 12px;
+        gap: 0.8rem;
         align-items: center;
-        background: linear-gradient(120deg, var(--surface-2) 0%, var(--surface) 100%);
       }
 
       .flash-photo {
         width: 100%;
         border-radius: 12px;
-        border: 1px solid rgba(0, 0, 0, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.16);
       }
 
-      .flash-chip {
-        display: inline-block;
-        background: #ef233c;
+      .flash-kicker {
+        border-radius: 999px;
+        background: linear-gradient(120deg, #ea384c 0%, #f9734f 100%);
         color: #fff;
-        border-radius: 999px;
-        padding: 4px 10px;
-        font-size: 11px;
-        font-weight: 700;
-        margin-bottom: 6px;
-      }
-
-      .flash-code {
+        padding: 0.24rem 0.7rem;
         display: inline-block;
-        background: #1d3557;
-        color: #fff;
+        font-size: 0.72rem;
+        text-transform: uppercase;
+      }
+
+      .flash-shell h3 {
+        margin-top: 0.5rem;
+        color: #f9fbff;
+        font-size: 1.7rem;
+      }
+
+      .flash-shell p {
+        color: #a8b7ca;
+        margin: 0.4rem 0;
+      }
+
+      .flash-shell p span {
         border-radius: 999px;
-        padding: 2px 8px;
-        font-size: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.26);
+        color: #f8fcff;
+        padding: 0.1rem 0.45rem;
       }
 
-      .offer-card, .news-card {
-        border: 1px solid rgba(0, 0, 0, 0.08);
-        border-radius: 12px;
-        padding: 12px;
-        background: var(--surface);
+      .flash-shell small,
+      .integration-time {
+        color: #91a5c1;
       }
 
-      .badge-chip {
-        display: inline-block;
-        background: #e9f5ef;
-        color: #1b4332;
+      .integration-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.7rem;
+      }
+
+      .integration-tile {
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.04);
+        padding: 0.75rem;
+      }
+
+      .integration-top {
+        display: flex;
+        justify-content: space-between;
+        gap: 0.45rem;
+        margin-bottom: 0.4rem;
+      }
+
+      .integration-icon {
         border-radius: 999px;
-        padding: 3px 9px;
-        font-size: 11px;
-        font-weight: 700;
-        margin-bottom: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.24);
+        color: #dce7fa;
+        padding: 0.17rem 0.5rem;
+        font-size: 0.72rem;
       }
 
-      .discount-pill {
-        display: inline-block;
-        background: #ef233c;
-        color: #fff;
+      .integration-state {
         border-radius: 999px;
-        padding: 4px 10px;
-        font-size: 11px;
-        font-weight: 800;
-        margin-bottom: 8px;
+        background: rgba(251, 191, 36, 0.2);
+        color: #fde68a;
+        padding: 0.17rem 0.5rem;
+        font-size: 0.72rem;
       }
 
-      .news-card {
+      .integration-state.live {
+        background: rgba(16, 185, 129, 0.2);
+        color: #86efac;
+      }
+
+      .integration-state.down {
+        background: rgba(239, 68, 68, 0.2);
+        color: #fca5a5;
+      }
+
+      .integration-tile h4 {
+        color: #f9fcff;
+        font-size: 1.3rem;
+      }
+
+      .integration-tile p,
+      .integration-tile small {
+        margin: 0;
+        color: #9fb0c8;
+      }
+
+      .content-grid {
+        display: grid;
+        grid-template-columns: 1.05fr 0.95fr;
+        gap: 0.75rem;
+      }
+
+      .offer-list,
+      .news-list {
+        display: grid;
+        gap: 0.65rem;
+      }
+
+      .offer-tile,
+      .news-tile {
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.04);
+        padding: 0.68rem;
+      }
+
+      .offer-badge {
+        border-radius: 999px;
+        border: 1px solid rgba(134, 239, 172, 0.42);
+        color: #bbf7d0;
+        padding: 0.14rem 0.5rem;
+        font-size: 0.72rem;
+      }
+
+      .offer-tile h4,
+      .news-tile h4 {
+        margin-top: 0.4rem;
+        color: #fbfdff;
+        font-size: 1.3rem;
+      }
+
+      .offer-tile p,
+      .news-tile p {
+        margin: 0.15rem 0 0.45rem;
+        color: #9fb0c8;
+      }
+
+      .offer-meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.35rem;
+        margin-bottom: 0.25rem;
+      }
+
+      .offer-meta strong {
+        color: #ffd3c9;
+      }
+
+      .offer-meta span,
+      .news-tile span {
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        color: #dbe8fa;
+        padding: 0.14rem 0.5rem;
+        font-size: 0.72rem;
+      }
+
+      .offer-tile small,
+      .news-tile small {
+        color: #8ea3bf;
+      }
+
+      .news-tile {
         display: grid;
         grid-template-columns: auto 1fr;
-        gap: 12px;
-        align-items: start;
+        gap: 0.55rem;
       }
 
-      .tag-pill {
-        background: #2d6a4f;
-        color: #fff;
-        border-radius: 999px;
-        padding: 2px 8px;
-        font-size: 10px;
-        font-weight: 700;
-      }
-
-      /* ── Mobile small (< 480px) ── */
-      @media (max-width: 479px) {
-        .hero-card {
-          padding: 18px 14px;
-          border-radius: 16px;
-        }
-
-        .hero-brand {
-          grid-template-columns: 1fr;
-        }
-
-        .hero-logo {
-          max-width: 96px;
-        }
-
-        .hero-card .display-5 {
-          font-size: 1.75rem;
-          line-height: 1.2;
-        }
-
-        .hero-card .lead {
-          font-size: 0.9rem;
-          margin-bottom: 0.8rem !important;
-        }
-
-        .hero-card .btn {
-          width: 100%;
-        }
-
-        .hero-metrics {
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 8px;
-        }
-
-        .metric-card {
-          padding: 10px 8px;
-        }
-
-        .metric-value {
-          font-size: 18px;
-        }
-
-        .metric-label {
-          font-size: 11px;
-        }
-
-        .flash-banner {
-          grid-template-columns: 1fr;
-        }
-
-        .feature-grid {
-          grid-template-columns: 1fr;
-        }
-
-        .service-showcase-grid {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 10px;
-        }
-
-        .service-showcase-card {
-          padding: 16px 8px 14px;
-          border-radius: 16px;
-        }
-
-        .service-showcase-icon {
-          width: 52px;
-          height: 52px;
-          font-size: 22px;
-          border-radius: 14px;
-        }
-
-        .service-showcase-label {
-          font-size: 11px;
-        }
-
+      @media (max-width: 1080px) {
+        .hero-shell,
+        .content-grid,
         .integration-grid {
           grid-template-columns: 1fr;
         }
+      }
 
-        .news-card {
+      @media (max-width: 768px) {
+        .hero-shell,
+        .services-shell,
+        .features-shell,
+        .flash-shell,
+        .operations-shell,
+        .offers-shell,
+        .news-shell {
+          border-radius: 16px;
+        }
+
+        .hero-actions .btn {
+          width: 100%;
+        }
+
+        .hero-brand-row {
+          justify-content: center;
+        }
+
+        .hero-logo {
+          width: 136px;
+          height: 136px;
+        }
+
+        .services-grid {
           grid-template-columns: 1fr;
         }
 
-        .discount-pill {
-          margin-top: 6px;
-        }
-      }
-
-      /* ── Mobile medium (480px – 767px) ── */
-      @media (min-width: 480px) and (max-width: 767px) {
-        .service-showcase-grid {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
+        .features-grid {
+          grid-template-columns: 1fr;
         }
 
-        .feature-grid {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
+        .flash-shell {
+          grid-template-columns: 1fr;
         }
 
-        .flash-banner {
-          grid-template-columns: 120px 1fr;
-        }
-      }
-
-      /* ── Tablet (768px – 1199px) ── */
-      @media (min-width: 768px) and (max-width: 1199px) {
-        .service-showcase-grid {
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-        }
-
-        .feature-grid {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-      }
-
-      /* ── Desktop (≥ 1200px) ── */
-      @media (min-width: 1200px) {
-        .service-showcase-grid {
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-        }
-
-        .service-showcase-card {
-          min-height: 230px;
-        }
-
-        .feature-grid {
-          grid-template-columns: repeat(3, minmax(0, 1fr));
+        .news-tile {
+          grid-template-columns: 1fr;
         }
       }
     `
@@ -625,13 +678,15 @@ export class HomeComponent {
 
   readonly serviceHighlights: HomeServiceHighlight[] = [
     {
-      icon: '🍔',
+      icon: '🍱',
+      iconImage: '/assets/lunchbox-logo.svg',
+      iconAlt: 'Food delivery logo',
       title: 'Food Delivery',
       description: 'Nearby restaurants with live prep and captain ETA.',
       route: '/booking/food/hotels'
     },
     {
-      icon: '🛍️',
+      icon: '📦',
       title: 'Pickup Service',
       description: 'Pickup item from any shop to your destination.',
       route: '/travel'
@@ -639,13 +694,13 @@ export class HomeComponent {
     {
       icon: '🛡️',
       title: 'Women Safety Mode',
-      description: 'Top-ranked trusted captains prioritized first.',
+      description: 'Trusted captains and priority routing for secure travel.',
       route: '/travel'
     },
     {
-      icon: '🎒',
+      icon: '🎓',
       title: 'School and Teen Rides',
-      description: 'RouteX school delivery and teen-safe assisted ride options.',
+      description: 'Assisted and parent-safe commute flows for students.',
       route: '/travel'
     }
   ];
@@ -664,22 +719,22 @@ export class HomeComponent {
     {
       icon: '03',
       title: 'Secure Ride Start',
-      description: 'New customers verify OTP once during registration for a safe and trusted flow.'
+      description: 'OTP-based start confirmation keeps every trip protected.'
     },
     {
       icon: '04',
-      title: 'Captain Workflow',
-      description: 'Captains can approve rides, update status, and complete deliveries with clarity.'
+      title: 'Driver Workflow',
+      description: 'Drivers can accept, manage, and complete rides with clear state flow.'
     },
     {
       icon: '05',
-      title: 'Offers and Discounts',
-      description: 'Get dynamic offer cards and flash discount updates directly on the home screen.'
+      title: 'Offers Engine',
+      description: 'Dynamic promotions and campaign drops rendered in real time.'
     },
     {
       icon: '06',
-      title: 'Admin Monitoring',
-      description: 'Admins can monitor active bookings and operations in a dedicated control panel.'
+      title: 'Admin Command Center',
+      description: 'Operations, pricing, payments, and support controls from one console.'
     }
   ];
 
@@ -706,7 +761,7 @@ export class HomeComponent {
       icon: 'OTP',
       key: 'otpDelivery',
       name: 'Customer OTP Verification',
-      description: 'One-time registration verification and secure ride start flow.',
+      description: 'One-time verification and secure ride start flow.',
       statusLabel: 'Checking...',
       statusColor: 'red',
       details: 'Waiting for backend health check.'
@@ -733,10 +788,16 @@ export class HomeComponent {
     private authService: AuthService,
     private router: Router
   ) {
-    // Redirect captain and admin away from customer home page
     const user = this.authService.getCurrentUser();
-    if (user?.role === 'captain') { this.router.navigate(['/captain-profile']); return; }
-    if (user?.role === 'admin') { this.router.navigate(['/admin']); return; }
+    if (user?.role === 'captain') {
+      this.router.navigate(['/captain-profile']);
+      return;
+    }
+    if (user?.role === 'admin') {
+      this.router.navigate(['/admin']);
+      return;
+    }
+
     this.offers$ = offersService.feed$.pipe(map((feed) => feed.offers.slice(0, 4)));
     this.news$ = offersService.feed$.pipe(map((feed) => feed.news.slice(0, 4)));
     this.updatedAt$ = offersService.feed$.pipe(map((feed) => feed.updatedAt));
@@ -833,6 +894,8 @@ interface HomeIntegrationCard {
 
 interface HomeServiceHighlight {
   icon: string;
+  iconImage?: string;
+  iconAlt?: string;
   title: string;
   description: string;
   route: string;
