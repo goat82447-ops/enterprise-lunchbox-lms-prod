@@ -21,13 +21,17 @@ jobs:
     env:
       OPENAI_API_BASE_URL: ${{ vars.OPENAI_API_BASE_URL || 'https://api.openai.com/v1' }}
       OPENAI_MODEL: 'gpt-4o-mini'
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_API_KEY: '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'
     steps:
       - name: Validate OpenAI configuration
         shell: bash
         run: |
           if [ -z "${OPENAI_API_KEY}" ]; then
             echo "Missing required secret: OPENAI_API_KEY" >&2
+            exit 1
+          fi
+          if [ "${OPENAI_API_KEY}" = "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" ]; then
+            echo "Replace OPENAI_API_KEY placeholder with your real key (format: sk-...)." >&2
             exit 1
           fi
           if [ -z "${OPENAI_MODEL}" ]; then
