@@ -211,6 +211,7 @@ jobs:
               '- In Resolution, provide only actions tied to observed evidence.',
               '- Keep response concise and actionable.',
               '- Under "## Proposed Patch", provide a single fenced diff block using ```diff ... ``` for real code changes when confident.',
+              '- The diff must be valid git unified diff syntax (start with "diff --git", include ---/+++ and @@ hunks, and contain no prose inside the fenced block).',
               '- If no safe code change can be made, put exactly "NO_PATCH" under "## Proposed Patch".',
               '',
               'Repository context (files/snippets):',
@@ -329,12 +330,50 @@ jobs:
             exit 0
           fi
 
-          awk '
-            BEGIN { in_patch=0 }
-            /^```diff[[:space:]]*$/ { in_patch=1; next }
-            /^```[[:space:]]*$/ && in_patch==1 { in_patch=0; exit }
-            { if (in_patch==1) print }
-          ' "$REPORT_PATH" > "$PATCH_FILE"
+          # Extract and normalize the fenced patch block to reduce malformed model output.
+          python - "$REPORT_PATH" "$PATCH_FILE" <<'PY'
+          import re
+          import sys
+
+          report_path, patch_path = sys.argv[1], sys.argv[2]
+          text = open(report_path, "r", encoding="utf-8", errors="ignore").read()
+
+          lowered = text.lower()
+          marker = lowered.find("## proposed patch")
+          section = text[marker:] if marker >= 0 else text
+
+          # Capture first fenced block under Proposed Patch (accept any fence language).
+          m = re.search(r"```[^\n]*\n(.*?)\n```", section, flags=re.S)
+          payload = m.group(1) if m else ""
+
+          # Handle explicit no-patch response.
+          if payload.strip().upper() == "NO_PATCH":
+            open(patch_path, "w", encoding="utf-8").write("NO_PATCH\n")
+            sys.exit(0)
+
+          # Normalize line endings and trim leading markdown indentation/quotes.
+          lines = []
+          for raw in payload.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+            line = raw
+            if line.startswith("> "):
+              line = line[2:]
+            if line.startswith("    diff --git ") or line.startswith("\tdiff --git "):
+              line = line.lstrip()
+            lines.append(line)
+
+          # Keep only from first diff header onward.
+          start = None
+          for i, line in enumerate(lines):
+            if line.startswith("diff --git "):
+              start = i
+              break
+          if start is None:
+            open(patch_path, "w", encoding="utf-8").write("")
+            sys.exit(0)
+
+          normalized = "\n".join(lines[start:]).strip()
+          open(patch_path, "w", encoding="utf-8").write(normalized + ("\n" if normalized else ""))
+          PY
 
           if [ ! -s "$PATCH_FILE" ]; then
             echo "No patch block detected in report."
@@ -348,7 +387,7 @@ jobs:
             exit 0
           fi
 
-          if git apply --check "$PATCH_FILE" && git apply --index "$PATCH_FILE"; then
+          if git apply --check --recount "$PATCH_FILE" && git apply --index --recount "$PATCH_FILE"; then
             echo "Patch applied successfully."
             STAGED_FILES="$(git diff --cached --name-only)"
             echo "Staged files:"
@@ -388,6 +427,8 @@ jobs:
               echo "patch_applied=false" >> "$GITHUB_OUTPUT"
             fi
           else
+            echo "First 80 lines of extracted patch for debugging:"
+            sed -n '1,80p' "$PATCH_FILE"
             echo "Patch apply failed; no PR will be created."
             echo "patch_applied=false" >> "$GITHUB_OUTPUT"
           fi
