@@ -1,4 +1,4 @@
-name: Proxima OPEN_ROUTER Healing Agent
+name: PROXIMA 🚀 Healing Agent
 
 on:
   issues:
@@ -41,6 +41,95 @@ jobs:
             exit 1
           fi
 
+      - name: Collect repository context for issue
+        id: collect_context
+        shell: bash
+        env:
+          ISSUE_TITLE: ${{ github.event.issue.title || '' }}
+          ISSUE_BODY: ${{ github.event.issue.body || '' }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || '' }}
+        run: |
+          CONTEXT_DIR="healing-reports"
+          CONTEXT_FILE="${CONTEXT_DIR}/openrouter-context-${ISSUE_NUMBER}.txt"
+          mkdir -p "$CONTEXT_DIR"
+          python - <<'PY'
+          import os, re, subprocess, pathlib
+
+          issue_title = os.environ.get("ISSUE_TITLE", "")
+          issue_body = os.environ.get("ISSUE_BODY", "")
+          issue_number = os.environ.get("ISSUE_NUMBER", "")
+          context_file = pathlib.Path(f"healing-reports/openrouter-context-{issue_number}.txt")
+          context_file.parent.mkdir(parents=True, exist_ok=True)
+
+          text = f"{issue_title}\n{issue_body}".lower()
+          stop = {"with","that","this","from","have","will","when","what","where","there","error","issue","failed","login","user","please","getting","while"}
+          words = [w for w in re.findall(r"[a-z0-9_]{4,}", text) if w not in stop]
+          keywords = []
+          for w in words:
+              if w not in keywords:
+                  keywords.append(w)
+              if len(keywords) >= 10:
+                  break
+
+          candidates = []
+          for kw in keywords:
+              try:
+                  out = subprocess.check_output(
+                      ["rg", "-l", kw, "Frontend/lunchbox-app/src", "Backend/microservices", "Backend/dotnet", "--glob", "!**/node_modules/**"],
+                      text=True,
+                      stderr=subprocess.DEVNULL
+                  )
+                  for p in out.splitlines():
+                      if p and p not in candidates:
+                          candidates.append(p)
+                      if len(candidates) >= 12:
+                          break
+              except Exception:
+                  pass
+              if len(candidates) >= 12:
+                  break
+
+          # fallback for empty matches
+          if not candidates:
+              defaults = [
+                  "Frontend/lunchbox-app/src/app/core/services/auth.service.ts",
+                  "Frontend/lunchbox-app/src/app/features/login/login.component.ts",
+                  "Frontend/lunchbox-app/src/environments/environment.prod.ts",
+                  "Backend/dotnet/AuthService/Program.cs",
+              ]
+              candidates = [p for p in defaults if pathlib.Path(p).exists()]
+
+          parts = []
+          parts.append("=== ISSUE SUMMARY ===")
+          parts.append(issue_title)
+          parts.append(issue_body)
+          parts.append("")
+          parts.append("=== CANDIDATE FILES ===")
+          parts.extend(candidates)
+          parts.append("")
+
+          max_total = 45000
+          total = 0
+          for p in candidates:
+              path = pathlib.Path(p)
+              if not path.exists():
+                  continue
+              try:
+                  content = path.read_text(encoding="utf-8", errors="ignore")
+              except Exception:
+                  continue
+              snippet = "\n".join(content.splitlines()[:220])
+              block = f"=== FILE: {p} ===\n{snippet}\n\n"
+              if total + len(block) > max_total:
+                  break
+              parts.append(block)
+              total += len(block)
+
+          context_file.write_text("\n".join(parts), encoding="utf-8")
+          print(f"Wrote context to {context_file}")
+          PY
+          echo "context_file=$CONTEXT_FILE" >> "$GITHUB_OUTPUT"
+
       - name: Analyze issue and publish diagnostics
         id: analyze
         uses: actions/github-script@v7
@@ -48,6 +137,7 @@ jobs:
           ISSUE_TITLE: ${{ github.event.issue.title || '' }}
           ISSUE_BODY: ${{ github.event.issue.body || '' }}
           ISSUE_NUMBER: ${{ github.event.issue.number || '' }}
+          ISSUE_CONTEXT_FILE: ${{ steps.collect_context.outputs.context_file }}
         with:
           script: |
             const issueNumber = Number(process.env.ISSUE_NUMBER || 0);
@@ -61,6 +151,11 @@ jobs:
             const baseUrl = process.env.OPENROUTER_API_BASE_URL;
             const model = process.env.OPENROUTER_MODEL;
             const apiKey = process.env.OPENROUTER_API_KEY;
+            const contextFile = process.env.ISSUE_CONTEXT_FILE;
+            let repoContext = '';
+            if (contextFile && fs.existsSync(contextFile)) {
+              repoContext = fs.readFileSync(contextFile, 'utf8');
+            }
 
             const prompt = [
               `Issue title: ${process.env.ISSUE_TITLE}`,
@@ -73,13 +168,19 @@ jobs:
               '## Root Cause',
               '## Resolution',
               '## Validation Steps',
+              '## Proposed Patch',
               '',
               'Rules:',
               '- Use only evidence from the issue text/logs.',
               '- Do not guess.',
               '- If exact root cause is not provable from provided details, write "Insufficient evidence for exact root cause" and list exactly what logs/steps are missing.',
               '- In Resolution, provide only actions tied to observed evidence.',
-              '- Keep response concise and actionable.'
+              '- Keep response concise and actionable.',
+              '- Under "## Proposed Patch", provide a single fenced diff block using ```diff ... ``` for real code changes when confident.',
+              '- If no safe code change can be made, put exactly "NO_PATCH" under "## Proposed Patch".',
+              '',
+              'Repository context (files/snippets):',
+              repoContext || 'No repository context available.'
             ].join('\n');
 
             let content = '';
@@ -182,20 +283,65 @@ jobs:
             core.setOutput('report_path', `healing-reports/openrouter-issue-${issueNumber}.md`);
             core.setOutput('analysis_status', apiError ? 'failed' : 'ok');
 
+      - name: Apply OPEN_ROUTER patch if provided
+        id: apply_patch
+        shell: bash
+        run: |
+          REPORT_PATH="healing-reports/openrouter-issue-${{ github.event.issue.number }}.md"
+          PATCH_FILE="openrouter.patch"
+
+          if [ ! -f "$REPORT_PATH" ]; then
+            echo "patch_applied=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          awk '
+            BEGIN { in_patch=0 }
+            /^```diff[[:space:]]*$/ { in_patch=1; next }
+            /^```[[:space:]]*$/ && in_patch==1 { in_patch=0; exit }
+            { if (in_patch==1) print }
+          ' "$REPORT_PATH" > "$PATCH_FILE"
+
+          if [ ! -s "$PATCH_FILE" ]; then
+            echo "No patch block detected in report."
+            echo "patch_applied=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if grep -q "^NO_PATCH$" "$PATCH_FILE"; then
+            echo "Model returned NO_PATCH."
+            echo "patch_applied=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if git apply --check "$PATCH_FILE" && git apply --index "$PATCH_FILE"; then
+            echo "Patch applied successfully."
+            if git diff --cached --name-only | grep -E -v '\.md$' > /dev/null; then
+              echo "Real code changes detected."
+              echo "patch_applied=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "Patch touched only markdown files; skipping PR."
+              git reset
+              echo "patch_applied=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "Patch apply failed; no PR will be created."
+            echo "patch_applied=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Create or update healing PR
-        if: ${{ steps.analyze.outputs.report_path != '' }}
+        if: ${{ steps.apply_patch.outputs.patch_applied == 'true' }}
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: open_router-healing/issue-${{ github.event.issue.number }}
-          title: OPEN_ROUTER healing report for issue #${{ github.event.issue.number }}
+          title: OPEN_ROUTER code fix for issue #${{ github.event.issue.number }}
           body: |
-            Automated OPEN_ROUTER healing analysis report generated from issue details.
+            Automated OPEN_ROUTER generated code changes from issue details.
 
             Closes #${{ github.event.issue.number }}
 
             - Analysis status: `${{ steps.analyze.outputs.analysis_status }}`
             - Report file: `${{ steps.analyze.outputs.report_path }}`
-          commit-message: "chore(healing): add OPEN_ROUTER report for issue #${{ github.event.issue.number }}"
-          add-paths: |
-            healing-reports/openrouter-issue-${{ github.event.issue.number }}.md
+            - Patch applied: `${{ steps.apply_patch.outputs.patch_applied || 'false' }}`
+          commit-message: "fix(healing): apply OPEN_ROUTER patch for issue #${{ github.event.issue.number }}"
