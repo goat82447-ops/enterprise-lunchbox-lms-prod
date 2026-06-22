@@ -1,4 +1,4 @@
-name: OpenAI ChatGPT Healing Agent
+name: OPEN_AI ChatGPT Healing Agent
 
 on:
   issues:
@@ -6,11 +6,12 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   issues: write
+  pull-requests: write
 
 concurrency:
-  group: openai-healing-${{ github.event.issue.number || github.run_id }}
+  group: open_ai-healing-${{ github.event.issue.number || github.run_id }}
   cancel-in-progress: false
 
 jobs:
@@ -23,7 +24,12 @@ jobs:
       OPENAI_MODEL: 'gpt-4o-mini'
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     steps:
-      - name: Validate OpenAI configuration
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate OPEN_AI configuration
         shell: bash
         run: |
           if [ -z "${OPENAI_API_KEY}" ]; then
@@ -36,6 +42,7 @@ jobs:
           fi
 
       - name: Analyze issue and publish diagnostics
+        id: analyze
         uses: actions/github-script@v7
         env:
           ISSUE_TITLE: ${{ github.event.issue.title || '' }}
@@ -49,6 +56,8 @@ jobs:
               return;
             }
 
+            const fs = require('fs');
+            const path = require('path');
             const baseUrl = process.env.OPENAI_API_BASE_URL;
             const model = process.env.OPENAI_MODEL;
             const apiKey = process.env.OPENAI_API_KEY;
@@ -99,24 +108,24 @@ Rules:
 
               if (!response.ok) {
                 const errorText = await response.text();
-                apiError = `OpenAI API request failed (${response.status}): ${errorText.slice(0, 1000)}`;
+                apiError = `OPEN_AI API request failed (${response.status}): ${errorText.slice(0, 1000)}`;
               } else {
                 const data = await response.json();
                 content = data?.choices?.[0]?.message?.content?.trim() || '';
                 if (!content) {
-                  apiError = 'OpenAI API returned no message content.';
+                  apiError = 'OPEN_AI API returned no message content.';
                 }
               }
             } catch (err) {
-              apiError = `OpenAI API request threw an exception: ${String(err).slice(0, 1000)}`;
+              apiError = `OPEN_AI API request threw an exception: ${String(err).slice(0, 1000)}`;
             }
 
             const body = apiError
               ? [
-                  `## OpenAI Healing Agent (${model})`,
+                  `## OPEN_AI Healing Agent (${model})`,
                   '',
                   '### Error Observed',
-                  'OpenAI analysis step failed before generating diagnostics.',
+                  'OPEN_AI analysis step failed before generating diagnostics.',
                   '',
                   '### Root Cause',
                   apiError,
@@ -129,12 +138,26 @@ Rules:
                   '> Automated fallback comment because model analysis failed.'
                 ].join('\n')
               : [
-                  `## OpenAI Healing Agent (${model})`,
+                  `## OPEN_AI Healing Agent (${model})`,
                   '',
                   content,
                   '',
                   '> Generated automatically from the current issue details.'
                 ].join('\n');
+
+            const reportDir = path.join(process.env.GITHUB_WORKSPACE, 'healing-reports');
+            fs.mkdirSync(reportDir, { recursive: true });
+            const reportPath = path.join(reportDir, `issue-${issueNumber}.md`);
+            const reportMarkdown = [
+              `# OPEN_AI Healing Report - Issue #${issueNumber}`,
+              '',
+              `**Issue:** ${process.env.ISSUE_TITLE}`,
+              `**Model:** ${model}`,
+              `**Generated at:** ${new Date().toISOString()}`,
+              '',
+              body
+            ].join('\n');
+            fs.writeFileSync(reportPath, reportMarkdown, 'utf8');
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
@@ -144,13 +167,31 @@ Rules:
             });
 
             await core.summary
-              .addHeading(`OpenAI Healing Agent (${model})`)
-              .addRaw(apiError ? '**Status:** Failed to analyze with OpenAI' : '**Status:** Analysis posted successfully')
+              .addHeading(`OPEN_AI Healing Agent (${model})`)
+              .addRaw(apiError ? '**Status:** Failed to analyze with OPEN_AI' : '**Status:** Analysis posted successfully')
               .addEOL()
               .addEOL()
               .addRaw(apiError ? `**Error:** ${apiError}` : 'Issue comment posted with structured diagnostics.')
               .write();
 
-            if (apiError) {
-              core.setFailed(apiError);
-            }
+            if (apiError) core.warning(apiError);
+            core.setOutput('report_path', `healing-reports/issue-${issueNumber}.md`);
+            core.setOutput('analysis_status', apiError ? 'failed' : 'ok');
+
+      - name: Create or update healing PR
+        if: ${{ steps.analyze.outputs.report_path != '' }}
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: open_ai-healing/issue-${{ github.event.issue.number }}
+          title: OPEN_AI healing report for issue #${{ github.event.issue.number }}
+          body: |
+            Automated healing analysis report generated from issue details.
+
+            Closes #${{ github.event.issue.number }}
+
+            - Analysis status: `${{ steps.analyze.outputs.analysis_status }}`
+            - Report file: `${{ steps.analyze.outputs.report_path }}`
+          commit-message: "chore(healing): add report for issue #${{ github.event.issue.number }}"
+          add-paths: |
+            healing-reports/issue-${{ github.event.issue.number }}.md
