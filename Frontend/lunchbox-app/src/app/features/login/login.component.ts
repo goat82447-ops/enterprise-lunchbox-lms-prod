@@ -45,7 +45,7 @@ import { LoginStartResponse, UserRole } from '../../core/models/delivery.models'
                 <input class="form-control dark-input" [(ngModel)]="username" placeholder="Enter username" />
               </div>
 
-              <div class="mb-3">
+              <div class="mb-4">
                 <label class="form-label section-label">Password</label>
                 <input type="password" class="form-control dark-input" [(ngModel)]="password" placeholder="Enter password" />
               </div>
@@ -53,8 +53,8 @@ import { LoginStartResponse, UserRole } from '../../core/models/delivery.models'
               <button class="btn w-100 guest-fill-btn mb-3" [disabled]="loading" (click)="fillGuestCredentials()" type="button">
                 Continue as Guest (Auto Fill)
               </button>
-
-              <button class="btn btn-danger w-100 auth-primary" [disabled]="loading" (click)="startLogin()">Start Login</button>
+              <!-- Changed btn-danger to btn-dark and removed auth-primary -->
+              <button class="btn btn-dark w-100" [disabled]="loading" (click)="startLogin()">Start Login</button>
               <div *ngIf="errorMessage" class="alert alert-danger mt-3 mb-0">{{ errorMessage }}</div>
             </div>
           </div>
