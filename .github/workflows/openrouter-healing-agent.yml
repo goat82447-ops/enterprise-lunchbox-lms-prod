@@ -316,11 +316,30 @@ jobs:
 
           if git apply --check "$PATCH_FILE" && git apply --index "$PATCH_FILE"; then
             echo "Patch applied successfully."
-            if git diff --cached --name-only | grep -E -v '\.md$' > /dev/null; then
-              echo "Real code changes detected."
+            STAGED_FILES="$(git diff --cached --name-only)"
+            echo "Staged files:"
+            echo "$STAGED_FILES"
+
+            if [ -z "$STAGED_FILES" ]; then
+              echo "No staged files after patch."
+              echo "patch_applied=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            # Only allow patches that touch repo source surfaces.
+            if echo "$STAGED_FILES" | grep -E -v '^(Frontend|Backend)/' > /dev/null; then
+              echo "Patch touches non-source paths; rejecting patch."
+              git reset
+              echo "patch_applied=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            # Require at least one concrete code/config file under Frontend or Backend.
+            if echo "$STAGED_FILES" | grep -E '^Frontend/.*\.(ts|tsx|js|jsx|html|scss|css|json)$|^Backend/.*\.(ts|tsx|js|jsx|json|cs|csproj|sln|props|targets|config)$' > /dev/null; then
+              echo "Real source changes detected."
               echo "patch_applied=true" >> "$GITHUB_OUTPUT"
             else
-              echo "Patch touched only markdown files; skipping PR."
+              echo "Patch does not include valid source file changes; skipping PR."
               git reset
               echo "patch_applied=false" >> "$GITHUB_OUTPUT"
             fi
@@ -345,3 +364,6 @@ jobs:
             - Report file: `${{ steps.analyze.outputs.report_path }}`
             - Patch applied: `${{ steps.apply_patch.outputs.patch_applied || 'false' }}`
           commit-message: "fix(healing): apply OPEN_ROUTER patch for issue #${{ github.event.issue.number }}"
+          add-paths: |
+            Frontend/**
+            Backend/**
