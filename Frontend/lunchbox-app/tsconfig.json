@@ -14,6 +14,10 @@
     "src/**/*.spec.ts",
     "src/playwright.config.ts",
     "src/**/playwright.config.ts",
-    "src/app/healing/**/*.ts"
+    "src/app/healing/**/*.ts",
+    "src/**/healing/**/*.ts",
+    "src/**/*healing*.ts",
+    "src/**/*_ISSUE_*.ts",
+    "src/**/*fallback*issue*.ts"
   ]
 }
