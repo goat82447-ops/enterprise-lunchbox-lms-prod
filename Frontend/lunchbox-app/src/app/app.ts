@@ -1,9 +1,9 @@
 import { Component, HostListener, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink, RouterLinkActive, RouterOutlet, Router } from '@angular/router';
+import { RouterLink, RouterLinkActive, RouterOutlet, Router, NavigationEnd } from '@angular/router';
 import { Observable } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { filter, map } from 'rxjs/operators';
 import { AuthService } from './core/services/auth.service';
 import { NotificationService } from './core/services/notification.service';
 import { AppNotification, AppUser } from './core/models/delivery.models';
@@ -126,7 +126,7 @@ import { SupportService } from './core/services/support.service';
 
             <!-- Quick action button -->
             <li class="nav-item" *ngIf="(isLoggedIn$ | async) && !(isCaptain$ | async)">
-              <button class="btn btn-brand-action btn-sm ms-2" routerLink="/booking" (click)="handleNavLinkClick()">Quick Book</button>
+              <button class="btn btn-brand-action btn-sm ms-2" routerLink="/booking/quickbook" (click)="handleNavLinkClick()">Quick Book</button>
             </li>
 
             <!-- Notification center -->
@@ -607,6 +607,8 @@ import { SupportService } from './core/services/support.service';
 })
 export class AppComponent {
   private readonly appFeedbackSubmittedKey = 'routex_app_feedback_submitted_v1';
+  private readonly routeHistoryLimit = 30;
+  private routeHistory: string[] = [];
   private languageService = inject(LanguageService);
   notificationService = inject(NotificationService);
   private authService = inject(AuthService);
@@ -637,6 +639,14 @@ export class AppComponent {
   appFeedbackNote = '';
   isSubmittingAppFeedback = false;
   readonly feedbackStars = [1, 2, 3, 4, 5];
+
+  constructor() {
+    this.routeHistory = [this.normalizeRoute(this.router.url || '/')];
+
+    this.router.events
+      .pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))
+      .subscribe((event) => this.recordRoute(event.urlAfterRedirects || event.url));
+  }
 
   t(key: string): string {
     return this.languageService.t(key);
@@ -845,6 +855,23 @@ export class AppComponent {
     this.isNetworkDown = false;
   }
 
+  @HostListener('window:popstate')
+  onBrowserBackNavigation(): void {
+    const previousRoute = this.getPreviousRoute();
+    if (!previousRoute) {
+      this.router.navigateByUrl('/home', { replaceUrl: true });
+      return;
+    }
+
+    const currentRoute = this.normalizeRoute(this.router.url);
+    if (previousRoute === currentRoute) {
+      return;
+    }
+
+    this.router.navigateByUrl(previousRoute, { replaceUrl: true });
+    this.routeHistory.pop();
+  }
+
   private shouldShowAppFeedbackWidget(): boolean {
     if (typeof window === 'undefined' || !window.localStorage) {
       return true;
@@ -859,5 +886,32 @@ export class AppComponent {
     }
 
     window.localStorage.setItem(this.appFeedbackSubmittedKey, '1');
+  }
+
+  private recordRoute(url: string): void {
+    const normalized = this.normalizeRoute(url);
+    const last = this.routeHistory[this.routeHistory.length - 1];
+    if (normalized === last) {
+      return;
+    }
+
+    this.routeHistory.push(normalized);
+    if (this.routeHistory.length > this.routeHistoryLimit) {
+      this.routeHistory.splice(0, this.routeHistory.length - this.routeHistoryLimit);
+    }
+  }
+
+  private getPreviousRoute(): string | null {
+    if (this.routeHistory.length < 2) {
+      return null;
+    }
+
+    return this.routeHistory[this.routeHistory.length - 2] ?? null;
+  }
+
+  private normalizeRoute(url: string): string {
+    const [pathWithoutHash] = url.split('#');
+    const [pathWithoutQuery] = pathWithoutHash.split('?');
+    return pathWithoutQuery || '/';
   }
 }
