@@ -33,7 +33,7 @@ jobs:
             });
             
             const hasAnalysis = comments.data.some(c => 
-              c.body.includes('Issue Investigation Assistant') || c.body.includes('Bug Investigation Assistant') || c.body.includes('Issue Analysis')
+              c.body.includes('DALL-E-Investigation Assistant') || c.body.includes('Bug Investigation Assistant') || c.body.includes('Issue Analysis')
             );
             
             if (hasAnalysis) {
@@ -135,7 +135,7 @@ jobs:
 
             // Build developer-focused analysis comment
             const analysisComment = [
-              '## Issue Investigation Assistant',
+              '## DALL-E-Investigation Assistant',
               '',
               '**Quick Triage:**',
               `- Type: ${labelsText}`,
