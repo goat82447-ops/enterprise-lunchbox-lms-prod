@@ -1,0 +1,110 @@
+name: OpenAI ChatGPT Healing Agent
+
+on:
+  issues:
+    types: [opened, reopened, edited]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: openai-healing-${{ github.event.issue.number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  heal-issue:
+    if: github.event_name == 'workflow_dispatch' || github.event.issue.pull_request == null
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      OPENAI_API_BASE_URL: ${{ vars.OPENAI_API_BASE_URL || 'https://api.openai.com/v1' }}
+      OPENAI_MODEL: 'gpt-4o-mini'
+      OPENAI_API_KEY: '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'
+    steps:
+      - name: Validate OpenAI configuration
+        shell: bash
+        run: |
+          if [ -z "${OPENAI_API_KEY}" ]; then
+            echo "Missing required secret: OPENAI_API_KEY" >&2
+            exit 1
+          fi
+          if [ "${OPENAI_API_KEY}" = "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" ]; then
+            echo "Replace OPENAI_API_KEY placeholder with your real key (format: sk-...)." >&2
+            exit 1
+          fi
+          if [ -z "${OPENAI_MODEL}" ]; then
+            echo "Missing required variable: OPENAI_MODEL" >&2
+            exit 1
+          fi
+
+      - name: Analyze issue with ChatGPT and comment
+        uses: actions/github-script@v7
+        env:
+          ISSUE_TITLE: ${{ github.event.issue.title || '' }}
+          ISSUE_BODY: ${{ github.event.issue.body || '' }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || '' }}
+        with:
+          script: |
+            const issueNumber = Number(process.env.ISSUE_NUMBER || 0);
+            if (!issueNumber) {
+              core.info('No issue context available (workflow_dispatch without issue payload). Skipping.');
+              return;
+            }
+
+            const baseUrl = process.env.OPENAI_API_BASE_URL;
+            const model = process.env.OPENAI_MODEL;
+            const apiKey = process.env.OPENAI_API_KEY;
+
+            const prompt = `Issue title: ${process.env.ISSUE_TITLE}\n\nIssue body:\n${process.env.ISSUE_BODY}\n\nGive:\n1. Likely root cause\n2. Fix approach\n3. Missing details to confirm\n4. Risk/impact\nKeep it concise and actionable.`;
+
+            const response = await fetch(`${baseUrl}/chat/completions`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                model,
+                temperature: 0.2,
+                messages: [
+                  {
+                    role: 'system',
+                    content: 'You are a software issue healing assistant for a production repository. Focus on safe, practical guidance.'
+                  },
+                  {
+                    role: 'user',
+                    content: prompt
+                  }
+                ]
+              })
+            });
+
+            if (!response.ok) {
+              const errorText = await response.text();
+              core.setFailed(`OpenAI API request failed (${response.status}): ${errorText.slice(0, 500)}`);
+              return;
+            }
+
+            const data = await response.json();
+            const content = data?.choices?.[0]?.message?.content?.trim();
+            if (!content) {
+              core.setFailed('OpenAI API returned no message content.');
+              return;
+            }
+
+            const body = [
+              `## OpenAI Healing Agent (${model})`,
+              '',
+              content,
+              '',
+              '> Generated automatically from the current issue details.'
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              body
+            });
