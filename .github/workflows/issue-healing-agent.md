@@ -4,7 +4,11 @@ on:
   issues:
     types: [opened, reopened, edited]
 
-permissions: read-all
+permissions:
+  contents: read
+  models: read
+  issues: read
+  pull-requests: read
 
 network: defaults
 
