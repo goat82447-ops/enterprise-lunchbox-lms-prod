@@ -1,0 +1,201 @@
+name: OPEN_ROUTER Healing Agent
+
+on:
+  issues:
+    types: [opened, reopened, edited]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: open_router-healing-${{ github.event.issue.number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  heal-issue:
+    if: github.event_name == 'workflow_dispatch' || github.event.issue.pull_request == null
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      OPENROUTER_API_BASE_URL: ${{ vars.OPENROUTER_API_BASE_URL || 'https://openrouter.ai/api/v1' }}
+      OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL || 'openrouter/auto' }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate OPEN_ROUTER configuration
+        shell: bash
+        run: |
+          if [ -z "${OPENROUTER_API_KEY}" ]; then
+            echo "Missing required secret: OPENROUTER_API_KEY" >&2
+            exit 1
+          fi
+          if [ -z "${OPENROUTER_MODEL}" ]; then
+            echo "Missing required variable: OPENROUTER_MODEL" >&2
+            exit 1
+          fi
+
+      - name: Analyze issue and publish diagnostics
+        id: analyze
+        uses: actions/github-script@v7
+        env:
+          ISSUE_TITLE: ${{ github.event.issue.title || '' }}
+          ISSUE_BODY: ${{ github.event.issue.body || '' }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || '' }}
+        with:
+          script: |
+            const issueNumber = Number(process.env.ISSUE_NUMBER || 0);
+            if (!issueNumber) {
+              core.info('No issue context available (workflow_dispatch without issue payload). Skipping.');
+              return;
+            }
+
+            const fs = require('fs');
+            const path = require('path');
+            const baseUrl = process.env.OPENROUTER_API_BASE_URL;
+            const model = process.env.OPENROUTER_MODEL;
+            const apiKey = process.env.OPENROUTER_API_KEY;
+
+            const prompt = [
+              `Issue title: ${process.env.ISSUE_TITLE}`,
+              '',
+              'Issue body:',
+              `${process.env.ISSUE_BODY}`,
+              '',
+              'Return markdown with these exact headings:',
+              '## Error Observed',
+              '## Root Cause',
+              '## Resolution',
+              '## Validation Steps',
+              '',
+              'Rules:',
+              '- Use only evidence from the issue text/logs.',
+              '- Do not guess.',
+              '- If exact root cause is not provable from provided details, write "Insufficient evidence for exact root cause" and list exactly what logs/steps are missing.',
+              '- In Resolution, provide only actions tied to observed evidence.',
+              '- Keep response concise and actionable.'
+            ].join('\n');
+
+            let content = '';
+            let apiError = '';
+
+            try {
+              const response = await fetch(`${baseUrl}/chat/completions`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${apiKey}`,
+                  'Content-Type': 'application/json',
+                  'HTTP-Referer': `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}`,
+                  'X-Title': `${process.env.GITHUB_REPOSITORY} OPEN_ROUTER Healing`
+                },
+                body: JSON.stringify({
+                  model,
+                  temperature: 0.2,
+                  messages: [
+                    {
+                      role: 'system',
+                      content: 'You are a software issue healing assistant for a production repository. Never invent facts. Provide exact root cause only when evidence is sufficient; otherwise explicitly mark insufficient evidence and request required logs.'
+                    },
+                    {
+                      role: 'user',
+                      content: prompt
+                    }
+                  ]
+                })
+              });
+
+              if (!response.ok) {
+                const errorText = await response.text();
+                apiError = `OPEN_ROUTER API request failed (${response.status}): ${errorText.slice(0, 1000)}`;
+              } else {
+                const data = await response.json();
+                content = data?.choices?.[0]?.message?.content?.trim() || '';
+                if (!content) {
+                  apiError = 'OPEN_ROUTER API returned no message content.';
+                }
+              }
+            } catch (err) {
+              apiError = `OPEN_ROUTER API request threw an exception: ${String(err).slice(0, 1000)}`;
+            }
+
+            const body = apiError
+              ? [
+                  `## OPEN_ROUTER Healing Agent (${model})`,
+                  '',
+                  '### Error Observed',
+                  'OPEN_ROUTER analysis step failed before generating diagnostics.',
+                  '',
+                  '### Root Cause',
+                  apiError,
+                  '',
+                  '### Resolution',
+                  '1. Verify `OPENROUTER_API_KEY` repository secret is valid and active.',
+                  '2. Verify OpenRouter account credits/quota and model access.',
+                  '3. Re-run this workflow after updating key/model.',
+                  '',
+                  '> Automated fallback comment because model analysis failed.'
+                ].join('\n')
+              : [
+                  `## OPEN_ROUTER Healing Agent (${model})`,
+                  '',
+                  content,
+                  '',
+                  '> Generated automatically from the current issue details.'
+                ].join('\n');
+
+            const reportDir = path.join(process.env.GITHUB_WORKSPACE, 'healing-reports');
+            fs.mkdirSync(reportDir, { recursive: true });
+            const reportPath = path.join(reportDir, `openrouter-issue-${issueNumber}.md`);
+            const reportMarkdown = [
+              `# OPEN_ROUTER Healing Report - Issue #${issueNumber}`,
+              '',
+              `**Issue:** ${process.env.ISSUE_TITLE}`,
+              `**Model:** ${model}`,
+              `**Generated at:** ${new Date().toISOString()}`,
+              '',
+              body
+            ].join('\n');
+            fs.writeFileSync(reportPath, reportMarkdown, 'utf8');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              body
+            });
+
+            await core.summary
+              .addHeading(`OPEN_ROUTER Healing Agent (${model})`)
+              .addRaw(apiError ? '**Status:** Failed to analyze with OPEN_ROUTER' : '**Status:** Analysis posted successfully')
+              .addEOL()
+              .addEOL()
+              .addRaw(apiError ? `**Error:** ${apiError}` : 'Issue comment posted with structured diagnostics.')
+              .write();
+
+            if (apiError) core.warning(apiError);
+            core.setOutput('report_path', `healing-reports/openrouter-issue-${issueNumber}.md`);
+            core.setOutput('analysis_status', apiError ? 'failed' : 'ok');
+
+      - name: Create or update healing PR
+        if: ${{ steps.analyze.outputs.report_path != '' }}
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: open_router-healing/issue-${{ github.event.issue.number }}
+          title: OPEN_ROUTER healing report for issue #${{ github.event.issue.number }}
+          body: |
+            Automated OPEN_ROUTER healing analysis report generated from issue details.
+
+            Closes #${{ github.event.issue.number }}
+
+            - Analysis status: `${{ steps.analyze.outputs.analysis_status }}`
+            - Report file: `${{ steps.analyze.outputs.report_path }}`
+          commit-message: "chore(healing): add OPEN_ROUTER report for issue #${{ github.event.issue.number }}"
+          add-paths: |
+            healing-reports/openrouter-issue-${{ github.event.issue.number }}.md
