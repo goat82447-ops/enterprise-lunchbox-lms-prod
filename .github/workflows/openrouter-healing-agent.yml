@@ -99,16 +99,50 @@ jobs:
               ]
               candidates = [p for p in defaults if pathlib.Path(p).exists()]
 
+          # Add high-signal baseline files so model sees project conventions.
+          baseline = [
+              ".github/copilot-instructions.md",
+              "Frontend/lunchbox-app/src/environments/environment.ts",
+              "Frontend/lunchbox-app/src/environments/environment.prod.ts",
+              "Frontend/lunchbox-app/src/app/app.routes.ts",
+              "Frontend/lunchbox-app/package.json",
+              "Backend/microservices/package.json",
+          ]
+          for p in baseline:
+              if pathlib.Path(p).exists() and p not in candidates:
+                  candidates.insert(0, p)
+
+          # Build a compact repository map to improve whole-repo understanding.
+          repo_map = []
+          for root in ["Frontend/lunchbox-app/src", "Backend/microservices", "Backend/dotnet"]:
+              r = pathlib.Path(root)
+              if not r.exists():
+                  continue
+              count = 0
+              for f in r.rglob("*"):
+                  if not f.is_file():
+                      continue
+                  fp = str(f).replace("\\", "/")
+                  if "/node_modules/" in fp or "/obj/" in fp or "/bin/" in fp:
+                      continue
+                  repo_map.append(fp)
+                  count += 1
+                  if count >= 180:
+                      break
+
           parts = []
           parts.append("=== ISSUE SUMMARY ===")
           parts.append(issue_title)
           parts.append(issue_body)
           parts.append("")
+          parts.append("=== REPOSITORY MAP (trimmed) ===")
+          parts.extend(repo_map[:500])
+          parts.append("")
           parts.append("=== CANDIDATE FILES ===")
           parts.extend(candidates)
           parts.append("")
 
-          max_total = 45000
+          max_total = 90000
           total = 0
           for p in candidates:
               path = pathlib.Path(p)
@@ -377,3 +411,4 @@ jobs:
           add-paths: |
             Frontend/**
             Backend/**
+            healing-reports/openrouter-issue-${{ github.event.issue.number }}.md
