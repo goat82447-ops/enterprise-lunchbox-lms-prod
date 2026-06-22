@@ -62,23 +62,25 @@ jobs:
             const model = process.env.OPENAI_MODEL;
             const apiKey = process.env.OPENAI_API_KEY;
 
-            const prompt = `Issue title: ${process.env.ISSUE_TITLE}
-
-Issue body:
-${process.env.ISSUE_BODY}
-
-Return markdown with these exact headings:
-## Error Observed
-## Root Cause
-## Resolution
-## Validation Steps
-
-Rules:
-- Use only evidence from the issue text/logs.
-- Do not guess.
-- If exact root cause is not provable from provided details, write "Insufficient evidence for exact root cause" and list exactly what logs/steps are missing.
-- In Resolution, provide only actions tied to observed evidence.
-- Keep response concise and actionable.`;
+            const prompt = [
+              `Issue title: ${process.env.ISSUE_TITLE}`,
+              '',
+              'Issue body:',
+              `${process.env.ISSUE_BODY}`,
+              '',
+              'Return markdown with these exact headings:',
+              '## Error Observed',
+              '## Root Cause',
+              '## Resolution',
+              '## Validation Steps',
+              '',
+              'Rules:',
+              '- Use only evidence from the issue text/logs.',
+              '- Do not guess.',
+              '- If exact root cause is not provable from provided details, write "Insufficient evidence for exact root cause" and list exactly what logs/steps are missing.',
+              '- In Resolution, provide only actions tied to observed evidence.',
+              '- Keep response concise and actionable.'
+            ].join('\n');
 
             let content = '';
             let apiError = '';
