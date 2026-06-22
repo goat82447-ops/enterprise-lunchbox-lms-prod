@@ -334,6 +334,16 @@ jobs:
               exit 0
             fi
 
+            # Require edits to existing files only (no newly created source files).
+            while IFS= read -r f; do
+              if [ -n "$f" ] && ! git cat-file -e "HEAD:$f" 2>/dev/null; then
+                echo "Patch created new file '$f'; rejecting patch."
+                git reset
+                echo "patch_applied=false" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+            done <<< "$STAGED_FILES"
+
             # Require at least one concrete code/config file under Frontend or Backend.
             if echo "$STAGED_FILES" | grep -E '^Frontend/.*\.(ts|tsx|js|jsx|html|scss|css|json)$|^Backend/.*\.(ts|tsx|js|jsx|json|cs|csproj|sln|props|targets|config)$' > /dev/null; then
               echo "Real source changes detected."
@@ -344,49 +354,12 @@ jobs:
               echo "patch_applied=false" >> "$GITHUB_OUTPUT"
             fi
           else
-            echo "Patch apply failed; fallback PR will be created."
+            echo "Patch apply failed; no PR will be created."
             echo "patch_applied=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Create fallback code stub when patch not applied
-        id: fallback_stub
-        if: ${{ steps.apply_patch.outputs.patch_applied != 'true' }}
-        shell: bash
-        env:
-          ISSUE_TITLE: ${{ github.event.issue.title || '' }}
-        run: |
-          ISSUE_NO="${{ github.event.issue.number }}"
-          TARGET_DIR="Frontend/lunchbox-app/src/app/healing"
-          TARGET_FILE="${TARGET_DIR}/openrouter-fallback-issue-${ISSUE_NO}.ts"
-          ISSUE_TITLE_ESCAPED="${ISSUE_TITLE//\"/\\\"}"
-          mkdir -p "$TARGET_DIR"
-
-          cat > "$TARGET_FILE" <<EOF
-          /**
-           * AUTO-GENERATED FALLBACK STUB
-           * Issue #${ISSUE_NO}: ${ISSUE_TITLE}
-           *
-           * The model analysis did not produce an applicable safe patch.
-           * Replace this stub with an exact code fix in this branch.
-           */
-          export const OPEN_ROUTER_FALLBACK_ISSUE_${ISSUE_NO} = {
-            issueNumber: ${ISSUE_NO},
-            issueTitle: "${ISSUE_TITLE_ESCAPED}",
-            generatedAt: "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            status: "manual-code-fix-required"
-          } as const;
-          EOF
-
-          git add "$TARGET_FILE"
-          if git diff --cached --quiet; then
-            echo "fallback_created=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "fallback_created=true" >> "$GITHUB_OUTPUT"
-            echo "fallback_file=$TARGET_FILE" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Create or update healing PR
-        if: ${{ steps.apply_patch.outputs.patch_applied == 'true' || steps.fallback_stub.outputs.fallback_created == 'true' }}
+        if: ${{ steps.apply_patch.outputs.patch_applied == 'true' }}
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -400,8 +373,6 @@ jobs:
             - Analysis status: `${{ steps.analyze.outputs.analysis_status }}`
             - Report file: `${{ steps.analyze.outputs.report_path }}`
             - Patch applied: `${{ steps.apply_patch.outputs.patch_applied || 'false' }}`
-            - Fallback stub created: `${{ steps.fallback_stub.outputs.fallback_created || 'false' }}`
-            - Fallback file: `${{ steps.fallback_stub.outputs.fallback_file || 'n/a' }}`
           commit-message: "fix(healing): apply OPEN_ROUTER patch for issue #${{ github.event.issue.number }}"
           add-paths: |
             Frontend/**
