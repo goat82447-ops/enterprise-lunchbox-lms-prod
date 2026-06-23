@@ -292,113 +292,77 @@ jobs:
 
       - name: Extract and apply patch
         id: apply_patch
-        shell: bash
+        uses: actions/github-script@v7
         env:
-          REPORT_PATH: healing-reports/openrouter-issue-${{ github.event.issue.number }}.md
-        run: |
-          REPORT_PATH="healing-reports/openrouter-issue-${{ github.event.issue.number }}.md"
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        with:
+          script: |
+            const fs   = require('fs');
+            const { execSync } = require('child_process');
 
-          if [ ! -f "$REPORT_PATH" ]; then
-            echo "⚠️ No report file found at $REPORT_PATH"
-            echo "patch_applied=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+            const issueNumber = process.env.ISSUE_NUMBER;
+            const reportPath  = `healing-reports/openrouter-issue-${issueNumber}.md`;
 
-          echo "📄 Found report at $REPORT_PATH"
+            if (!fs.existsSync(reportPath)) {
+              core.info('⚠️ No report file found');
+              core.setOutput('patch_applied', 'false');
+              return;
+            }
+            core.info(`📄 Found report at ${reportPath}`);
 
-          # Apply search/replace blocks from the report using inline Python
-          CHANGED_FILES=$(python3 << 'PYEOF'
-import re, os, sys
+            const report  = fs.readFileSync(reportPath, 'utf8');
+            const lower   = report.toLowerCase();
+            const idx     = lower.indexOf('## proposed patch');
+            const section = idx >= 0 ? report.slice(idx) : report;
 
-report = open(os.environ['REPORT_PATH'], encoding='utf-8', errors='ignore').read()
+            if (/\bNO_PATCH\b/.test(section.slice(0, 300))) {
+              core.info('⚠️ Model returned NO_PATCH');
+              core.setOutput('patch_applied', 'false');
+              return;
+            }
 
-# Find ## Proposed Patch section
-lower = report.lower()
-idx = lower.find('## proposed patch')
-section = report[idx:] if idx >= 0 else report
+            // Parse FILE / <<<SEARCH ... >>>REPLACE ... >>>END blocks
+            const re = /FILE:\s*([^\n]+)\n<<<SEARCH\n([\s\S]*?)>>>REPLACE\n([\s\S]*?)>>>END/g;
+            let match;
+            const changed = [];
 
-# Check NO_PATCH
-if re.search(r'\bNO_PATCH\b', section[:300]):
-    print('NO_PATCH')
-    sys.exit(0)
+            while ((match = re.exec(section)) !== null) {
+              const filepath = match[1].trim();
+              const search   = match[2];
+              const replace  = match[3];
 
-# Parse FILE / <<<SEARCH ... >>>REPLACE ... >>>END blocks
-pattern = re.compile(
-    r'FILE:\s*([^\n]+)\n<<<SEARCH\n(.*?)>>>REPLACE\n(.*?)>>>END',
-    re.DOTALL
-)
-matches = pattern.findall(section)
+              if (!/^(Frontend|Backend)\//.test(filepath)) {
+                core.warning(`Skipping path outside source dirs: ${filepath}`);
+                continue;
+              }
+              if (!fs.existsSync(filepath)) {
+                core.warning(`File not found: ${filepath}`);
+                continue;
+              }
 
-if not matches:
-    print('NO_BLOCKS')
-    sys.exit(0)
+              let content = fs.readFileSync(filepath, 'utf8');
+              // Normalise line endings then try match
+              const norm = (s) => s.replace(/\r\n/g, '\n');
+              if (!norm(content).includes(norm(search))) {
+                core.warning(`Search text not found in ${filepath}`);
+                continue;
+              }
 
-changed = []
-for filepath, search, replace in matches:
-    filepath = filepath.strip()
-    if not os.path.exists(filepath):
-        print(f'MISSING:{filepath}', flush=True)
-        continue
-    content = open(filepath, encoding='utf-8', errors='ignore').read()
-    if search not in content:
-        # Try stripping trailing whitespace from each line
-        search_stripped = '\n'.join(l.rstrip() for l in search.splitlines())
-        content_stripped = '\n'.join(l.rstrip() for l in content.splitlines())
-        if search_stripped not in content_stripped:
-            print(f'NOT_FOUND:{filepath}', flush=True)
-            continue
-        content = content_stripped
-    new_content = content.replace(search, replace, 1)
-    open(filepath, 'w', encoding='utf-8').write(new_content)
-    print(f'PATCHED:{filepath}', flush=True)
-    changed.append(filepath)
+              const newContent = norm(content).replace(norm(search), replace);
+              fs.writeFileSync(filepath, newContent, 'utf8');
+              execSync(`git add "${filepath}"`);
+              core.info(`✓ Patched and staged: ${filepath}`);
+              changed.push(filepath);
+            }
 
-if not changed:
-    print('NO_CHANGES')
-PYEOF
-)
+            if (changed.length === 0) {
+              core.info('❌ No files were modified');
+              core.setOutput('patch_applied', 'false');
+              return;
+            }
 
-          echo "Patch result: $CHANGED_FILES"
-
-          if echo "$CHANGED_FILES" | grep -q "^NO_PATCH"; then
-            echo "⚠️ Model returned NO_PATCH"
-            echo "patch_applied=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if echo "$CHANGED_FILES" | grep -q "^NO_BLOCKS\|^NO_CHANGES"; then
-            echo "❌ No search/replace blocks found or no files changed"
-            echo "patch_applied=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if echo "$CHANGED_FILES" | grep -q "^MISSING:\|^NOT_FOUND:"; then
-            echo "❌ Could not locate search text in files:"
-            echo "$CHANGED_FILES"
-            echo "patch_applied=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # Stage changed files
-          STAGED_FILES=""
-          while IFS= read -r line; do
-            f="${line#PATCHED:}"
-            [ -z "$f" ] && continue
-            if echo "$f" | grep -qE '^(Frontend|Backend)/'; then
-              git add "$f"
-              STAGED_FILES="$STAGED_FILES $f"
-              echo "✓ Staged: $f"
-            fi
-          done <<< "$CHANGED_FILES"
-
-          if [ -z "$(git diff --cached --name-only)" ]; then
-            echo "❌ No files staged"
-            echo "patch_applied=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          echo "✓ Patch applied successfully"
-          echo "patch_applied=true" >> "$GITHUB_OUTPUT"
+            core.info(`Changed: ${changed.join(', ')}`);
+            core.setOutput('patch_applied', 'true');
 
       - name: Create healing PR
         if: ${{ steps.apply_patch.outputs.patch_applied == 'true' }}
