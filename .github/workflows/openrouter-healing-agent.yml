@@ -1,4 +1,4 @@
-name: PROXIMA 🚀 Healing Agent
+name: MCP+ PROXIMA 🚀 Healing Agent
 
 on:
   issues:
@@ -292,7 +292,7 @@ jobs:
 
             const body = apiError
               ? [
-                  `## OPEN_ROUTER Healing Agent (${model})`,
+                  `## MCP+ PROXIMA 🚀 Healing Agent (${model})`,
                   '',
                   '### Error Observed',
                   'OPEN_ROUTER analysis step failed before generating diagnostics.',
@@ -308,7 +308,7 @@ jobs:
                   '> Automated fallback comment because model analysis failed.'
                 ].join('\n')
               : [
-                  `## OPEN_ROUTER Healing Agent (${model})`,
+                  `## MCP+ PROXIMA 🚀 Healing Agent (${model})`,
                   '',
                   content,
                   '',
@@ -319,7 +319,7 @@ jobs:
             fs.mkdirSync(reportDir, { recursive: true });
             const reportPath = path.join(reportDir, `openrouter-issue-${issueNumber}.md`);
             const reportMarkdown = [
-              `# OPEN_ROUTER Healing Report - Issue #${issueNumber}`,
+              `# MCP+ PROXIMA 🚀 Healing Report - Issue #${issueNumber}`,
               '',
               `**Issue:** ${process.env.ISSUE_TITLE}`,
               `**Model:** ${model}`,
@@ -337,7 +337,7 @@ jobs:
             });
 
             await core.summary
-              .addHeading(`OPEN_ROUTER Healing Agent (${model})`)
+              .addHeading(`MCP+ PROXIMA 🚀 Healing Agent (${model})`)
               .addRaw(apiError ? '**Status:** Failed to analyze with OPEN_ROUTER' : '**Status:** Analysis posted successfully')
               .addEOL()
               .addEOL()
@@ -513,9 +513,9 @@ PY
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: open_router-healing/issue-${{ github.event.issue.number }}
-          title: OPEN_ROUTER code fix for issue #${{ github.event.issue.number }}
+          title: MCP+ PROXIMA 🚀 code fix for issue #${{ github.event.issue.number }}
           body: |
-            Automated OPEN_ROUTER generated code changes from issue details.
+            Automated MCP+ PROXIMA 🚀 generated code changes from issue details.
 
             Closes #${{ github.event.issue.number }}
 
