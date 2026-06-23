@@ -430,7 +430,7 @@ jobs:
              'normalized = "\n".join(lines[start:]).strip()' \
              'open(patch_path, "w", encoding="utf-8").write(normalized + ("\n" if normalized else ""))' \
              'print(f"✓ Normalized patch: {len(normalized)} bytes")' \
-             'print(f"✓ First line: {normalized.splitlines()[0] if normalized else \"EMPTY\"}")' \
+             'print(f"✓ First line: {normalized.splitlines()[0] if normalized else "EMPTY"}")' \
              | python3 - "$REPORT_PATH" "$PATCH_FILE"
 
            if [ ! -s "$PATCH_FILE" ]; then
