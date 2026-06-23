@@ -1,561 +1,469 @@
 #!/usr/bin/env node
 /**
- * MCP Server: Enterprise Lunchbox LMS Project Context
- * 
- * Exposes project structure, file search, and content retrieval
- * for AI-driven healing agents and analysis workflows.
+ * MCP Project Context Server
+ * Reads JSON requests from stdin and writes JSON responses to stdout.
  */
 
 const fs = require('fs');
 const path = require('path');
-const { spawn } = require('child_process');
+const readline = require('readline');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
+const MAX_FILE_SIZE_BYTES = 1_000_000;
+const MAX_RESULTS = 100;
+const DEFAULT_CHUNK_LINES = 100;
+const MAX_CONTEXT_SNIPPET = 500;
 
-class ProjectContextMCPServer {
-  constructor() {
-    this.cache = {
-      fileTree: null,
-      fileContent: {},
-    };
+const IGNORE_DIRS = new Set([
+  '.git',
+  '.github',
+  '.vs',
+  '.vscode',
+  'node_modules',
+  'dist',
+  'build',
+  'coverage',
+  '.next',
+  '.angular',
+  'bin',
+  'obj',
+  'out',
+]);
+
+const SOURCE_TYPES = {
+  'frontend-ts': ['.ts', '.tsx'],
+  'frontend-html': ['.html'],
+  'frontend-scss': ['.scss'],
+  'backend-node-ts': ['.js', '.ts'],
+  'backend-dotnet-cs': ['.cs'],
+  'config-json': ['.json', '.yml', '.yaml', '.env'],
+};
+
+const STOP_WORDS = new Set([
+  'the', 'a', 'an', 'and', 'or', 'for', 'to', 'of', 'in', 'on', 'at', 'is',
+  'are', 'be', 'from', 'with', 'by', 'as', 'this', 'that', 'it', 'its', 'if',
+  'when', 'where', 'what', 'how', 'why', 'was', 'were', 'can', 'could', 'should',
+  'would', 'will', 'not', 'no', 'yes', 'but', 'into', 'out', 'up', 'down',
+  'user', 'users', 'app', 'application', 'issue', 'bug', 'error', 'fix', 'broken'
+]);
+
+const fileCache = new Map();
+
+function send(result) {
+  process.stdout.write(`${JSON.stringify(result)}\n`);
+}
+
+function ok(data) {
+  return { success: true, data };
+}
+
+function fail(error) {
+  return { success: false, error };
+}
+
+function normalizePath(inputPath) {
+  if (!inputPath || typeof inputPath !== 'string') {
+    throw new Error('Invalid path');
   }
 
-  /**
-   * SMART ISSUE ANALYZER: Finds relevant files based on issue description
-   * Searches filenames, paths, AND file contents for keywords
-   */
-  analyzeIssue(issueTitle, issueBody) {
-    const combinedText = `${issueTitle} ${issueBody}`.toLowerCase();
-    const keywords = this.extractKeywords(combinedText);
-    
-    const relevantFiles = this.findRelevantFiles(keywords);
-    const fileContents = relevantFiles.slice(0, 5).map(fp => ({
-      path: fp,
-      content: this.buildRelevantSnippet(fp, keywords),
-    }));
+  const resolved = path.resolve(PROJECT_ROOT, inputPath);
+  const rel = path.relative(PROJECT_ROOT, resolved);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    throw new Error('Path is outside project root');
+  }
+  return resolved;
+}
 
-    return {
-      keywords,
-      relevantFiles: relevantFiles.slice(0, 10),
-      fileContents,
-      analysis: `Found ${relevantFiles.length} files matching keywords: ${keywords.join(', ')}`,
-    };
+function toRelative(absPath) {
+  return path.relative(PROJECT_ROOT, absPath).replace(/\\/g, '/');
+}
+
+function safeReadFile(absPath) {
+  const stat = fs.statSync(absPath);
+  if (!stat.isFile()) {
+    throw new Error('Path is not a file');
+  }
+  if (stat.size > MAX_FILE_SIZE_BYTES) {
+    throw new Error('File too large to read in full');
   }
 
-  /**
-   * Extract meaningful keywords from issue text
-   */
-  extractKeywords(text) {
-    const stopWords = new Set(['the', 'a', 'is', 'are', 'and', 'or', 'to', 'in', 'on', 'at', 'for', 'of', 'with', 'by']);
-    const words = text.match(/\b[a-z0-9_-]+\b/g) || [];
-    return [...new Set(words.filter(w => w.length > 2 && !stopWords.has(w)))].slice(0, 15);
+  if (fileCache.has(absPath)) {
+    return fileCache.get(absPath);
   }
 
-  /**
-   * Find files matching keywords (name + content search)
-   */
-  findRelevantFiles(keywords) {
-    const results = [];
-    const sourceFiles = this.listSourceFilesSync();
+  const content = fs.readFileSync(absPath, 'utf8');
+  fileCache.set(absPath, content);
+  return content;
+}
 
-    for (const filePath of sourceFiles) {
-      let matchScore = 0;
+function walkFiles(dir, results, options = {}) {
+  const { depth = 0, maxDepth = 7 } = options;
+  if (depth > maxDepth) return;
 
-      // Score by filename matches
-      const fileName = path.basename(filePath).toLowerCase();
-      for (const kw of keywords) {
-        if (fileName.includes(kw)) matchScore += 3;
-      }
-
-      // Score by file path matches
-      const dirPath = path.dirname(filePath).toLowerCase();
-      for (const kw of keywords) {
-        if (dirPath.includes(kw)) matchScore += 2;
-      }
-
-      // Score by content matches (fast scan)
-      if (matchScore > 0 || keywords.length === 0) {
-        try {
-          const content = this.getFileContentSync(filePath).toLowerCase().slice(0, 2000);
-          for (const kw of keywords) {
-            const count = (content.match(new RegExp(kw, 'g')) || []).length;
-            matchScore += count;
-          }
-        } catch (e) {
-          // Skip if can't read
-        }
-      }
-
-      if (matchScore > 0) {
-        results.push({ path: this.normalizePath(filePath), score: matchScore });
-      }
-    }
-
-    // Sort by score, return top matches
-    return results.sort((a, b) => b.score - a.score).map(r => r.path);
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
   }
 
-  /**
-   * Get file content synchronously (for analysis)
-   */
-  getFileContentSync(filePath) {
-    const cacheKey = filePath;
-    if (this.cache.fileContent[cacheKey]) {
-      return this.cache.fileContent[cacheKey];
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (IGNORE_DIRS.has(entry.name)) continue;
+      walkFiles(full, results, { depth: depth + 1, maxDepth });
+      continue;
     }
-
-    try {
-      const fullPath = path.join(PROJECT_ROOT, filePath);
-      const stat = fs.statSync(fullPath);
-      
-      if (stat.size > 1024 * 1024) {
-        return ''; // Skip large files
-      }
-
-      const content = fs.readFileSync(fullPath, 'utf8');
-      this.cache.fileContent[cacheKey] = content;
-      return content;
-    } catch (e) {
-      return '';
-    }
-  }
-
-  normalizePath(filePath) {
-    return filePath.replace(/\\/g, '/');
-  }
-
-  buildRelevantSnippet(filePath, keywords) {
-    const content = this.getFileContentSync(filePath);
-    if (!content) return '';
-
-    const snippets = [];
-    const lower = content.toLowerCase();
-
-    const addSlice = (start, end) => {
-      const slice = content.slice(Math.max(0, start), Math.min(content.length, end)).trim();
-      if (slice && !snippets.includes(slice)) {
-        snippets.push(slice);
-      }
-    };
-
-    const decoratorIndex = lower.indexOf('@component({');
-    if (decoratorIndex >= 0) {
-      addSlice(decoratorIndex, decoratorIndex + 5000);
-    }
-
-    const styleIndex = lower.indexOf('styles:');
-    if (styleIndex >= 0) {
-      addSlice(styleIndex, styleIndex + 3000);
-    }
-
-    const templateIndex = lower.indexOf('template:');
-    if (templateIndex >= 0) {
-      addSlice(templateIndex, templateIndex + 3000);
-    }
-
-    for (const keyword of keywords) {
-      const matchIndex = lower.indexOf(keyword.toLowerCase());
-      if (matchIndex >= 0) {
-        addSlice(matchIndex - 600, matchIndex + 1800);
-      }
-    }
-
-    if (snippets.length === 0) {
-      addSlice(0, 4000);
-    }
-
-    return snippets.join('\n\n--- SNIPPET BREAK ---\n\n').slice(0, 9000);
-  }
-
-  /**
-   * List source files synchronously (for analysis)
-   */
-  listSourceFilesSync() {
-    const sourceFiles = [];
-    const extensions = ['.ts', '.tsx', '.js', '.jsx', '.html', '.scss', '.css', '.json', '.cs'];
-
-    const walkDir = (dir) => {
-      try {
-        const files = fs.readdirSync(dir, { withFileTypes: true });
-        for (const file of files) {
-          if (this.shouldIgnore(file.name, dir)) continue;
-          const fullPath = path.join(dir, file.name);
-          if (file.isDirectory()) {
-            walkDir(fullPath);
-          } else if (file.isFile()) {
-            const ext = path.extname(file.name);
-            if (extensions.includes(ext)) {
-              sourceFiles.push(this.normalizePath(path.relative(PROJECT_ROOT, fullPath)));
-            }
-          }
-        }
-      } catch (e) {
-        // Skip directories we can't read
-      }
-    };
-
-    walkDir(PROJECT_ROOT);
-    return sourceFiles.slice(0, 500); // Limit to 500 files for performance
-  }
-
-  /**
-   * Build a hierarchical file tree of the project
-   */
-  buildFileTree(dir = PROJECT_ROOT, depth = 0, maxDepth = 4) {
-    if (depth > maxDepth) return [];
-
-    const entries = [];
-    try {
-      const files = fs.readdirSync(dir, { withFileTypes: true });
-
-      for (const file of files) {
-        if (this.shouldIgnore(file.name, dir)) continue;
-
-        const fullPath = path.join(dir, file.name);
-        const relPath = path.relative(PROJECT_ROOT, fullPath);
-
-        if (file.isDirectory()) {
-          entries.push({
-            type: 'directory',
-            name: file.name,
-            path: relPath,
-            children: this.buildFileTree(fullPath, depth + 1, maxDepth),
-          });
-        } else if (file.isFile()) {
-          entries.push({
-            type: 'file',
-            name: file.name,
-            path: relPath,
-            size: fs.statSync(fullPath).size,
-            ext: path.extname(file.name),
-          });
-        }
-      }
-    } catch (err) {
-      console.error(`[MCP] Error reading directory ${dir}:`, err.message);
-    }
-
-    return entries.sort((a, b) => {
-      if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
-      return a.name.localeCompare(b.name);
-    });
-  }
-
-  /**
-   * Determine if file/folder should be ignored
-   */
-  shouldIgnore(name, dir) {
-    const ignoreDirs = new Set([
-      'node_modules', 'dist', 'build', 'out-tsc', '.next', '.vercel', '.git',
-      'obj', 'bin', '.vs', 'DotnetRoutix-Server', 'ZIPTen', '.vs',
-    ]);
-
-    const ignoreFiles = new Set([
-      '.DS_Store', '.env', '.env.local', '.env.*.local', '*.log',
-      'playwright-report', 'test-results', '.gitattributes',
-    ]);
-
-    if (ignoreDirs.has(name)) return true;
-    if (ignoreFiles.has(name)) return true;
-    if (name.startsWith('.')) return true;
-
-    return false;
-  }
-
-  /**
-   * Search files by keyword/pattern
-   */
-  searchFiles(keyword, fileExtensions = null) {
-    const results = [];
-    const visited = new Set();
-
-    const search = (dir, depth = 0) => {
-      if (depth > 4 || visited.has(dir)) return;
-      visited.add(dir);
-
-      try {
-        const files = fs.readdirSync(dir, { withFileTypes: true });
-
-        for (const file of files) {
-          if (this.shouldIgnore(file.name, dir)) continue;
-
-          const fullPath = path.join(dir, file.name);
-
-          if (file.isDirectory()) {
-            search(fullPath, depth + 1);
-          } else if (file.isFile()) {
-            const relPath = path.relative(PROJECT_ROOT, fullPath);
-
-            // Filter by extension if provided
-            if (fileExtensions && !fileExtensions.includes(path.extname(file.name))) {
-              continue;
-            }
-
-            // Search filename
-            if (file.name.toLowerCase().includes(keyword.toLowerCase())) {
-              results.push({
-                type: 'file',
-                path: relPath,
-                match: 'filename',
-              });
-              continue;
-            }
-
-            // Search file content (only for source files)
-            const ext = path.extname(file.name);
-            if (['.ts', '.tsx', '.js', '.jsx', '.json', '.md', '.cs'].includes(ext)) {
-              try {
-                const content = fs.readFileSync(fullPath, 'utf8');
-                if (content.toLowerCase().includes(keyword.toLowerCase())) {
-                  results.push({
-                    type: 'file',
-                    path: relPath,
-                    match: 'content',
-                  });
-                }
-              } catch (err) {
-                // Ignore read errors for large binary files
-              }
-            }
-          }
-        }
-      } catch (err) {
-        console.error(`[MCP] Error searching in ${dir}:`, err.message);
-      }
-    };
-
-    search(PROJECT_ROOT);
-    return results.slice(0, 100); // Limit results
-  }
-
-  /**
-   * Get file content with caching
-   */
-  getFileContent(relPath) {
-    const fullPath = path.resolve(PROJECT_ROOT, relPath);
-
-    // Security: ensure path is within project
-    if (!fullPath.startsWith(PROJECT_ROOT)) {
-      throw new Error('Access denied: path outside project root');
-    }
-
-    if (!fs.existsSync(fullPath)) {
-      throw new Error(`File not found: ${relPath}`);
-    }
-
-    if (this.cache.fileContent[relPath]) {
-      return this.cache.fileContent[relPath];
-    }
-
-    try {
-      const content = fs.readFileSync(fullPath, 'utf8');
-      this.cache.fileContent[relPath] = content;
-
-      // Clear cache if file is too large (> 1MB)
-      if (content.length > 1024 * 1024) {
-        delete this.cache.fileContent[relPath];
-        return { content: '(File too large, use streaming)', truncated: true };
-      }
-
-      return content;
-    } catch (err) {
-      throw new Error(`Cannot read file: ${err.message}`);
-    }
-  }
-
-  /**
-   * Get file content in chunks (for large files)
-   */
-  getFileContentChunked(relPath, startLine = 0, lineCount = 100) {
-    const fullPath = path.resolve(PROJECT_ROOT, relPath);
-
-    if (!fullPath.startsWith(PROJECT_ROOT)) {
-      throw new Error('Access denied: path outside project root');
-    }
-
-    if (!fs.existsSync(fullPath)) {
-      throw new Error(`File not found: ${relPath}`);
-    }
-
-    try {
-      const content = fs.readFileSync(fullPath, 'utf8');
-      const lines = content.split('\n');
-      const start = Math.max(0, startLine);
-      const end = Math.min(lines.length, start + lineCount);
-      const chunk = lines.slice(start, end).join('\n');
-
-      return {
-        path: relPath,
-        startLine: start,
-        endLine: end,
-        totalLines: lines.length,
-        content: chunk,
-      };
-    } catch (err) {
-      throw new Error(`Cannot read file: ${err.message}`);
-    }
-  }
-
-  /**
-   * List Frontend/Backend source files by type
-   */
-  listSourcesByType(type) {
-    const typeMap = {
-      'frontend-ts': /Frontend\/lunchbox-app\/src\/.*\.ts$/,
-      'frontend-html': /Frontend\/lunchbox-app\/src\/.*\.html$/,
-      'frontend-scss': /Frontend\/lunchbox-app\/src\/.*\.scss$/,
-      'backend-node-ts': /Backend\/microservices\/.*\.ts$/,
-      'backend-dotnet-cs': /Backend\/dotnet\/.*\.cs$/,
-      'config-json': /(package\.json|tsconfig.*\.json|\.json)$/,
-    };
-
-    if (!typeMap[type]) {
-      throw new Error(`Unknown source type: ${type}`);
-    }
-
-    const results = [];
-    const visited = new Set();
-
-    const scan = (dir, depth = 0) => {
-      if (depth > 5 || visited.has(dir)) return;
-      visited.add(dir);
-
-      try {
-        const files = fs.readdirSync(dir, { withFileTypes: true });
-        for (const file of files) {
-          if (this.shouldIgnore(file.name, dir)) continue;
-
-          const fullPath = path.join(dir, file.name);
-          const relPath = path.relative(PROJECT_ROOT, fullPath).replace(/\\/g, '/');
-
-          if (file.isDirectory()) {
-            scan(fullPath, depth + 1);
-          } else if (file.isFile() && typeMap[type].test(relPath)) {
-            results.push({
-              path: relPath,
-              size: fs.statSync(fullPath).size,
-            });
-          }
-        }
-      } catch (err) {
-        // Ignore errors
-      }
-    };
-
-    scan(PROJECT_ROOT);
-    return results.slice(0, 200);
-  }
-
-  /**
-   * Get project summary (counts, key services, etc)
-   */
-  getProjectSummary() {
-    const summary = {
-      frontend: this.listSourcesByType('frontend-ts').length,
-      backend_node: this.listSourcesByType('backend-node-ts').length,
-      backend_dotnet: this.listSourcesByType('backend-dotnet-cs').length,
-      config_files: this.listSourcesByType('config-json').length,
-      generated_at: new Date().toISOString(),
-    };
-
-    // Count routes
-    try {
-      const routesPath = path.join(PROJECT_ROOT, 'Frontend/lunchbox-app/src/app/app.routes.ts');
-      if (fs.existsSync(routesPath)) {
-        const content = fs.readFileSync(routesPath, 'utf8');
-        const routeMatches = content.match(/path:\s*['"`]([^'"`]+)['"`]/g) || [];
-        summary.routes = routeMatches.length;
-      }
-    } catch (err) {
-      // Ignore
-    }
-
-    return summary;
-  }
-
-  /**
-   * Get list of key project files for healing context
-   */
-  getHealingContextFiles() {
-    return [
-      'Frontend/lunchbox-app/src/app/app.ts',
-      'Frontend/lunchbox-app/src/app/app.routes.ts',
-      'Frontend/lunchbox-app/src/environments/environment.ts',
-      'Frontend/lunchbox-app/src/environments/environment.prod.ts',
-      'Frontend/lunchbox-app/package.json',
-      'Backend/microservices/package.json',
-      '.github/workflows/openrouter-healing-agent.yml',
-      '.github/copilot-instructions.md',
-    ].filter(p => fs.existsSync(path.join(PROJECT_ROOT, p)));
-  }
-
-  /**
-   * Serve MCP protocol requests
-   */
-  handle(method, params) {
-    try {
-      switch (method) {
-        case 'project:summary':
-          return { success: true, data: this.getProjectSummary() };
-
-        case 'project:tree':
-          return { success: true, data: this.buildFileTree() };
-
-        case 'project:search':
-          if (!params.keyword) throw new Error('Missing keyword parameter');
-          const extensions = params.extensions ? params.extensions.split(',') : null;
-          return { success: true, data: this.searchFiles(params.keyword, extensions) };
-
-        case 'file:content':
-          if (!params.path) throw new Error('Missing path parameter');
-          return { success: true, data: this.getFileContent(params.path) };
-
-        case 'file:chunked':
-          if (!params.path) throw new Error('Missing path parameter');
-          const startLine = parseInt(params.startLine || '0', 10);
-          const lineCount = parseInt(params.lineCount || '100', 10);
-          return { success: true, data: this.getFileContentChunked(params.path, startLine, lineCount) };
-
-        case 'sources:list':
-          if (!params.type) throw new Error('Missing type parameter');
-          return { success: true, data: this.listSourcesByType(params.type) };
-
-        case 'healing:context':
-          return { success: true, data: this.getHealingContextFiles() };
-
-        case 'issue:analyze':
-          if (!params.title && !params.body) throw new Error('Missing title or body parameter');
-          return { success: true, data: this.analyzeIssue(params.title || '', params.body || '') };
-
-        default:
-          throw new Error(`Unknown method: ${method}`);
-      }
-    } catch (err) {
-      return {
-        success: false,
-        error: err.message,
-      };
+    if (entry.isFile()) {
+      results.push(full);
     }
   }
 }
 
-// Initialize and expose server
-const server = new ProjectContextMCPServer();
+function listAllFiles() {
+  const files = [];
+  walkFiles(PROJECT_ROOT, files, { maxDepth: 8 });
+  return files;
+}
 
-// Simple stdio-based protocol handler
-process.stdin.on('data', (chunk) => {
-  const lines = chunk.toString().split('\n');
-  for (const line of lines) {
-    if (!line.trim()) continue;
+function startsWithAny(input, prefixes) {
+  return prefixes.some((p) => input.startsWith(p));
+}
 
-    try {
-      const req = JSON.parse(line);
-      const res = server.handle(req.method, req.params || {});
-      console.log(JSON.stringify(res));
-    } catch (err) {
-      console.log(JSON.stringify({ success: false, error: err.message }));
+function classifyBySurface(relPath) {
+  if (startsWithAny(relPath, ['Frontend/'])) return 'frontend';
+  if (startsWithAny(relPath, ['Backend/microservices/'])) return 'backend_node';
+  if (startsWithAny(relPath, ['Backend/dotnet/'])) return 'backend_dotnet';
+  return 'other';
+}
+
+function handleProjectSummary() {
+  const files = listAllFiles();
+  const summary = {
+    frontend: 0,
+    backend_node: 0,
+    backend_dotnet: 0,
+    config_files: 0,
+    routes: 0,
+    generated_at: new Date().toISOString(),
+  };
+
+  for (const absPath of files) {
+    const rel = toRelative(absPath);
+    const lower = rel.toLowerCase();
+    const surface = classifyBySurface(rel);
+    if (surface === 'frontend') summary.frontend += 1;
+    if (surface === 'backend_node') summary.backend_node += 1;
+    if (surface === 'backend_dotnet') summary.backend_dotnet += 1;
+    if (lower.endsWith('.json') || lower.endsWith('.yml') || lower.endsWith('.yaml') || lower.endsWith('.env')) {
+      summary.config_files += 1;
+    }
+    if (lower.includes('route') || lower.includes('routes')) {
+      summary.routes += 1;
     }
   }
-});
 
-console.error('[MCP] Project Context Server started. Listening on stdin...');
+  return ok(summary);
+}
+
+function parseExtensions(extensions) {
+  if (!extensions) return null;
+  if (Array.isArray(extensions)) {
+    return extensions.map((e) => e.trim().toLowerCase()).filter(Boolean);
+  }
+  if (typeof extensions === 'string') {
+    return extensions.split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
+  }
+  return null;
+}
+
+function snippetAround(content, keyword, maxLen = 180) {
+  const idx = content.toLowerCase().indexOf(keyword.toLowerCase());
+  if (idx < 0) return content.slice(0, maxLen);
+  const start = Math.max(0, idx - Math.floor(maxLen / 3));
+  const end = Math.min(content.length, start + maxLen);
+  return content.slice(start, end).replace(/\s+/g, ' ').trim();
+}
+
+function handleProjectSearch(params = {}) {
+  const keyword = (params.keyword || '').trim();
+  if (!keyword) {
+    return fail('Missing required parameter: keyword');
+  }
+
+  const extensions = parseExtensions(params.extensions);
+  const files = listAllFiles();
+  const needle = keyword.toLowerCase();
+  const matches = [];
+
+  for (const absPath of files) {
+    const rel = toRelative(absPath);
+    const relLower = rel.toLowerCase();
+    const ext = path.extname(relLower);
+    if (extensions && !extensions.includes(ext)) continue;
+
+    let score = 0;
+    let contentMatch = '';
+
+    if (path.basename(relLower).includes(needle)) score += 8;
+    if (relLower.includes(needle)) score += 4;
+
+    try {
+      const stat = fs.statSync(absPath);
+      if (stat.size <= MAX_FILE_SIZE_BYTES) {
+        const content = safeReadFile(absPath);
+        if (content.toLowerCase().includes(needle)) {
+          score += 6;
+          contentMatch = snippetAround(content, needle);
+        }
+      }
+    } catch {
+      // Keep search resilient across mixed files.
+    }
+
+    if (score > 0) {
+      matches.push({
+        path: rel,
+        score,
+        match: contentMatch || rel,
+      });
+    }
+  }
+
+  matches.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
+
+  return ok(matches.slice(0, MAX_RESULTS));
+}
+
+function handleFileContent(params = {}) {
+  const absPath = normalizePath(params.path);
+  const content = safeReadFile(absPath);
+  return ok({
+    path: toRelative(absPath),
+    content,
+  });
+}
+
+function handleFileChunked(params = {}) {
+  const absPath = normalizePath(params.path);
+  const content = safeReadFile(absPath);
+  const lines = content.split(/\r?\n/);
+  const startLine = Number.isInteger(params.startLine) ? params.startLine : Number(params.startLine || 0);
+  const lineCount = Number.isInteger(params.lineCount) ? params.lineCount : Number(params.lineCount || DEFAULT_CHUNK_LINES);
+  const safeStart = Math.max(0, startLine);
+  const safeCount = Math.max(1, Math.min(1000, lineCount));
+  const end = Math.min(lines.length, safeStart + safeCount);
+  const chunk = lines.slice(safeStart, end).join('\n');
+
+  return ok({
+    path: toRelative(absPath),
+    startLine: safeStart,
+    lineCount: safeCount,
+    totalLines: lines.length,
+    content: chunk,
+  });
+}
+
+function filterByType(relPath, type) {
+  const lower = relPath.toLowerCase();
+  const exts = SOURCE_TYPES[type];
+  if (!exts) return false;
+
+  if (type.startsWith('frontend-') && !lower.startsWith('frontend/')) return false;
+  if (type.startsWith('backend-node-') && !lower.startsWith('backend/microservices/')) return false;
+  if (type.startsWith('backend-dotnet-') && !lower.startsWith('backend/dotnet/')) return false;
+
+  return exts.some((ext) => lower.endsWith(ext));
+}
+
+function handleSourcesList(params = {}) {
+  const type = params.type;
+  if (!type || !SOURCE_TYPES[type]) {
+    return fail(`Unsupported source type: ${type || '(missing)'}`);
+  }
+
+  const files = listAllFiles()
+    .map(toRelative)
+    .filter((rel) => filterByType(rel, type))
+    .sort((a, b) => a.localeCompare(b))
+    .slice(0, 200);
+
+  return ok(files);
+}
+
+function extractKeywords(title, body) {
+  const text = `${title || ''} ${body || ''}`.toLowerCase();
+  const tokens = text.match(/[a-z0-9][a-z0-9_-]{2,}/g) || [];
+  const counts = new Map();
+
+  for (const raw of tokens) {
+    const token = raw.replace(/[_-]+/g, '');
+    if (!token || STOP_WORDS.has(token)) continue;
+    counts.set(token, (counts.get(token) || 0) + 1);
+  }
+
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([k]) => k)
+    .slice(0, 20);
+}
+
+function analyzeFileForKeywords(absPath, relPath, keywords) {
+  const relLower = relPath.toLowerCase();
+  let score = 0;
+  const hitKeywords = new Set();
+  let content = '';
+
+  for (const kw of keywords) {
+    if (path.basename(relLower).includes(kw)) {
+      score += 10;
+      hitKeywords.add(kw);
+    } else if (relLower.includes(kw)) {
+      score += 5;
+      hitKeywords.add(kw);
+    }
+  }
+
+  try {
+    const stat = fs.statSync(absPath);
+    if (stat.size <= MAX_FILE_SIZE_BYTES) {
+      content = safeReadFile(absPath);
+      const lower = content.toLowerCase();
+      for (const kw of keywords) {
+        const firstIdx = lower.indexOf(kw);
+        if (firstIdx >= 0) {
+          score += 6;
+          hitKeywords.add(kw);
+        }
+      }
+    }
+  } catch {
+    // Skip unreadable content.
+  }
+
+  return { score, hitKeywords: [...hitKeywords], content };
+}
+
+function handleIssueAnalyze(params = {}) {
+  const title = params.title || '';
+  const body = params.body || '';
+  const keywords = extractKeywords(title, body);
+
+  if (keywords.length === 0) {
+    return ok({
+      keywords: [],
+      relevantFiles: [],
+      fileContents: [],
+      analysis: 'No meaningful keywords extracted from issue title/body.',
+    });
+  }
+
+  const candidates = listAllFiles()
+    .filter((absPath) => {
+      const rel = toRelative(absPath).toLowerCase();
+      return (
+        rel.endsWith('.ts') ||
+        rel.endsWith('.tsx') ||
+        rel.endsWith('.js') ||
+        rel.endsWith('.cs') ||
+        rel.endsWith('.html') ||
+        rel.endsWith('.scss') ||
+        rel.endsWith('.json') ||
+        rel.endsWith('.yml') ||
+        rel.endsWith('.yaml')
+      );
+    });
+
+  const scored = [];
+  for (const absPath of candidates) {
+    const rel = toRelative(absPath);
+    const { score, hitKeywords, content } = analyzeFileForKeywords(absPath, rel, keywords);
+    if (score <= 0) continue;
+
+    scored.push({
+      path: rel,
+      score,
+      hitKeywords,
+      content,
+    });
+  }
+
+  scored.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
+  const top = scored.slice(0, 10);
+  const fileContents = top.slice(0, 5).map((item) => ({
+    path: item.path,
+    content: item.content.slice(0, MAX_CONTEXT_SNIPPET),
+  }));
+
+  return ok({
+    keywords,
+    relevantFiles: top.map((item) => item.path),
+    fileContents,
+    analysis: `Found ${top.length} files matching keywords: ${keywords.join(', ')}`,
+  });
+}
+
+function existingPath(rel) {
+  const abs = path.resolve(PROJECT_ROOT, rel);
+  return fs.existsSync(abs);
+}
+
+function handleHealingContext() {
+  const preferred = [
+    '.github/copilot-instructions.md',
+    'Frontend/lunchbox-app/src/app/app.routes.ts',
+    'Frontend/lunchbox-app/package.json',
+    'Backend/microservices/package.json',
+    'Backend/dotnet/AuthService/Program.cs',
+    '.github/workflows/openrouter-healing-agent.yml',
+  ];
+
+  const files = preferred.filter(existingPath);
+  return ok(files);
+}
+
+function handleRequest(rawRequest) {
+  const method = rawRequest?.method;
+  const params = rawRequest?.params || {};
+
+  switch (method) {
+    case 'project:summary':
+      return handleProjectSummary();
+    case 'project:search':
+      return handleProjectSearch(params);
+    case 'file:content':
+      return handleFileContent(params);
+    case 'file:chunked':
+      return handleFileChunked(params);
+    case 'sources:list':
+      return handleSourcesList(params);
+    case 'issue:analyze':
+      return handleIssueAnalyze(params);
+    case 'healing:context':
+      return handleHealingContext();
+    default:
+      return fail(`Unsupported method: ${method || '(missing)'}`);
+  }
+}
+
+function main() {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    crlfDelay: Infinity,
+  });
+
+  rl.on('line', (line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+
+    try {
+      const req = JSON.parse(trimmed);
+      const result = handleRequest(req);
+      send(result);
+    } catch (err) {
+      send(fail(`Invalid request: ${err.message}`));
+    }
+  });
+}
+
+main();
