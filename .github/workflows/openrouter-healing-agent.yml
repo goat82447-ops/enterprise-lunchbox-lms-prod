@@ -45,6 +45,13 @@ jobs:
           ISSUE_BODY: ${{ github.event.issue.body || '' }}
           ISSUE_NUMBER: ${{ github.event.issue.number || '' }}
         run: |
+          # Skip context collection when no issue payload (e.g. workflow_dispatch)
+          if [ -z "${ISSUE_NUMBER}" ]; then
+            echo "⚠️ No issue number — skipping context collection"
+            echo "context_file=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           mkdir -p healing-reports
           CONTEXT_FILE="healing-reports/openrouter-context-${ISSUE_NUMBER}.txt"
 
@@ -56,12 +63,12 @@ jobs:
             echo ""
           } > "$CONTEXT_FILE"
 
-          # Extract meaningful keywords from issue text
+          # Extract meaningful keywords (|| true prevents pipefail on no matches)
           KEYWORDS=$(printf '%s %s' "${ISSUE_TITLE}" "${ISSUE_BODY}" \
             | tr '[:upper:]' '[:lower:]' \
             | grep -oE '[a-z][a-z0-9]{3,}' \
             | grep -vxE 'this|that|with|from|have|will|been|when|then|they|also|into|more|some|what|which|there|their|after|before|should|would|could|using|error|issue|problem|please|working|getting|cannot|doesnt|https|http|the|and|for|not|are|but|was|has|its' \
-            | sort -u | head -20)
+            | sort -u | head -20 || true)
 
           echo "=== KEYWORDS ===" >> "$CONTEXT_FILE"
           printf '%s\n' "$KEYWORDS" >> "$CONTEXT_FILE"
@@ -71,7 +78,7 @@ jobs:
           RELEVANT_FILES=""
           for kw in $KEYWORDS; do
             hits=$(grep -rl "$kw" Frontend/ Backend/ 2>/dev/null \
-              | grep -E '\.(ts|html|scss|css|json|cs)$' | head -5)
+              | grep -E '\.(ts|html|scss|css|json|cs)$' | head -5 || true)
             RELEVANT_FILES="${RELEVANT_FILES}"$'\n'"${hits}"
           done
 
@@ -79,7 +86,7 @@ jobs:
           TOP_FILES=$(printf '%s\n' "$RELEVANT_FILES" \
             | grep -v '^[[:space:]]*$' \
             | sort | uniq -c | sort -rn \
-            | awk '{print $2}' | head -8)
+            | awk '{print $2}' | head -8 || true)
 
           echo "=== RELEVANT FILES ===" >> "$CONTEXT_FILE"
           printf '%s\n' "$TOP_FILES" >> "$CONTEXT_FILE"
@@ -88,7 +95,7 @@ jobs:
           # Include content of top matched files
           echo "=== FILE CONTENTS ===" >> "$CONTEXT_FILE"
           while IFS= read -r f; do
-            [ -z "$f" ] || [ ! -f "$f" ] && continue
+            { [ -z "$f" ] || [ ! -f "$f" ]; } && continue
             echo "--- FILE: $f ---" >> "$CONTEXT_FILE"
             head -120 "$f" >> "$CONTEXT_FILE"
             echo "" >> "$CONTEXT_FILE"
@@ -97,7 +104,8 @@ jobs:
           # Always include these baseline files
           for baseline in \
             "Frontend/lunchbox-app/src/app/app.routes.ts" \
-            "Frontend/lunchbox-app/src/app/app.module.ts" \
+            "Frontend/lunchbox-app/src/app/app.config.ts" \
+            "Frontend/lunchbox-app/src/app/app.ts" \
             "Frontend/lunchbox-app/package.json" \
             ".github/copilot-instructions.md"; do
             [ -f "$baseline" ] || continue
