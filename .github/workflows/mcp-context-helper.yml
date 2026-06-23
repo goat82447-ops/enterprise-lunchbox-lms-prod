@@ -1,0 +1,82 @@
+name: MCP Context Helper (Optional Reference)
+
+# This workflow demonstrates how to use the MCP server
+# It runs on demand to generate project context for healing agents
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      search_keyword:
+        description: 'Keyword to search in project (optional)'
+        required: false
+        type: string
+
+jobs:
+  collect-mcp-context:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Generate project context via MCP
+        shell: bash
+        run: |
+          mkdir -p /tmp/mcp-output
+          
+          # Test 1: Get project summary
+          echo '{"method": "project:summary", "params": {}}' | \
+            node mcp-server/server.js > /tmp/mcp-output/summary.json 2>/dev/null &
+          
+          sleep 2
+          
+          # Display results
+          echo "=== MCP PROJECT SUMMARY ==="
+          cat /tmp/mcp-output/summary.json 2>/dev/null | jq . || echo "No data yet"
+
+      - name: Collect healing context files
+        shell: bash
+        run: |
+          # Get key project files for healing
+          echo '{"method": "healing:context", "params": {}}' | \
+            node mcp-server/server.js > /tmp/mcp-healing-files.json 2>/dev/null
+          
+          echo "=== HEALING CONTEXT FILES ==="
+          cat /tmp/mcp-healing-files.json | jq .
+          
+          # Count source files
+          echo ""
+          echo "=== SOURCE FILE COUNTS ==="
+          for TYPE in frontend-ts backend-node-ts backend-dotnet-cs; do
+            echo "{\"method\": \"sources:list\", \"params\": {\"type\": \"$TYPE\"}}" | \
+              node mcp-server/server.js | jq ".data | length" 2>/dev/null | \
+              xargs echo "$TYPE files:"
+          done
+
+      - name: Search project (if keyword provided)
+        if: ${{ inputs.search_keyword != '' }}
+        shell: bash
+        run: |
+          KEYWORD="${{ inputs.search_keyword }}"
+          echo "Searching for: $KEYWORD"
+          
+          echo "{\"method\": \"project:search\", \"params\": {\"keyword\": \"$KEYWORD\"}}" | \
+            node mcp-server/server.js | jq . > /tmp/search-results.json
+          
+          echo "=== SEARCH RESULTS ==="
+          cat /tmp/search-results.json | jq '.data[] | {path, match}' | head -20
+
+      - name: Upload MCP context artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-context-report
+          path: /tmp/mcp-*.json
+          retention-days: 7
