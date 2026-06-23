@@ -12,7 +12,8 @@ const PROJECT_ROOT = path.resolve(__dirname, '..');
 const MAX_FILE_SIZE_BYTES = 1_000_000;
 const MAX_RESULTS = 100;
 const DEFAULT_CHUNK_LINES = 100;
-const MAX_CONTEXT_SNIPPET = 500;
+const MAX_CONTEXT_SNIPPET = 700;
+const FILE_LIST_CACHE_TTL_MS = 20_000;
 
 const IGNORE_DIRS = new Set([
   '.git',
@@ -30,6 +31,16 @@ const IGNORE_DIRS = new Set([
   'out',
 ]);
 
+const TEXT_FILE_EXTENSIONS = new Set([
+  '.ts', '.tsx', '.js', '.jsx', '.cs', '.json', '.yml', '.yaml',
+  '.html', '.scss', '.css', '.md', '.txt', '.xml', '.csproj', '.sln'
+]);
+
+const ANALYSIS_FILE_EXTENSIONS = new Set([
+  '.ts', '.tsx', '.js', '.jsx', '.cs', '.json', '.yml', '.yaml',
+  '.html', '.scss', '.css', '.xml', '.csproj', '.sln'
+]);
+
 const SOURCE_TYPES = {
   'frontend-ts': ['.ts', '.tsx'],
   'frontend-html': ['.html'],
@@ -44,10 +55,31 @@ const STOP_WORDS = new Set([
   'are', 'be', 'from', 'with', 'by', 'as', 'this', 'that', 'it', 'its', 'if',
   'when', 'where', 'what', 'how', 'why', 'was', 'were', 'can', 'could', 'should',
   'would', 'will', 'not', 'no', 'yes', 'but', 'into', 'out', 'up', 'down',
-  'user', 'users', 'app', 'application', 'issue', 'bug', 'error', 'fix', 'broken'
+  'user', 'users', 'app', 'application', 'issue', 'bug', 'error', 'fix', 'broken',
+  'code', 'service', 'services', 'system', 'project', 'problem', 'failed', 'failure',
+  'frontend', 'backend', 'return', 'handle', 'safely', 'screen', 'page', 'small',
+  'endpoint', 'optional', 'missing'
 ]);
 
+const NON_ACTIONABLE_FILE_PATTERNS = [
+  /package-lock\.json$/i,
+  /yarn\.lock$/i,
+  /pnpm-lock\.yaml$/i,
+  /\.min\.(js|css)$/i,
+  /\.map$/i,
+  /\/dist\//i,
+];
+
+const SURFACE_HINT_KEYWORDS = {
+  frontend: ['ui', 'frontend', 'angular', 'component', 'template', 'button', 'screen', 'page', 'route', 'scss', 'css'],
+  backend_node: ['backend', 'api', 'microservice', 'node', 'express', 'endpoint', 'queue', 'redis'],
+  backend_dotnet: ['dotnet', '.net', 'c#', 'controller', 'middleware', 'aspnet', 'kestrel'],
+  config: ['config', 'configuration', 'env', 'workflow', 'pipeline', 'github action', 'yaml'],
+};
+
 const fileCache = new Map();
+let allFilesCache = [];
+let allFilesCacheAt = 0;
 
 function send(result) {
   process.stdout.write(`${JSON.stringify(result)}\n`);
@@ -121,9 +153,16 @@ function walkFiles(dir, results, options = {}) {
 }
 
 function listAllFiles() {
+  const now = Date.now();
+  if (allFilesCache.length > 0 && (now - allFilesCacheAt) < FILE_LIST_CACHE_TTL_MS) {
+    return allFilesCache;
+  }
+
   const files = [];
   walkFiles(PROJECT_ROOT, files, { maxDepth: 8 });
-  return files;
+  allFilesCache = files;
+  allFilesCacheAt = now;
+  return allFilesCache;
 }
 
 function startsWithAny(input, prefixes) {
@@ -134,6 +173,9 @@ function classifyBySurface(relPath) {
   if (startsWithAny(relPath, ['Frontend/'])) return 'frontend';
   if (startsWithAny(relPath, ['Backend/microservices/'])) return 'backend_node';
   if (startsWithAny(relPath, ['Backend/dotnet/'])) return 'backend_dotnet';
+  if (relPath.startsWith('.github/') || relPath.endsWith('.yml') || relPath.endsWith('.yaml') || relPath.endsWith('.env')) {
+    return 'config';
+  }
   return 'other';
 }
 
@@ -264,6 +306,30 @@ function handleFileChunked(params = {}) {
   });
 }
 
+function normalizeToken(token) {
+  if (!token) return '';
+  const sanitized = token.replace(/[_-]+/g, '').toLowerCase();
+  if (!sanitized) return '';
+  if (/^\d+$/.test(sanitized)) {
+    const asNum = Number(sanitized);
+    if (asNum >= 400 && asNum <= 599) return sanitized;
+    return '';
+  }
+  if (sanitized.length <= 2) return '';
+  if (STOP_WORDS.has(sanitized)) return '';
+  let normalized = sanitized;
+  if (sanitized.endsWith('s') && sanitized.length > 4) {
+    normalized = sanitized.slice(0, -1);
+  }
+  if (STOP_WORDS.has(normalized)) return '';
+  return normalized;
+}
+
+function tokenizeText(text) {
+  const rawTokens = (text || '').toLowerCase().match(/[a-z0-9][a-z0-9_-]{1,}/g) || [];
+  return rawTokens.map(normalizeToken).filter(Boolean);
+}
+
 function filterByType(relPath, type) {
   const lower = relPath.toLowerCase();
   const exts = SOURCE_TYPES[type];
@@ -292,13 +358,15 @@ function handleSourcesList(params = {}) {
 }
 
 function extractKeywords(title, body) {
-  const text = `${title || ''} ${body || ''}`.toLowerCase();
-  const tokens = text.match(/[a-z0-9][a-z0-9_-]{2,}/g) || [];
   const counts = new Map();
+  const titleTokens = tokenizeText(title);
+  const bodyTokens = tokenizeText(body);
 
-  for (const raw of tokens) {
-    const token = raw.replace(/[_-]+/g, '');
-    if (!token || STOP_WORDS.has(token)) continue;
+  for (const token of titleTokens) {
+    counts.set(token, (counts.get(token) || 0) + 3);
+  }
+
+  for (const token of bodyTokens) {
     counts.set(token, (counts.get(token) || 0) + 1);
   }
 
@@ -308,32 +376,155 @@ function extractKeywords(title, body) {
     .slice(0, 20);
 }
 
-function analyzeFileForKeywords(absPath, relPath, keywords) {
+function extractPhrases(title, body, maxPhrases = 6) {
+  const text = `${title || ''}. ${body || ''}`;
+  const chunks = text.split(/[.!?;\n]/).map((part) => part.trim()).filter(Boolean);
+  const phrases = [];
+
+  for (const chunk of chunks) {
+    const raw = chunk.toLowerCase().match(/[a-z0-9][a-z0-9_-]{1,}/g) || [];
+    const filtered = raw.map(normalizeToken).filter(Boolean);
+    if (filtered.length < 2) continue;
+    for (let i = 0; i < filtered.length - 1; i += 1) {
+      const phrase = `${filtered[i]} ${filtered[i + 1]}`;
+      if (!phrase || phrase.length < 6) continue;
+      if (!phrases.includes(phrase)) {
+        phrases.push(phrase);
+      }
+      if (phrases.length >= maxPhrases) return phrases;
+    }
+  }
+
+  return phrases;
+}
+
+function detectSurfaceHints(title, body, explicitSurface) {
+  const hints = new Set();
+  const text = `${title || ''} ${body || ''}`.toLowerCase();
+
+  if (explicitSurface && ['frontend', 'backend_node', 'backend_dotnet', 'config'].includes(explicitSurface)) {
+    hints.add(explicitSurface);
+  }
+
+  for (const [surface, tokens] of Object.entries(SURFACE_HINT_KEYWORDS)) {
+    if (tokens.some((token) => text.includes(token))) {
+      hints.add(surface);
+    }
+  }
+
+  return [...hints];
+}
+
+function countOccurrences(text, keyword) {
+  let count = 0;
+  let start = 0;
+  while (start < text.length) {
+    const idx = text.indexOf(keyword, start);
+    if (idx === -1) break;
+    count += 1;
+    start = idx + keyword.length;
+  }
+  return count;
+}
+
+function findBestSnippet(content, keywords, phrases) {
+  const lines = content.split(/\r?\n/);
+  const terms = [...keywords, ...phrases];
+  let foundLine = -1;
+  let matchedTerm = '';
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const lowerLine = lines[i].toLowerCase();
+    const term = terms.find((candidate) => lowerLine.includes(candidate));
+    if (term) {
+      foundLine = i;
+      matchedTerm = term;
+      break;
+    }
+  }
+
+  if (foundLine === -1) {
+    return {
+      content: content.slice(0, MAX_CONTEXT_SNIPPET),
+      startLine: 1,
+      endLine: Math.min(lines.length, 20),
+      matchedTerm: '',
+    };
+  }
+
+  const startLine = Math.max(0, foundLine - 8);
+  const endLine = Math.min(lines.length, foundLine + 12);
+  const snippet = lines.slice(startLine, endLine).join('\n').slice(0, MAX_CONTEXT_SNIPPET);
+
+  return {
+    content: snippet,
+    startLine: startLine + 1,
+    endLine,
+    matchedTerm,
+  };
+}
+
+function isActionableFile(relPath) {
+  const lower = relPath.toLowerCase();
+  return !NON_ACTIONABLE_FILE_PATTERNS.some((pattern) => pattern.test(lower));
+}
+
+function analyzeFileForKeywords(absPath, relPath, keywords, phrases, surfaceHints) {
   const relLower = relPath.toLowerCase();
+  const basename = path.basename(relLower);
+  const fileSurface = classifyBySurface(relPath);
   let score = 0;
   const hitKeywords = new Set();
+  const hitPhrases = new Set();
   let content = '';
 
+  if (!isActionableFile(relPath)) {
+    score -= 20;
+  }
+
+  if (surfaceHints.length > 0) {
+    if (surfaceHints.includes(fileSurface)) score += 22;
+    else if (fileSurface !== 'other') score -= 12;
+  }
+
   for (const kw of keywords) {
-    if (path.basename(relLower).includes(kw)) {
-      score += 10;
+    if (basename.includes(kw)) {
+      score += 14;
       hitKeywords.add(kw);
     } else if (relLower.includes(kw)) {
-      score += 5;
+      score += 7;
       hitKeywords.add(kw);
+    }
+  }
+
+  for (const phrase of phrases) {
+    const phraseInPath = phrase.split(' ').every((term) => relLower.includes(term));
+    if (phraseInPath) {
+      score += 10;
+      hitPhrases.add(phrase);
     }
   }
 
   try {
     const stat = fs.statSync(absPath);
-    if (stat.size <= MAX_FILE_SIZE_BYTES) {
+    const ext = path.extname(relLower);
+    if (stat.size <= MAX_FILE_SIZE_BYTES && TEXT_FILE_EXTENSIONS.has(ext)) {
       content = safeReadFile(absPath);
       const lower = content.toLowerCase();
+
       for (const kw of keywords) {
-        const firstIdx = lower.indexOf(kw);
-        if (firstIdx >= 0) {
-          score += 6;
+        const occurrences = countOccurrences(lower, kw);
+        if (occurrences > 0) {
+          score += Math.min(occurrences, 4) * 4;
           hitKeywords.add(kw);
+        }
+      }
+
+      for (const phrase of phrases) {
+        const occurrences = countOccurrences(lower, phrase);
+        if (occurrences > 0) {
+          score += Math.min(occurrences, 2) * 6;
+          hitPhrases.add(phrase);
         }
       }
     }
@@ -341,19 +532,51 @@ function analyzeFileForKeywords(absPath, relPath, keywords) {
     // Skip unreadable content.
   }
 
-  return { score, hitKeywords: [...hitKeywords], content };
+  if (hitKeywords.size <= 1 && hitPhrases.size === 0) {
+    score -= 5;
+  }
+
+  const snippet = content ? findBestSnippet(content, [...hitKeywords], [...hitPhrases]) : null;
+
+  return {
+    score,
+    hitKeywords: [...hitKeywords],
+    hitPhrases: [...hitPhrases],
+    content,
+    snippet,
+    fileSurface,
+  };
+}
+
+function confidenceFromTopMatch(topMatch, keywordCount) {
+  if (!topMatch) return 'low';
+  const score = topMatch.score;
+  const coverage = keywordCount > 0 ? (topMatch.matchedKeywords.length / keywordCount) : 0;
+
+  if (score >= 45 && coverage >= 0.25) return 'high';
+  if (score >= 25 && coverage >= 0.15) return 'medium';
+  return 'low';
 }
 
 function handleIssueAnalyze(params = {}) {
   const title = params.title || '';
   const body = params.body || '';
+  const explicitSurface = typeof params.surface === 'string' ? params.surface : '';
+  const maxFiles = Math.max(1, Math.min(Number(params.maxFiles) || 10, 30));
+  const maxSnippets = Math.max(1, Math.min(Number(params.maxSnippets) || 5, 10));
   const keywords = extractKeywords(title, body);
+  const phrases = extractPhrases(title, body);
+  const surfaceHints = detectSurfaceHints(title, body, explicitSurface);
 
   if (keywords.length === 0) {
     return ok({
       keywords: [],
+      phrases: [],
+      surfaceHints,
       relevantFiles: [],
       fileContents: [],
+      rankedMatches: [],
+      confidence: 'low',
       analysis: 'No meaningful keywords extracted from issue title/body.',
     });
   }
@@ -361,45 +584,59 @@ function handleIssueAnalyze(params = {}) {
   const candidates = listAllFiles()
     .filter((absPath) => {
       const rel = toRelative(absPath).toLowerCase();
-      return (
-        rel.endsWith('.ts') ||
-        rel.endsWith('.tsx') ||
-        rel.endsWith('.js') ||
-        rel.endsWith('.cs') ||
-        rel.endsWith('.html') ||
-        rel.endsWith('.scss') ||
-        rel.endsWith('.json') ||
-        rel.endsWith('.yml') ||
-        rel.endsWith('.yaml')
-      );
+      return ANALYSIS_FILE_EXTENSIONS.has(path.extname(rel));
     });
 
   const scored = [];
   for (const absPath of candidates) {
     const rel = toRelative(absPath);
-    const { score, hitKeywords, content } = analyzeFileForKeywords(absPath, rel, keywords);
+    const { score, hitKeywords, hitPhrases, content, snippet, fileSurface } =
+      analyzeFileForKeywords(absPath, rel, keywords, phrases, surfaceHints);
     if (score <= 0) continue;
 
     scored.push({
       path: rel,
       score,
       hitKeywords,
+      hitPhrases,
+      snippet,
+      fileSurface,
       content,
     });
   }
 
   scored.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
-  const top = scored.slice(0, 10);
-  const fileContents = top.slice(0, 5).map((item) => ({
+  const top = scored.slice(0, maxFiles);
+  const rankedMatches = top.map((item) => ({
     path: item.path,
-    content: item.content.slice(0, MAX_CONTEXT_SNIPPET),
+    score: item.score,
+    surface: item.fileSurface,
+    matchedKeywords: item.hitKeywords,
+    matchedPhrases: item.hitPhrases,
+    snippetLineStart: item.snippet?.startLine || null,
+    snippetLineEnd: item.snippet?.endLine || null,
   }));
+
+  const fileContents = top.slice(0, maxSnippets).map((item) => ({
+    path: item.path,
+    content: item.snippet?.content || item.content.slice(0, MAX_CONTEXT_SNIPPET),
+    matchedKeywords: item.hitKeywords,
+    matchedPhrases: item.hitPhrases,
+    lineStart: item.snippet?.startLine || 1,
+    lineEnd: item.snippet?.endLine || null,
+  }));
+
+  const confidence = confidenceFromTopMatch(rankedMatches[0], keywords.length);
 
   return ok({
     keywords,
+    phrases,
+    surfaceHints,
     relevantFiles: top.map((item) => item.path),
     fileContents,
-    analysis: `Found ${top.length} files matching keywords: ${keywords.join(', ')}`,
+    rankedMatches,
+    confidence,
+    analysis: `Found ${top.length} files matching keywords/phrases: ${keywords.join(', ')}`,
   });
 }
 
