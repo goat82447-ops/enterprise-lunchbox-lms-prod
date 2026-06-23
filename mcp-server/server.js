@@ -21,6 +21,137 @@ class ProjectContextMCPServer {
   }
 
   /**
+   * SMART ISSUE ANALYZER: Finds relevant files based on issue description
+   * Searches filenames, paths, AND file contents for keywords
+   */
+  analyzeIssue(issueTitle, issueBody) {
+    const combinedText = `${issueTitle} ${issueBody}`.toLowerCase();
+    const keywords = this.extractKeywords(combinedText);
+    
+    const relevantFiles = this.findRelevantFiles(keywords);
+    const fileContents = relevantFiles.slice(0, 5).map(fp => ({
+      path: fp,
+      content: this.getFileContentSync(fp).slice(0, 500), // First 500 chars
+    }));
+
+    return {
+      keywords,
+      relevantFiles: relevantFiles.slice(0, 10),
+      fileContents,
+      analysis: `Found ${relevantFiles.length} files matching keywords: ${keywords.join(', ')}`,
+    };
+  }
+
+  /**
+   * Extract meaningful keywords from issue text
+   */
+  extractKeywords(text) {
+    const stopWords = new Set(['the', 'a', 'is', 'are', 'and', 'or', 'to', 'in', 'on', 'at', 'for', 'of', 'with', 'by']);
+    const words = text.match(/\b[a-z0-9_-]+\b/g) || [];
+    return [...new Set(words.filter(w => w.length > 2 && !stopWords.has(w)))].slice(0, 15);
+  }
+
+  /**
+   * Find files matching keywords (name + content search)
+   */
+  findRelevantFiles(keywords) {
+    const results = [];
+    const sourceFiles = this.listSourceFilesSync();
+
+    for (const filePath of sourceFiles) {
+      let matchScore = 0;
+
+      // Score by filename matches
+      const fileName = path.basename(filePath).toLowerCase();
+      for (const kw of keywords) {
+        if (fileName.includes(kw)) matchScore += 3;
+      }
+
+      // Score by file path matches
+      const dirPath = path.dirname(filePath).toLowerCase();
+      for (const kw of keywords) {
+        if (dirPath.includes(kw)) matchScore += 2;
+      }
+
+      // Score by content matches (fast scan)
+      if (matchScore > 0 || keywords.length === 0) {
+        try {
+          const content = this.getFileContentSync(filePath).toLowerCase().slice(0, 2000);
+          for (const kw of keywords) {
+            const count = (content.match(new RegExp(kw, 'g')) || []).length;
+            matchScore += count;
+          }
+        } catch (e) {
+          // Skip if can't read
+        }
+      }
+
+      if (matchScore > 0) {
+        results.push({ path: filePath, score: matchScore });
+      }
+    }
+
+    // Sort by score, return top matches
+    return results.sort((a, b) => b.score - a.score).map(r => r.path);
+  }
+
+  /**
+   * Get file content synchronously (for analysis)
+   */
+  getFileContentSync(filePath) {
+    const cacheKey = filePath;
+    if (this.cache.fileContent[cacheKey]) {
+      return this.cache.fileContent[cacheKey];
+    }
+
+    try {
+      const fullPath = path.join(PROJECT_ROOT, filePath);
+      const stat = fs.statSync(fullPath);
+      
+      if (stat.size > 1024 * 1024) {
+        return ''; // Skip large files
+      }
+
+      const content = fs.readFileSync(fullPath, 'utf8');
+      this.cache.fileContent[cacheKey] = content;
+      return content;
+    } catch (e) {
+      return '';
+    }
+  }
+
+  /**
+   * List source files synchronously (for analysis)
+   */
+  listSourceFilesSync() {
+    const sourceFiles = [];
+    const extensions = ['.ts', '.tsx', '.js', '.jsx', '.html', '.scss', '.css', '.json', '.cs'];
+
+    const walkDir = (dir) => {
+      try {
+        const files = fs.readdirSync(dir, { withFileTypes: true });
+        for (const file of files) {
+          if (this.shouldIgnore(file.name, dir)) continue;
+          const fullPath = path.join(dir, file.name);
+          if (file.isDirectory()) {
+            walkDir(fullPath);
+          } else if (file.isFile()) {
+            const ext = path.extname(file.name);
+            if (extensions.includes(ext)) {
+              sourceFiles.push(path.relative(PROJECT_ROOT, fullPath));
+            }
+          }
+        }
+      } catch (e) {
+        // Skip directories we can't read
+      }
+    };
+
+    walkDir(PROJECT_ROOT);
+    return sourceFiles.slice(0, 500); // Limit to 500 files for performance
+  }
+
+  /**
    * Build a hierarchical file tree of the project
    */
   buildFileTree(dir = PROJECT_ROOT, depth = 0, maxDepth = 4) {
@@ -344,6 +475,10 @@ class ProjectContextMCPServer {
 
         case 'healing:context':
           return { success: true, data: this.getHealingContextFiles() };
+
+        case 'issue:analyze':
+          if (!params.title || !params.body) throw new Error('Missing title or body parameter');
+          return { success: true, data: this.analyzeIssue(params.title, params.body) };
 
         default:
           throw new Error(`Unknown method: ${method}`);

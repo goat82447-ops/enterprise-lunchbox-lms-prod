@@ -44,7 +44,38 @@ frontend-scss - Angular styles
 backend-node-ts - Node.js microservices
 backend-dotnet-cs - .NET services
 config-json - Configuration files
-6. Get Healing Context
+6. Smart Issue Analysis ⭐ NEW
+Automatically find relevant files based on issue description (searches filenames, paths, AND file contents):
+
+echo '{"method": "issue:analyze", "params": {"title": "Login button disable on request", "body": "When user clicks login, button should disable until response arrives"}}' | node mcp-server/server.js
+Response:
+
+{
+  "success": true,
+  "data": {
+    "keywords": ["login", "button", "disable", "request", "response"],
+    "relevantFiles": [
+      "Frontend/lunchbox-app/src/app/features/login/login.component.ts",
+      "Frontend/lunchbox-app/src/app/features/login/login.component.html",
+      "Frontend/lunchbox-app/src/app/core/services/auth.service.ts"
+    ],
+    "fileContents": [
+      {
+        "path": "Frontend/lunchbox-app/src/app/features/login/login.component.ts",
+        "content": "export class LoginComponent {\n  isLoading = false;\n  ..."
+      }
+    ],
+    "analysis": "Found 3 files matching keywords: login, button, disable, request, response"
+  }
+}
+How it works:
+
+Extracts keywords from issue title + body (stops words filtered)
+Scores files by keyword matches in: filename, directory path, file content
+Returns ranked list of relevant files (top 10)
+Includes file content preview (first 500 chars) for top 5 files
+Healing Agent uses this to find files WITHOUT user specifying paths!
+7. Get Healing Context
 Retrieve key project files for issue analysis:
 
 echo '{"method": "healing:context", "params": {}}' | node mcp-server/server.js
