@@ -1,8 +1,6 @@
 name: OPEN_AI ChatGPT Healing Agent
 
 on:
-  issues:
-    types: [opened, reopened, edited]
   workflow_dispatch:
 
 permissions:
@@ -16,7 +14,7 @@ concurrency:
 
 jobs:
   heal-issue:
-    if: github.event_name == 'workflow_dispatch' || github.event.issue.pull_request == null
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -181,7 +179,7 @@ jobs:
             core.setOutput('analysis_status', apiError ? 'failed' : 'ok');
 
       - name: Create or update healing PR
-        if: ${{ steps.analyze.outputs.report_path != '' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && steps.analyze.outputs.report_path != '' }}
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}

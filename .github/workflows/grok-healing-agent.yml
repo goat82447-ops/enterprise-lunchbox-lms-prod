@@ -1,8 +1,6 @@
 name: Grok Healing Agent
 
 on:
-  issues:
-    types: [opened, reopened, edited]
   workflow_dispatch:
 
 permissions:
@@ -15,7 +13,7 @@ concurrency:
 
 jobs:
   heal-issue:
-    if: github.event_name == 'workflow_dispatch' || github.event.issue.pull_request == null
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:

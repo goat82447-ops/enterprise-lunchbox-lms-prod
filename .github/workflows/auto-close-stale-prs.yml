@@ -15,13 +15,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Close PRs older than 24 hours
+      - name: Close PRs older than 15 days
         uses: actions/github-script@v7
         with:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const cutoffMs = 10 * 60 * 60 * 1000;
+            const cutoffMs = 15 * 24 * 60 * 60 * 1000;
             const now = Date.now();
 
             const prs = await github.paginate(github.rest.pulls.list, {
