@@ -29,19 +29,15 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Validate OPEN_ROUTER configuration
+      - name: Validate configuration
         shell: bash
         run: |
           if [ -z "${OPENROUTER_API_KEY}" ]; then
             echo "Missing required secret: OPENROUTER_API_KEY" >&2
             exit 1
           fi
-          if [ -z "${OPENROUTER_MODEL}" ]; then
-            echo "Missing required variable: OPENROUTER_MODEL" >&2
-            exit 1
-          fi
 
-      - name: Collect repository context via MCP + smart analysis
+      - name: Collect repository context
         id: collect_context
         shell: bash
         env:
@@ -49,144 +45,71 @@ jobs:
           ISSUE_BODY: ${{ github.event.issue.body || '' }}
           ISSUE_NUMBER: ${{ github.event.issue.number || '' }}
         run: |
-          CONTEXT_DIR="healing-reports"
-          CONTEXT_FILE="${CONTEXT_DIR}/openrouter-context-${ISSUE_NUMBER}.txt"
-          mkdir -p "$CONTEXT_DIR"
-          
-          # Collect MCP context with SMART issue analysis
-          python3 << 'PYEOF'
-          import json
-          import subprocess
-          import os
-          import pathlib
-          
-          issue_title = os.environ.get("ISSUE_TITLE", "")
-          issue_body = os.environ.get("ISSUE_BODY", "")
-          issue_number = os.environ.get("ISSUE_NUMBER", "")
-          
-          # Call MCP with smart issue:analyze
-          mcp_requests = [
-              {"method": "project:summary", "params": {}},
-              {"method": "issue:analyze", "params": {"title": issue_title, "body": issue_body}},
-              {"method": "healing:context", "params": {}}
-          ]
-          
-          context = {}
-          try:
-              for req in mcp_requests:
-                  try:
-                      proc = subprocess.run(
-                          ["node", "mcp-server/server.js"],
-                          input=json.dumps(req),
-                          text=True,
-                          capture_output=True,
-                          timeout=5
-                      )
-                      if proc.returncode == 0 and proc.stdout.strip():
-                          resp = json.loads(proc.stdout.strip())
-                          if resp.get("success"):
-                              context[req["method"]] = resp.get("data", {})
-                  except Exception as e:
-                      print(f"Warning: Failed to collect {req['method']}: {e}")
-          except Exception as e:
-              print(f"Warning: MCP context collection failed: {e}")
-          
-          # USE SMART ANALYSIS RESULTS FROM MCP
-          issue_analysis = context.get("issue:analyze", {})
-          relevant_files = issue_analysis.get("relevantFiles", [])
-          keywords = issue_analysis.get("keywords", [])
-          phrases = issue_analysis.get("phrases", [])
-          ranked_matches = issue_analysis.get("rankedMatches", [])
-          confidence = issue_analysis.get("confidence", "unknown")
-          file_contents = issue_analysis.get("fileContents", [])
-          surface_hints = issue_analysis.get("surfaceHints", [])
-          healing_context_files = context.get("healing:context", [])
-          
-          # Build context for model with smart file discovery
-          parts = []
-          parts.append("=== ISSUE SUMMARY ===")
-          parts.append(issue_title)
-          parts.append(issue_body)
-          parts.append("")
-          
-          if keywords:
-              parts.append(f"=== DETECTED KEYWORDS (Smart Analysis) ===")
-              parts.extend(keywords[:20])
-              parts.append("")
+          mkdir -p healing-reports
+          CONTEXT_FILE="healing-reports/openrouter-context-${ISSUE_NUMBER}.txt"
 
-          if phrases:
-              parts.append(f"=== DETECTED PHRASES (Smart Analysis) ===")
-              parts.extend(phrases[:12])
-              parts.append("")
+          {
+            echo "=== ISSUE ==="
+            echo "Title: ${ISSUE_TITLE}"
+            echo ""
+            printf '%s\n' "${ISSUE_BODY}"
+            echo ""
+          } > "$CONTEXT_FILE"
 
-          parts.append(f"=== MATCH CONFIDENCE ===")
-          parts.append(confidence)
-          parts.append("")
+          # Extract meaningful keywords from issue text
+          KEYWORDS=$(printf '%s %s' "${ISSUE_TITLE}" "${ISSUE_BODY}" \
+            | tr '[:upper:]' '[:lower:]' \
+            | grep -oE '[a-z][a-z0-9]{3,}' \
+            | grep -vxE 'this|that|with|from|have|will|been|when|then|they|also|into|more|some|what|which|there|their|after|before|should|would|could|using|error|issue|problem|please|working|getting|cannot|doesnt|https|http|the|and|for|not|are|but|was|has|its' \
+            | sort -u | head -20)
 
-          if surface_hints:
-              parts.append("=== SURFACE HINTS ===")
-              parts.extend(surface_hints[:8])
-              parts.append("")
-          
-          if relevant_files:
-              parts.append(f"=== RELEVANT FILES ({len(relevant_files)} found) ===")
-              parts.extend(relevant_files[:15])
-              parts.append("")
+          echo "=== KEYWORDS ===" >> "$CONTEXT_FILE"
+          printf '%s\n' "$KEYWORDS" >> "$CONTEXT_FILE"
+          echo "" >> "$CONTEXT_FILE"
 
-          if ranked_matches:
-              parts.append(f"=== TOP MATCH DETAILS ({len(ranked_matches)} ranked) ===")
-              for match in ranked_matches[:8]:
-                  parts.append(
-                      f"- {match.get('path', '')} | score={match.get('score', 0)} | "
-                      f"surface={match.get('surface', '')} | "
-                      f"keywords={','.join(match.get('matchedKeywords', []))}"
-                  )
-              parts.append("")
+          # Search for relevant files using keywords
+          RELEVANT_FILES=""
+          for kw in $KEYWORDS; do
+            hits=$(grep -rl "$kw" Frontend/ Backend/ 2>/dev/null \
+              | grep -E '\.(ts|html|scss|css|json|cs)$' | head -5)
+            RELEVANT_FILES="${RELEVANT_FILES}"$'\n'"${hits}"
+          done
 
-          if healing_context_files:
-              parts.append(f"=== HEALING CONTEXT FILES ({len(healing_context_files)} found) ===")
-              parts.extend(healing_context_files[:20])
-              parts.append("")
-          
-          # Add file contents from smart analysis
-          if file_contents:
-              parts.append("=== FILE CONTENTS (Most Relevant) ===")
-              for fc in file_contents[:5]:
-                  parts.append(f"FILE: {fc.get('path', '')}")
-                  if fc.get("lineStart"):
-                      parts.append(
-                          f"LINES: {fc.get('lineStart', '')}-{fc.get('lineEnd', '')} | "
-                          f"KEYWORDS: {','.join(fc.get('matchedKeywords', []))}"
-                      )
-                  parts.append(fc.get('content', '')[:3500])
-                  parts.append("")
-          
-          # Add baseline files for context
-          baseline_files = [
-              ".github/copilot-instructions.md",
-              "Frontend/lunchbox-app/src/app/app.routes.ts",
-              "Frontend/lunchbox-app/package.json",
-          ]
-          
-          for p in baseline_files:
-              if pathlib.Path(p).exists():
-                  try:
-                      content = pathlib.Path(p).read_text(encoding="utf-8", errors="ignore")
-                      snippet = "\n".join(content.splitlines()[:80])
-                      parts.append(f"=== BASELINE: {p} ===")
-                      parts.append(snippet)
-                      parts.append("")
-                  except Exception:
-                      pass
-          
-          context_file = pathlib.Path(f"healing-reports/openrouter-context-{issue_number}.txt")
-          context_file.write_text("\n".join(parts), encoding="utf-8")
-          print(f"Wrote smart analysis context to {context_file}")
-          PYEOF
-          
+          # Sort files by match frequency — most-matched files first
+          TOP_FILES=$(printf '%s\n' "$RELEVANT_FILES" \
+            | grep -v '^[[:space:]]*$' \
+            | sort | uniq -c | sort -rn \
+            | awk '{print $2}' | head -8)
+
+          echo "=== RELEVANT FILES ===" >> "$CONTEXT_FILE"
+          printf '%s\n' "$TOP_FILES" >> "$CONTEXT_FILE"
+          echo "" >> "$CONTEXT_FILE"
+
+          # Include content of top matched files
+          echo "=== FILE CONTENTS ===" >> "$CONTEXT_FILE"
+          while IFS= read -r f; do
+            [ -z "$f" ] || [ ! -f "$f" ] && continue
+            echo "--- FILE: $f ---" >> "$CONTEXT_FILE"
+            head -120 "$f" >> "$CONTEXT_FILE"
+            echo "" >> "$CONTEXT_FILE"
+          done <<< "$TOP_FILES"
+
+          # Always include these baseline files
+          for baseline in \
+            "Frontend/lunchbox-app/src/app/app.routes.ts" \
+            "Frontend/lunchbox-app/src/app/app.module.ts" \
+            "Frontend/lunchbox-app/package.json" \
+            ".github/copilot-instructions.md"; do
+            [ -f "$baseline" ] || continue
+            echo "--- BASELINE: $baseline ---" >> "$CONTEXT_FILE"
+            head -80 "$baseline" >> "$CONTEXT_FILE"
+            echo "" >> "$CONTEXT_FILE"
+          done
+
           echo "context_file=$CONTEXT_FILE" >> "$GITHUB_OUTPUT"
+          echo "✓ Context written: $(wc -l < "$CONTEXT_FILE") lines"
 
-      - name: Analyze issue and publish diagnostics
+      - name: Analyze issue and generate patch
         id: analyze
         uses: actions/github-script@v7
         env:
@@ -198,7 +121,7 @@ jobs:
           script: |
             const issueNumber = Number(process.env.ISSUE_NUMBER || 0);
             if (!issueNumber) {
-              core.info('No issue context available (workflow_dispatch without issue payload). Skipping.');
+              core.info('No issue number (workflow_dispatch without issue payload). Skipping.');
               return;
             }
 
@@ -207,45 +130,55 @@ jobs:
             const baseUrl = process.env.OPENROUTER_API_BASE_URL;
             const model = process.env.OPENROUTER_MODEL;
             const apiKey = process.env.OPENROUTER_API_KEY;
-            const contextFile = process.env.ISSUE_CONTEXT_FILE;
+
             let repoContext = '';
-            if (contextFile && fs.existsSync(contextFile)) {
-              repoContext = fs.readFileSync(contextFile, 'utf8');
+            const ctxFile = process.env.ISSUE_CONTEXT_FILE;
+            if (ctxFile && fs.existsSync(ctxFile)) {
+              repoContext = fs.readFileSync(ctxFile, 'utf8').slice(0, 12000);
             }
 
             const prompt = [
               `Issue title: ${process.env.ISSUE_TITLE}`,
               '',
               'Issue body:',
-              `${process.env.ISSUE_BODY}`,
+              process.env.ISSUE_BODY,
               '',
-              'IMPORTANT INSTRUCTIONS:',
-              '1. You are a code healing assistant. Your job is to FIX code issues.',
-              '2. Use the repository context provided below to understand the project structure.',
-              '3. Return markdown with these EXACT headings:',
-              '   - ## Error Observed (what the user sees)',
-              '   - ## Root Cause (why it happens)',
-              '   - ## Resolution (how to fix it)',
-              '   - ## Validation Steps (how to test)',
-              '   - ## Proposed Patch (the actual code fix)',
+              'TASK: Analyze this issue and produce a working code fix as a git patch.',
               '',
-              '4. Rules for "## Proposed Patch":',
-              '   - If you can write a code fix based on the context, provide it as a fenced diff block.',
-              '   - Diff must use valid git unified diff format (start with "diff --git", include ---/+++ headers and @@ hunks).',
-              '   - Only modify EXISTING files (Frontend, Backend paths).',
-              '   - Keep changes minimal and focused.',
-              '   - If impossible to fix (insufficient evidence), write exactly "NO_PATCH" (nothing else).',
+              'Return EXACTLY these sections in order:',
+              '## Error Observed',
+              '## Root Cause',
+              '## Resolution',
+              '## Validation Steps',
+              '## Proposed Patch',
               '',
-              '5. RULES FOR GENERATING PATCHES:',
-              '   - For any actionable issue with sufficient evidence (frontend, backend, .NET, or config), GENERATE CODE',
-              '   - DO NOT write NO_PATCH unless it is truly impossible',
-              '   - Use the file contents below to understand current code structure',
-              '   - Match existing code style (indentation, naming, patterns)',
+              'PATCH RULES — read carefully:',
+              '- The patch MUST be inside a ```diff fenced block.',
+              '- Must be valid git unified diff format.',
+              '- Line 1: diff --git a/<path> b/<path>',
+              '- Line 2: --- a/<path>',
+              '- Line 3: +++ b/<path>',
+              '- Line 4+: @@ hunk headers, then context lines (space prefix), deletions (- prefix), additions (+ prefix).',
+              '- Only modify EXISTING files whose paths start with Frontend/ or Backend/.',
+              '- Use the exact file paths shown in the repository context below.',
+              '- If no patch can be produced from the evidence, write exactly: NO_PATCH',
               '',
-              'Repository context (files/code snippets):',
+              'EXAMPLE of correct format:',
+              '```diff',
+              'diff --git a/Frontend/lunchbox-app/src/app/app.component.ts b/Frontend/lunchbox-app/src/app/app.component.ts',
+              '--- a/Frontend/lunchbox-app/src/app/app.component.ts',
+              '+++ b/Frontend/lunchbox-app/src/app/app.component.ts',
+              '@@ -10,6 +10,6 @@ export class AppComponent {',
+              "   title = 'lunchbox-app';",
+              '-  showNav = false;',
+              '+  showNav = true;',
+              ' }',
+              '```',
+              '',
+              'Repository context (use these exact file paths in your patch):',
               repoContext || 'No repository context available.',
               '',
-              'Generate your response now. Remember: provide actual code changes, not explanations only.'
+              'Generate your response now.'
             ].join('\n');
 
             let content = '';
@@ -258,54 +191,41 @@ jobs:
                   'Authorization': `Bearer ${apiKey}`,
                   'Content-Type': 'application/json',
                   'HTTP-Referer': `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}`,
-                  'X-Title': `${process.env.GITHUB_REPOSITORY} OPEN_ROUTER Healing`
+                  'X-Title': `${process.env.GITHUB_REPOSITORY} Healing`
                 },
                 body: JSON.stringify({
                   model,
-                  temperature: 0.2,
+                  temperature: 0.1,
                   messages: [
                     {
                       role: 'system',
-                      content: 'You are a software issue healing assistant for a production repository. Never invent facts. Provide exact root cause only when evidence is sufficient; otherwise explicitly mark insufficient evidence and request required logs.'
+                      content: 'You are a code healing assistant. When you produce a patch it must be a syntactically valid git unified diff that applies cleanly with "git apply". Never invent file paths — only use paths from the repository context provided.'
                     },
-                    {
-                      role: 'user',
-                      content: prompt
-                    }
+                    { role: 'user', content: prompt }
                   ]
                 })
               });
 
               if (!response.ok) {
                 const errorText = await response.text();
-                apiError = `OPEN_ROUTER API request failed (${response.status}): ${errorText.slice(0, 1000)}`;
+                apiError = `API request failed (${response.status}): ${errorText.slice(0, 800)}`;
               } else {
                 const data = await response.json();
                 content = data?.choices?.[0]?.message?.content?.trim() || '';
-                if (!content) {
-                  apiError = 'OPEN_ROUTER API returned no message content.';
-                }
+                if (!content) apiError = 'API returned no content.';
               }
             } catch (err) {
-              apiError = `OPEN_ROUTER API request threw an exception: ${String(err).slice(0, 1000)}`;
+              apiError = `API exception: ${String(err).slice(0, 800)}`;
             }
 
             const body = apiError
               ? [
                   `## MCP+ PROXIMA 🚀 Healing Agent (${model})`,
                   '',
-                  '### Error Observed',
-                  'OPEN_ROUTER analysis step failed before generating diagnostics.',
-                  '',
-                  '### Root Cause',
+                  '### Error',
                   apiError,
                   '',
-                  '### Resolution',
-                  '1. Verify `OPENROUTER_API_KEY` repository secret is valid and active.',
-                  '2. Verify OpenRouter account credits/quota and model access.',
-                  '3. Re-run this workflow after updating key/model.',
-                  '',
-                  '> Automated fallback comment because model analysis failed.'
+                  '> Verify `OPENROUTER_API_KEY` secret and account credits.'
                 ].join('\n')
               : [
                   `## MCP+ PROXIMA 🚀 Healing Agent (${model})`,
@@ -318,7 +238,7 @@ jobs:
             const reportDir = path.join(process.env.GITHUB_WORKSPACE, 'healing-reports');
             fs.mkdirSync(reportDir, { recursive: true });
             const reportPath = path.join(reportDir, `openrouter-issue-${issueNumber}.md`);
-            const reportMarkdown = [
+            fs.writeFileSync(reportPath, [
               `# MCP+ PROXIMA 🚀 Healing Report - Issue #${issueNumber}`,
               '',
               `**Issue:** ${process.env.ISSUE_TITLE}`,
@@ -326,8 +246,7 @@ jobs:
               `**Generated at:** ${new Date().toISOString()}`,
               '',
               body
-            ].join('\n');
-            fs.writeFileSync(reportPath, reportMarkdown, 'utf8');
+            ].join('\n'), 'utf8');
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
@@ -336,19 +255,11 @@ jobs:
               body
             });
 
-            await core.summary
-              .addHeading(`MCP+ PROXIMA 🚀 Healing Agent (${model})`)
-              .addRaw(apiError ? '**Status:** Failed to analyze with OPEN_ROUTER' : '**Status:** Analysis posted successfully')
-              .addEOL()
-              .addEOL()
-              .addRaw(apiError ? `**Error:** ${apiError}` : 'Issue comment posted with structured diagnostics.')
-              .write();
-
             if (apiError) core.warning(apiError);
             core.setOutput('report_path', `healing-reports/openrouter-issue-${issueNumber}.md`);
             core.setOutput('analysis_status', apiError ? 'failed' : 'ok');
 
-      - name: Apply OPEN_ROUTER patch if provided
+      - name: Extract and apply patch
         id: apply_patch
         shell: bash
         run: |
@@ -356,103 +267,113 @@ jobs:
           PATCH_FILE="openrouter.patch"
 
           if [ ! -f "$REPORT_PATH" ]; then
-             echo "⚠️ No report file found at $REPORT_PATH"
-             echo "patch_applied=false" >> "$GITHUB_OUTPUT"
-             exit 0
-           fi
+            echo "⚠️ No report file found at $REPORT_PATH"
+            echo "patch_applied=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
-           echo "📄 Found report at $REPORT_PATH"
-           echo "---"
-          
-           # Extract and normalize patch content. Do not depend strictly on "## Proposed Patch".
-           python3 .github/scripts/openrouter_extract_patch.py "$REPORT_PATH" "$PATCH_FILE"
+          echo "📄 Found report at $REPORT_PATH"
 
-           if [ ! -s "$PATCH_FILE" ]; then
-             echo "❌ No patch block detected in report."
-             echo "patch_applied=false" >> "$GITHUB_OUTPUT"
-             exit 0
-           fi
+          # Extract diff from fenced ```diff block (no Python dependency)
+          awk '
+            /^```/ {
+              if (!infence) { infence=1; next }
+              if (hasdiff) { exit }
+              infence=0; hasdiff=0; next
+            }
+            infence && /^diff --git / { hasdiff=1 }
+            infence && hasdiff { print }
+          ' "$REPORT_PATH" > "$PATCH_FILE"
 
-           if grep -q "^NO_PATCH$" "$PATCH_FILE"; then
-             echo "⚠️ Model returned NO_PATCH - insufficient issue details for code generation"
-             echo "patch_applied=false" >> "$GITHUB_OUTPUT"
-             exit 0
-           fi
+          # Fallback: raw diff block not inside a fence
+          if [ ! -s "$PATCH_FILE" ]; then
+            awk '/^diff --git /{found=1} found{print}' "$REPORT_PATH" > "$PATCH_FILE"
+          fi
 
-           echo "---"
-           echo "🔧 Attempting to apply patch..."
-          
-           if git apply --check --recount "$PATCH_FILE" 2>&1; then
-             echo "✓ Patch validation passed"
-             if git apply --index --recount "$PATCH_FILE" 2>&1; then
-               echo "✓ Patch applied successfully"
-               STAGED_FILES="$(git diff --cached --name-only)"
-               echo ""
-               echo "📝 Staged files:"
-               echo "$STAGED_FILES"
+          # Handle empty or NO_PATCH result
+          if [ ! -s "$PATCH_FILE" ]; then
+            if grep -q "NO_PATCH" "$REPORT_PATH"; then
+              echo "⚠️ Model returned NO_PATCH"
+            else
+              echo "❌ No diff block found in report"
+            fi
+            echo "patch_applied=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
-               if [ -z "$STAGED_FILES" ]; then
-                 echo "❌ No staged files after patch"
-                 echo "patch_applied=false" >> "$GITHUB_OUTPUT"
-                 exit 0
-               fi
+          if grep -q "^NO_PATCH" "$PATCH_FILE"; then
+            echo "⚠️ Model returned NO_PATCH — insufficient issue details for a patch"
+            echo "patch_applied=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
-               # Only allow patches that touch repo source surfaces.
-               if echo "$STAGED_FILES" | grep -E -v '^(Frontend|Backend)/' > /dev/null; then
-                 echo "❌ Patch touches non-source paths; rejecting"
-                 git reset
-                 echo "patch_applied=false" >> "$GITHUB_OUTPUT"
-                 exit 0
-               fi
+          echo "🔧 Attempting to apply patch..."
 
-               # Require edits to existing files only (no newly created source files).
-               while IFS= read -r f; do
-                 if [ -n "$f" ] && ! git cat-file -e "HEAD:$f" 2>/dev/null; then
-                   echo "❌ Patch created new file '$f'; rejecting"
-                   git reset
-                   echo "patch_applied=false" >> "$GITHUB_OUTPUT"
-                   exit 0
-                 fi
-               done <<< "$STAGED_FILES"
+          if git apply --check --recount "$PATCH_FILE" 2>&1; then
+            echo "✓ Patch validation passed"
+            git apply --index --recount "$PATCH_FILE"
+            STAGED_FILES="$(git diff --cached --name-only)"
 
-               # Require at least one concrete code/config file under Frontend or Backend.
-               if echo "$STAGED_FILES" | grep -E '^Frontend/.*\.(ts|tsx|js|jsx|html|scss|css|json)$|^Backend/.*\.(ts|tsx|js|jsx|json|cs|csproj|sln|props|targets|config)$' > /dev/null; then
-                 echo "✓ Valid source file changes detected"
-                 echo "patch_applied=true" >> "$GITHUB_OUTPUT"
-               else
-                 echo "❌ Patch does not include valid source file changes"
-                 git reset
-                 echo "patch_applied=false" >> "$GITHUB_OUTPUT"
-               fi
-             else
-               echo "❌ git apply --index failed"
-               echo "First 80 lines of patch:"
-               head -80 "$PATCH_FILE"
-               echo "patch_applied=false" >> "$GITHUB_OUTPUT"
-             fi
-           else
-             echo "❌ git apply --check validation failed"
-             echo "First 80 lines of patch for debugging:"
-             head -80 "$PATCH_FILE"
-             echo "patch_applied=false" >> "$GITHUB_OUTPUT"
-           fi
+            if [ -z "$STAGED_FILES" ]; then
+              echo "❌ No staged files after patch"
+              echo "patch_applied=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
 
-      - name: Create or update healing PR
+            echo "📝 Staged files:"
+            echo "$STAGED_FILES"
+
+            # Reject if any staged file is outside Frontend/ or Backend/
+            BAD_FILES=$(echo "$STAGED_FILES" | grep -Ev '^(Frontend|Backend)/')
+            if [ -n "$BAD_FILES" ]; then
+              echo "❌ Patch touches paths outside Frontend/ or Backend/: $BAD_FILES"
+              git reset
+              echo "patch_applied=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            # Reject patches that create new files (only edits to existing files allowed)
+            while IFS= read -r f; do
+              [ -z "$f" ] && continue
+              if ! git cat-file -e "HEAD:$f" 2>/dev/null; then
+                echo "❌ Patch creates new file '$f'; rejecting"
+                git reset
+                echo "patch_applied=false" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+            done <<< "$STAGED_FILES"
+
+            # Require at least one real source file
+            if echo "$STAGED_FILES" | grep -qE '\.(ts|tsx|js|jsx|html|scss|css|json|cs|csproj)$'; then
+              echo "✓ Valid source changes — raising PR"
+              echo "patch_applied=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "❌ Patch contains no source code files"
+              git reset
+              echo "patch_applied=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "❌ git apply --check failed"
+            echo "--- Patch preview ---"
+            head -80 "$PATCH_FILE"
+            echo "patch_applied=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create healing PR
         if: ${{ steps.apply_patch.outputs.patch_applied == 'true' }}
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: open_router-healing/issue-${{ github.event.issue.number }}
-          title: MCP+ PROXIMA 🚀 code fix for issue #${{ github.event.issue.number }}
+          title: "fix: healing patch for issue #${{ github.event.issue.number }}"
           body: |
-            Automated MCP+ PROXIMA 🚀 generated code changes from issue details.
+            Automated code fix generated by MCP+ PROXIMA 🚀 Healing Agent.
 
             Closes #${{ github.event.issue.number }}
 
             - Analysis status: `${{ steps.analyze.outputs.analysis_status }}`
-            - Report file: `${{ steps.analyze.outputs.report_path }}`
-            - Patch applied: `${{ steps.apply_patch.outputs.patch_applied || 'false' }}`
-          commit-message: "fix(healing): apply OPEN_ROUTER patch for issue #${{ github.event.issue.number }}"
+            - Report: `${{ steps.analyze.outputs.report_path }}`
+          commit-message: "fix(healing): apply patch for issue #${{ github.event.issue.number }}"
           add-paths: |
             Frontend/**
             Backend/**
