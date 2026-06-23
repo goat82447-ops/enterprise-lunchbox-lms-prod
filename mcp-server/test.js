@@ -33,6 +33,13 @@ async function testMCP() {
       { method: 'sources:list', params: { type: 'frontend-ts' } },
       { method: 'healing:context', params: {} },
       { method: 'project:search', params: { keyword: 'login' } },
+      {
+        method: 'issue:analyze',
+        params: {
+          title: 'Login button color should be green',
+          body: 'Change login and register buttons from red to green'
+        }
+      },
     ];
 
     for (const req of requests) {
