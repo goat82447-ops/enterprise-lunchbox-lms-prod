@@ -41,7 +41,7 @@ jobs:
             exit 1
           fi
 
-      - name: Collect repository context for issue
+      - name: Collect repository context via MCP + rg
         id: collect_context
         shell: bash
         env:
@@ -52,6 +52,13 @@ jobs:
           CONTEXT_DIR="healing-reports"
           CONTEXT_FILE="${CONTEXT_DIR}/openrouter-context-${ISSUE_NUMBER}.txt"
           mkdir -p "$CONTEXT_DIR"
+          
+          # Collect MCP context in background
+          (echo '{"method": "project:summary", "params": {}}'; \
+           echo '{"method": "healing:context", "params": {}}'; \
+           echo '{"method": "sources:list", "params": {"type": "frontend-ts"}}') | \
+            timeout 5 node mcp-server/server.js > "$CONTEXT_DIR/mcp-context.json" 2>/dev/null || true
+          
           python - <<'PY'
           import os, re, subprocess, pathlib
 
