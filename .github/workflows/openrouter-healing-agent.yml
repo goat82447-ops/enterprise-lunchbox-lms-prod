@@ -92,9 +92,14 @@ jobs:
               print(f"Warning: MCP context collection failed: {e}")
           
           # USE SMART ANALYSIS RESULTS FROM MCP
-          relevant_files = context.get("issue:analyze", {}).get("relevantFiles", [])
-          keywords = context.get("issue:analyze", {}).get("keywords", [])
-          file_contents = context.get("issue:analyze", {}).get("fileContents", [])
+          issue_analysis = context.get("issue:analyze", {})
+          relevant_files = issue_analysis.get("relevantFiles", [])
+          keywords = issue_analysis.get("keywords", [])
+          phrases = issue_analysis.get("phrases", [])
+          ranked_matches = issue_analysis.get("rankedMatches", [])
+          confidence = issue_analysis.get("confidence", "unknown")
+          file_contents = issue_analysis.get("fileContents", [])
+          surface_hints = issue_analysis.get("surfaceHints", [])
           healing_context_files = context.get("healing:context", [])
           
           # Build context for model with smart file discovery
@@ -108,10 +113,34 @@ jobs:
               parts.append(f"=== DETECTED KEYWORDS (Smart Analysis) ===")
               parts.extend(keywords[:20])
               parts.append("")
+
+          if phrases:
+              parts.append(f"=== DETECTED PHRASES (Smart Analysis) ===")
+              parts.extend(phrases[:12])
+              parts.append("")
+
+          parts.append(f"=== MATCH CONFIDENCE ===")
+          parts.append(confidence)
+          parts.append("")
+
+          if surface_hints:
+              parts.append("=== SURFACE HINTS ===")
+              parts.extend(surface_hints[:8])
+              parts.append("")
           
           if relevant_files:
               parts.append(f"=== RELEVANT FILES ({len(relevant_files)} found) ===")
               parts.extend(relevant_files[:15])
+              parts.append("")
+
+          if ranked_matches:
+              parts.append(f"=== TOP MATCH DETAILS ({len(ranked_matches)} ranked) ===")
+              for match in ranked_matches[:8]:
+                  parts.append(
+                      f"- {match.get('path', '')} | score={match.get('score', 0)} | "
+                      f"surface={match.get('surface', '')} | "
+                      f"keywords={','.join(match.get('matchedKeywords', []))}"
+                  )
               parts.append("")
 
           if healing_context_files:
@@ -124,6 +153,11 @@ jobs:
               parts.append("=== FILE CONTENTS (Most Relevant) ===")
               for fc in file_contents[:5]:
                   parts.append(f"FILE: {fc.get('path', '')}")
+                  if fc.get("lineStart"):
+                      parts.append(
+                          f"LINES: {fc.get('lineStart', '')}-{fc.get('lineEnd', '')} | "
+                          f"KEYWORDS: {','.join(fc.get('matchedKeywords', []))}"
+                      )
                   parts.append(fc.get('content', '')[:3500])
                   parts.append("")
           

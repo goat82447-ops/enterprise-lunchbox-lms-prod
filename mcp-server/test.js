@@ -36,8 +36,9 @@ async function testMCP() {
       {
         method: 'issue:analyze',
         params: {
-          title: 'Login button color should be green',
-          body: 'Change login and register buttons from red to green'
+          title: 'Order API returns 500 when coupon is missing',
+          body: 'Backend microservice endpoint should handle optional coupon code safely',
+          surface: 'backend_node',
         }
       },
     ];
