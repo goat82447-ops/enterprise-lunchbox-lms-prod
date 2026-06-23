@@ -105,11 +105,20 @@ jobs:
             echo "" >> "$CONTEXT_FILE"
           done <<< "$TOP_FILES"
 
+          # Write exact file tree so AI uses correct paths (not guessed ones)
+          echo "=== EXACT FILE TREE (use ONLY these paths in patches) ===" >> "$CONTEXT_FILE"
+          find Frontend/lunchbox-app/src Backend/src \
+            -not \( -path "*/node_modules/*" -o -path "*/dist/*" \) \
+            -type f \( -name "*.ts" -o -name "*.html" -o -name "*.scss" -o -name "*.css" -o -name "*.json" -o -name "*.cs" \) \
+            2>/dev/null | sort | head -60 >> "$CONTEXT_FILE" || true
+          echo "" >> "$CONTEXT_FILE"
+
           # Always include these baseline files
           for baseline in \
             "Frontend/lunchbox-app/src/app/app.routes.ts" \
             "Frontend/lunchbox-app/src/app/app.config.ts" \
             "Frontend/lunchbox-app/src/app/app.ts" \
+            "Frontend/lunchbox-app/src/app/app.html" \
             "Frontend/lunchbox-app/package.json" \
             ".github/copilot-instructions.md"; do
             [ -f "$baseline" ] || continue
@@ -155,39 +164,49 @@ jobs:
               'Issue body:',
               process.env.ISSUE_BODY,
               '',
-              'TASK: Analyze this issue and produce a working code fix as a git patch.',
+              'TASK: Analyze this issue and fix the code.',
               '',
-              'Return EXACTLY these sections in order:',
+              'Return EXACTLY these sections:',
               '## Error Observed',
               '## Root Cause',
               '## Resolution',
               '## Validation Steps',
               '## Proposed Patch',
               '',
-              'PATCH RULES — read carefully:',
-              '- The patch MUST be inside a ```diff fenced block.',
-              '- Must be valid git unified diff format.',
-              '- Line 1: diff --git a/<path> b/<path>',
-              '- Line 2: --- a/<path>',
-              '- Line 3: +++ b/<path>',
-              '- Line 4+: @@ hunk headers, then context lines (space prefix), deletions (- prefix), additions (+ prefix).',
-              '- Only modify EXISTING files whose paths start with Frontend/ or Backend/.',
-              '- Use the exact file paths shown in the repository context below.',
-              '- If no patch can be produced from the evidence, write exactly: NO_PATCH',
+              '── FORMAT FOR ## Proposed Patch ──',
+              'Use this search/replace block (NOT git diff):',
               '',
-              'EXAMPLE of correct format:',
-              '```diff',
-              'diff --git a/Frontend/lunchbox-app/src/app/app.component.ts b/Frontend/lunchbox-app/src/app/app.component.ts',
-              '--- a/Frontend/lunchbox-app/src/app/app.component.ts',
-              '+++ b/Frontend/lunchbox-app/src/app/app.component.ts',
-              '@@ -10,6 +10,6 @@ export class AppComponent {',
-              "   title = 'lunchbox-app';",
-              '-  showNav = false;',
-              '+  showNav = true;',
-              ' }',
-              '```',
+              'FILE: <exact path from EXACT FILE TREE below>',
+              '<<<SEARCH',
+              '<copy the exact lines from the file that need to change>',
+              '>>>REPLACE',
+              '<the new lines to put in their place>',
+              '>>>END',
               '',
-              'Repository context (use these exact file paths in your patch):',
+              'RULES:',
+              '- FILE path must exactly match a path in the EXACT FILE TREE section.',
+              '- <<<SEARCH must contain lines that exist verbatim in the file shown in context.',
+              '- Copy enough lines to be unique (3-10 lines), do not copy the whole file.',
+              '- Only modify EXISTING files under Frontend/ or Backend/.',
+              '- If you cannot produce a fix, write exactly: NO_PATCH',
+              '',
+              'EXAMPLE:',
+              'FILE: Frontend/lunchbox-app/src/app/app.ts',
+              '<<<SEARCH',
+              '  toggleNav() {',
+              '    this.isNavOpen = !this.isNavOpen;',
+              '  }',
+              '>>>REPLACE',
+              '  toggleNav() {',
+              '    this.isNavOpen = !this.isNavOpen;',
+              '  }',
+              '',
+              '  closeNav() {',
+              '    this.isNavOpen = false;',
+              '  }',
+              '>>>END',
+              '',
+              'Repository context — EXACT FILE TREE and file contents:',
               repoContext || 'No repository context available.',
               '',
               'Generate your response now.'
@@ -274,9 +293,10 @@ jobs:
       - name: Extract and apply patch
         id: apply_patch
         shell: bash
+        env:
+          REPORT_PATH: healing-reports/openrouter-issue-${{ github.event.issue.number }}.md
         run: |
           REPORT_PATH="healing-reports/openrouter-issue-${{ github.event.issue.number }}.md"
-          PATCH_FILE="openrouter.patch"
 
           if [ ! -f "$REPORT_PATH" ]; then
             echo "⚠️ No report file found at $REPORT_PATH"
@@ -286,90 +306,99 @@ jobs:
 
           echo "📄 Found report at $REPORT_PATH"
 
-          # Extract diff from fenced ```diff block (no Python dependency)
-          awk '
-            /^```/ {
-              if (!infence) { infence=1; next }
-              if (hasdiff) { exit }
-              infence=0; hasdiff=0; next
-            }
-            infence && /^diff --git / { hasdiff=1 }
-            infence && hasdiff { print }
-          ' "$REPORT_PATH" > "$PATCH_FILE"
+          # Apply search/replace blocks from the report using inline Python
+          CHANGED_FILES=$(python3 << 'PYEOF'
+import re, os, sys
 
-          # Fallback: raw diff block not inside a fence
-          if [ ! -s "$PATCH_FILE" ]; then
-            awk '/^diff --git /{found=1} found{print}' "$REPORT_PATH" > "$PATCH_FILE"
-          fi
+report = open(os.environ['REPORT_PATH'], encoding='utf-8', errors='ignore').read()
 
-          # Handle empty or NO_PATCH result
-          if [ ! -s "$PATCH_FILE" ]; then
-            if grep -q "NO_PATCH" "$REPORT_PATH"; then
-              echo "⚠️ Model returned NO_PATCH"
-            else
-              echo "❌ No diff block found in report"
-            fi
+# Find ## Proposed Patch section
+lower = report.lower()
+idx = lower.find('## proposed patch')
+section = report[idx:] if idx >= 0 else report
+
+# Check NO_PATCH
+if re.search(r'\bNO_PATCH\b', section[:300]):
+    print('NO_PATCH')
+    sys.exit(0)
+
+# Parse FILE / <<<SEARCH ... >>>REPLACE ... >>>END blocks
+pattern = re.compile(
+    r'FILE:\s*([^\n]+)\n<<<SEARCH\n(.*?)>>>REPLACE\n(.*?)>>>END',
+    re.DOTALL
+)
+matches = pattern.findall(section)
+
+if not matches:
+    print('NO_BLOCKS')
+    sys.exit(0)
+
+changed = []
+for filepath, search, replace in matches:
+    filepath = filepath.strip()
+    if not os.path.exists(filepath):
+        print(f'MISSING:{filepath}', flush=True)
+        continue
+    content = open(filepath, encoding='utf-8', errors='ignore').read()
+    if search not in content:
+        # Try stripping trailing whitespace from each line
+        search_stripped = '\n'.join(l.rstrip() for l in search.splitlines())
+        content_stripped = '\n'.join(l.rstrip() for l in content.splitlines())
+        if search_stripped not in content_stripped:
+            print(f'NOT_FOUND:{filepath}', flush=True)
+            continue
+        content = content_stripped
+    new_content = content.replace(search, replace, 1)
+    open(filepath, 'w', encoding='utf-8').write(new_content)
+    print(f'PATCHED:{filepath}', flush=True)
+    changed.append(filepath)
+
+if not changed:
+    print('NO_CHANGES')
+PYEOF
+)
+
+          echo "Patch result: $CHANGED_FILES"
+
+          if echo "$CHANGED_FILES" | grep -q "^NO_PATCH"; then
+            echo "⚠️ Model returned NO_PATCH"
             echo "patch_applied=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          if grep -q "^NO_PATCH" "$PATCH_FILE"; then
-            echo "⚠️ Model returned NO_PATCH — insufficient issue details for a patch"
+          if echo "$CHANGED_FILES" | grep -q "^NO_BLOCKS\|^NO_CHANGES"; then
+            echo "❌ No search/replace blocks found or no files changed"
             echo "patch_applied=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          echo "🔧 Attempting to apply patch..."
-
-          if git apply --check --recount "$PATCH_FILE" 2>&1; then
-            echo "✓ Patch validation passed"
-            git apply --index --recount "$PATCH_FILE"
-            STAGED_FILES="$(git diff --cached --name-only)"
-
-            if [ -z "$STAGED_FILES" ]; then
-              echo "❌ No staged files after patch"
-              echo "patch_applied=false" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-
-            echo "📝 Staged files:"
-            echo "$STAGED_FILES"
-
-            # Reject if any staged file is outside Frontend/ or Backend/
-            BAD_FILES=$(echo "$STAGED_FILES" | grep -Ev '^(Frontend|Backend)/')
-            if [ -n "$BAD_FILES" ]; then
-              echo "❌ Patch touches paths outside Frontend/ or Backend/: $BAD_FILES"
-              git reset
-              echo "patch_applied=false" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-
-            # Reject patches that create new files (only edits to existing files allowed)
-            while IFS= read -r f; do
-              [ -z "$f" ] && continue
-              if ! git cat-file -e "HEAD:$f" 2>/dev/null; then
-                echo "❌ Patch creates new file '$f'; rejecting"
-                git reset
-                echo "patch_applied=false" >> "$GITHUB_OUTPUT"
-                exit 0
-              fi
-            done <<< "$STAGED_FILES"
-
-            # Require at least one real source file
-            if echo "$STAGED_FILES" | grep -qE '\.(ts|tsx|js|jsx|html|scss|css|json|cs|csproj)$'; then
-              echo "✓ Valid source changes — raising PR"
-              echo "patch_applied=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "❌ Patch contains no source code files"
-              git reset
-              echo "patch_applied=false" >> "$GITHUB_OUTPUT"
-            fi
-          else
-            echo "❌ git apply --check failed"
-            echo "--- Patch preview ---"
-            head -80 "$PATCH_FILE"
+          if echo "$CHANGED_FILES" | grep -q "^MISSING:\|^NOT_FOUND:"; then
+            echo "❌ Could not locate search text in files:"
+            echo "$CHANGED_FILES"
             echo "patch_applied=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+
+          # Stage changed files
+          STAGED_FILES=""
+          while IFS= read -r line; do
+            f="${line#PATCHED:}"
+            [ -z "$f" ] && continue
+            if echo "$f" | grep -qE '^(Frontend|Backend)/'; then
+              git add "$f"
+              STAGED_FILES="$STAGED_FILES $f"
+              echo "✓ Staged: $f"
+            fi
+          done <<< "$CHANGED_FILES"
+
+          if [ -z "$(git diff --cached --name-only)" ]; then
+            echo "❌ No files staged"
+            echo "patch_applied=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "✓ Patch applied successfully"
+          echo "patch_applied=true" >> "$GITHUB_OUTPUT"
 
       - name: Create healing PR
         if: ${{ steps.apply_patch.outputs.patch_applied == 'true' }}
