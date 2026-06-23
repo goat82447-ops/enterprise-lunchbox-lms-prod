@@ -41,7 +41,7 @@ jobs:
             exit 1
           fi
 
-      - name: Collect repository context via MCP + rg
+      - name: Collect repository context via MCP + smart analysis
         id: collect_context
         shell: bash
         env:
@@ -53,122 +53,97 @@ jobs:
           CONTEXT_FILE="${CONTEXT_DIR}/openrouter-context-${ISSUE_NUMBER}.txt"
           mkdir -p "$CONTEXT_DIR"
           
-          # Collect MCP context in background
-          (echo '{"method": "project:summary", "params": {}}'; \
-           echo '{"method": "healing:context", "params": {}}'; \
-           echo '{"method": "sources:list", "params": {"type": "frontend-ts"}}') | \
-            timeout 5 node mcp-server/server.js > "$CONTEXT_DIR/mcp-context.json" 2>/dev/null || true
+          # Collect MCP context with SMART issue analysis
+          python3 << 'PYEOF'
+          import json
+          import subprocess
+          import os
+          import pathlib
           
-          python - <<'PY'
-          import os, re, subprocess, pathlib
-
           issue_title = os.environ.get("ISSUE_TITLE", "")
           issue_body = os.environ.get("ISSUE_BODY", "")
           issue_number = os.environ.get("ISSUE_NUMBER", "")
-          context_file = pathlib.Path(f"healing-reports/openrouter-context-{issue_number}.txt")
-          context_file.parent.mkdir(parents=True, exist_ok=True)
-
-          text = f"{issue_title}\n{issue_body}".lower()
-          stop = {"with","that","this","from","have","will","when","what","where","there","error","issue","failed","login","user","please","getting","while"}
-          words = [w for w in re.findall(r"[a-z0-9_]{4,}", text) if w not in stop]
-          keywords = []
-          for w in words:
-              if w not in keywords:
-                  keywords.append(w)
-              if len(keywords) >= 10:
-                  break
-
-          candidates = []
-          for kw in keywords:
-              try:
-                  out = subprocess.check_output(
-                      ["rg", "-l", kw, "Frontend/lunchbox-app/src", "Backend/microservices", "Backend/dotnet", "--glob", "!**/node_modules/**"],
-                      text=True,
-                      stderr=subprocess.DEVNULL
-                  )
-                  for p in out.splitlines():
-                      if p and p not in candidates:
-                          candidates.append(p)
-                      if len(candidates) >= 12:
-                          break
-              except Exception:
-                  pass
-              if len(candidates) >= 12:
-                  break
-
-          # fallback for empty matches
-          if not candidates:
-              defaults = [
-                  "Frontend/lunchbox-app/src/app/core/services/auth.service.ts",
-                  "Frontend/lunchbox-app/src/app/features/login/login.component.ts",
-                  "Frontend/lunchbox-app/src/environments/environment.prod.ts",
-                  "Backend/dotnet/AuthService/Program.cs",
-              ]
-              candidates = [p for p in defaults if pathlib.Path(p).exists()]
-
-          # Add high-signal baseline files so model sees project conventions.
-          baseline = [
-              ".github/copilot-instructions.md",
-              "Frontend/lunchbox-app/src/environments/environment.ts",
-              "Frontend/lunchbox-app/src/environments/environment.prod.ts",
-              "Frontend/lunchbox-app/src/app/app.routes.ts",
-              "Frontend/lunchbox-app/package.json",
-              "Backend/microservices/package.json",
+          
+          # Call MCP with smart issue:analyze
+          mcp_requests = [
+              {"method": "project:summary", "params": {}},
+              {"method": "issue:analyze", "params": {"title": issue_title, "body": issue_body}},
+              {"method": "sources:list", "params": {"type": "frontend-ts"}}
           ]
-          for p in baseline:
-              if pathlib.Path(p).exists() and p not in candidates:
-                  candidates.insert(0, p)
-
-          # Build a compact repository map to improve whole-repo understanding.
-          repo_map = []
-          for root in ["Frontend/lunchbox-app/src", "Backend/microservices", "Backend/dotnet"]:
-              r = pathlib.Path(root)
-              if not r.exists():
-                  continue
-              count = 0
-              for f in r.rglob("*"):
-                  if not f.is_file():
-                      continue
-                  fp = str(f).replace("\\", "/")
-                  if "/node_modules/" in fp or "/obj/" in fp or "/bin/" in fp:
-                      continue
-                  repo_map.append(fp)
-                  count += 1
-                  if count >= 180:
-                      break
-
+          
+          context = {}
+          try:
+              for req in mcp_requests:
+                  try:
+                      proc = subprocess.run(
+                          ["node", "mcp-server/server.js"],
+                          input=json.dumps(req),
+                          text=True,
+                          capture_output=True,
+                          timeout=5
+                      )
+                      if proc.returncode == 0 and proc.stdout.strip():
+                          resp = json.loads(proc.stdout.strip())
+                          if resp.get("success"):
+                              context[req["method"]] = resp.get("data", {})
+                  except Exception as e:
+                      print(f"Warning: Failed to collect {req['method']}: {e}")
+          except Exception as e:
+              print(f"Warning: MCP context collection failed: {e}")
+          
+          # USE SMART ANALYSIS RESULTS FROM MCP
+          relevant_files = context.get("issue:analyze", {}).get("relevantFiles", [])
+          keywords = context.get("issue:analyze", {}).get("keywords", [])
+          file_contents = context.get("issue:analyze", {}).get("fileContents", [])
+          
+          # Build context for model with smart file discovery
           parts = []
           parts.append("=== ISSUE SUMMARY ===")
           parts.append(issue_title)
           parts.append(issue_body)
           parts.append("")
-          parts.append("=== REPOSITORY MAP (trimmed) ===")
-          parts.extend(repo_map[:500])
-          parts.append("")
-          parts.append("=== CANDIDATE FILES ===")
-          parts.extend(candidates)
-          parts.append("")
-
-          max_total = 90000
-          total = 0
-          for p in candidates:
-              path = pathlib.Path(p)
-              if not path.exists():
-                  continue
-              try:
-                  content = path.read_text(encoding="utf-8", errors="ignore")
-              except Exception:
-                  continue
-              snippet = "\n".join(content.splitlines()[:220])
-              block = f"=== FILE: {p} ===\n{snippet}\n\n"
-              if total + len(block) > max_total:
-                  break
-              parts.append(block)
-              total += len(block)
-
+          
+          if keywords:
+              parts.append(f"=== DETECTED KEYWORDS (Smart Analysis) ===")
+              parts.extend(keywords[:20])
+              parts.append("")
+          
+          if relevant_files:
+              parts.append(f"=== RELEVANT FILES ({len(relevant_files)} found) ===")
+              parts.extend(relevant_files[:15])
+              parts.append("")
+          
+          # Add file contents from smart analysis
+          if file_contents:
+              parts.append("=== FILE CONTENTS (Most Relevant) ===")
+              for fc in file_contents[:5]:
+                  parts.append(f"FILE: {fc.get('path', '')}")
+                  parts.append(fc.get('content', '')[:800])
+                  parts.append("")
+          
+          # Add baseline files for context
+          baseline_files = [
+              ".github/copilot-instructions.md",
+              "Frontend/lunchbox-app/src/app/app.routes.ts",
+              "Frontend/lunchbox-app/package.json",
+          ]
+          
+          for p in baseline_files:
+              if pathlib.Path(p).exists():
+                  try:
+                      content = pathlib.Path(p).read_text(encoding="utf-8", errors="ignore")
+                      snippet = "\n".join(content.splitlines()[:80])
+                      parts.append(f"=== BASELINE: {p} ===")
+                      parts.append(snippet)
+                      parts.append("")
+                  except Exception:
+                      pass
+          
+          context_file = pathlib.Path(f"healing-reports/openrouter-context-{issue_number}.txt")
           context_file.write_text("\n".join(parts), encoding="utf-8")
-          print(f"Wrote context to {context_file}")
-          PY
+          print(f"Wrote smart analysis context to {context_file}")
+          PYEOF
+          
           echo "context_file=$CONTEXT_FILE" >> "$GITHUB_OUTPUT"
 
       - name: Analyze issue and publish diagnostics
@@ -204,25 +179,33 @@ jobs:
               'Issue body:',
               `${process.env.ISSUE_BODY}`,
               '',
-              'Return markdown with these exact headings:',
-              '## Error Observed',
-              '## Root Cause',
-              '## Resolution',
-              '## Validation Steps',
-              '## Proposed Patch',
+              'IMPORTANT INSTRUCTIONS:',
+              '1. You are a code healing assistant. Your job is to FIX code issues.',
+              '2. Use the repository context provided below to understand the project structure.',
+              '3. Return markdown with these EXACT headings:',
+              '   - ## Error Observed (what the user sees)',
+              '   - ## Root Cause (why it happens)',
+              '   - ## Resolution (how to fix it)',
+              '   - ## Validation Steps (how to test)',
+              '   - ## Proposed Patch (the actual code fix)',
               '',
-              'Rules:',
-              '- Use only evidence from the issue text/logs.',
-              '- Do not guess.',
-              '- If exact root cause is not provable from provided details, write "Insufficient evidence for exact root cause" and list exactly what logs/steps are missing.',
-              '- In Resolution, provide only actions tied to observed evidence.',
-              '- Keep response concise and actionable.',
-              '- Under "## Proposed Patch", provide a single fenced diff block using ```diff ... ``` for real code changes when confident.',
-              '- The diff must be valid git unified diff syntax (start with "diff --git", include ---/+++ and @@ hunks, and contain no prose inside the fenced block).',
-              '- If no safe code change can be made, put exactly "NO_PATCH" under "## Proposed Patch".',
+              '4. Rules for "## Proposed Patch":',
+              '   - If you can write a code fix based on the context, provide it as a fenced diff block.',
+              '   - Diff must use valid git unified diff format (start with "diff --git", include ---/+++ headers and @@ hunks).',
+              '   - Only modify EXISTING files (Frontend, Backend paths).',
+              '   - Keep changes minimal and focused.',
+              '   - If impossible to fix (insufficient evidence), write exactly "NO_PATCH" (nothing else).',
               '',
-              'Repository context (files/snippets):',
-              repoContext || 'No repository context available.'
+              '5. RULES FOR GENERATING PATCHES:',
+              '   - When you see keywords like "button", "login", "color", "disable", "API", "fix" → GENERATE CODE',
+              '   - DO NOT write NO_PATCH unless it is truly impossible',
+              '   - Use the file contents below to understand current code structure',
+              '   - Match existing code style (indentation, naming, patterns)',
+              '',
+              'Repository context (files/code snippets):',
+              repoContext || 'No repository context available.',
+              '',
+              'Generate your response now. Remember: provide actual code changes, not explanations only.'
             ].join('\n');
 
             let content = '';
@@ -333,112 +316,150 @@ jobs:
           PATCH_FILE="openrouter.patch"
 
           if [ ! -f "$REPORT_PATH" ]; then
-            echo "patch_applied=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+             echo "⚠️ No report file found at $REPORT_PATH"
+             echo "patch_applied=false" >> "$GITHUB_OUTPUT"
+             exit 0
+           fi
 
-          # Extract and normalize the fenced patch block to reduce malformed model output.
-          python - "$REPORT_PATH" "$PATCH_FILE" <<'PY'
-          import re
-          import sys
+           echo "📄 Found report at $REPORT_PATH"
+           echo "---"
+          
+           # Extract and normalize the fenced patch block to reduce malformed model output.
+           python3 - "$REPORT_PATH" "$PATCH_FILE" <<'PY'
+           import re
+           import sys
 
-          report_path, patch_path = sys.argv[1], sys.argv[2]
-          text = open(report_path, "r", encoding="utf-8", errors="ignore").read()
+           report_path, patch_path = sys.argv[1], sys.argv[2]
+           text = open(report_path, "r", encoding="utf-8", errors="ignore").read()
 
-          lowered = text.lower()
-          marker = lowered.find("## proposed patch")
-          section = text[marker:] if marker >= 0 else text
-
-          # Capture first fenced block under Proposed Patch (accept any fence language).
-          m = re.search(r"```[^\n]*\n(.*?)\n```", section, flags=re.S)
-          payload = m.group(1) if m else ""
-
-          # Handle explicit no-patch response.
-          if payload.strip().upper() == "NO_PATCH":
-            open(patch_path, "w", encoding="utf-8").write("NO_PATCH\n")
+           lowered = text.lower()
+           marker = lowered.find("## proposed patch")
+          
+           if marker < 0:
+             print("❌ ERROR: '## Proposed Patch' section not found in report")
+             print(f"Report preview (first 1000 chars):\n{text[:1000]}")
+             open(patch_path, "w", encoding="utf-8").write("")
             sys.exit(0)
+          
+           section = text[marker:]
+           print(f"✓ Found 'Proposed Patch' section at position {marker}")
 
-          # Normalize line endings and trim leading markdown indentation/quotes.
-          lines = []
-          for raw in payload.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
-            line = raw
-            if line.startswith("> "):
-              line = line[2:]
-            if line.startswith("    diff --git ") or line.startswith("\tdiff --git "):
-              line = line.lstrip()
-            lines.append(line)
+           # Capture first fenced block under Proposed Patch (accept any fence language).
+           m = re.search(r"```[^\n]*\n(.*?)\n```", section, flags=re.S)
+          
+           if not m:
+             print("❌ ERROR: No fenced code block found in Proposed Patch section")
+             print(f"Section preview:\n{section[:500]}")
+             open(patch_path, "w", encoding="utf-8").write("")
+             sys.exit(0)
+          
+           payload = m.group(1)
+           print(f"✓ Extracted fenced block: {len(payload)} bytes")
 
-          # Keep only from first diff header onward.
-          start = None
-          for i, line in enumerate(lines):
-            if line.startswith("diff --git "):
-              start = i
-              break
-          if start is None:
-            open(patch_path, "w", encoding="utf-8").write("")
-            sys.exit(0)
+           # Handle explicit no-patch response.
+           if payload.strip().upper() == "NO_PATCH":
+             print("⚠️ Model returned NO_PATCH (insufficient info to generate code)")
+             open(patch_path, "w", encoding="utf-8").write("NO_PATCH\n")
+             sys.exit(0)
 
-          normalized = "\n".join(lines[start:]).strip()
-          open(patch_path, "w", encoding="utf-8").write(normalized + ("\n" if normalized else ""))
-          PY
+           # Normalize line endings and trim leading markdown indentation/quotes.
+           lines = []
+           for raw in payload.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+             line = raw
+             if line.startswith("> "):
+               line = line[2:]
+             if line.startswith("    diff --git ") or line.startswith("\tdiff --git "):
+               line = line.lstrip()
+             lines.append(line)
 
-          if [ ! -s "$PATCH_FILE" ]; then
-            echo "No patch block detected in report."
-            echo "patch_applied=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+           # Keep only from first diff header onward.
+           start = None
+           for i, line in enumerate(lines):
+             if line.startswith("diff --git "):
+               start = i
+               break
+          
+           if start is None:
+             print("❌ ERROR: No 'diff --git' header found in patch")
+             print(f"Extracted content preview (first 500 chars):\n{payload[:500]}")
+             open(patch_path, "w", encoding="utf-8").write("")
+             sys.exit(0)
 
-          if grep -q "^NO_PATCH$" "$PATCH_FILE"; then
-            echo "Model returned NO_PATCH."
-            echo "patch_applied=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+           normalized = "\n".join(lines[start:]).strip()
+           open(patch_path, "w", encoding="utf-8").write(normalized + ("\n" if normalized else ""))
+           print(f"✓ Normalized patch: {len(normalized)} bytes")
+           print(f"✓ First line: {normalized.splitlines()[0] if normalized else 'EMPTY'}")
+           PY
 
-          if git apply --check --recount "$PATCH_FILE" && git apply --index --recount "$PATCH_FILE"; then
-            echo "Patch applied successfully."
-            STAGED_FILES="$(git diff --cached --name-only)"
-            echo "Staged files:"
-            echo "$STAGED_FILES"
+           if [ ! -s "$PATCH_FILE" ]; then
+             echo "❌ No patch block detected in report."
+             echo "patch_applied=false" >> "$GITHUB_OUTPUT"
+             exit 0
+           fi
 
-            if [ -z "$STAGED_FILES" ]; then
-              echo "No staged files after patch."
-              echo "patch_applied=false" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
+           if grep -q "^NO_PATCH$" "$PATCH_FILE"; then
+             echo "⚠️ Model returned NO_PATCH - insufficient issue details for code generation"
+             echo "patch_applied=false" >> "$GITHUB_OUTPUT"
+             exit 0
+           fi
 
-            # Only allow patches that touch repo source surfaces.
-            if echo "$STAGED_FILES" | grep -E -v '^(Frontend|Backend)/' > /dev/null; then
-              echo "Patch touches non-source paths; rejecting patch."
-              git reset
-              echo "patch_applied=false" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
+           echo "---"
+           echo "🔧 Attempting to apply patch..."
+          
+           if git apply --check --recount "$PATCH_FILE" 2>&1; then
+             echo "✓ Patch validation passed"
+             if git apply --index --recount "$PATCH_FILE" 2>&1; then
+               echo "✓ Patch applied successfully"
+               STAGED_FILES="$(git diff --cached --name-only)"
+               echo ""
+               echo "📝 Staged files:"
+               echo "$STAGED_FILES"
 
-            # Require edits to existing files only (no newly created source files).
-            while IFS= read -r f; do
-              if [ -n "$f" ] && ! git cat-file -e "HEAD:$f" 2>/dev/null; then
-                echo "Patch created new file '$f'; rejecting patch."
-                git reset
-                echo "patch_applied=false" >> "$GITHUB_OUTPUT"
-                exit 0
-              fi
-            done <<< "$STAGED_FILES"
+               if [ -z "$STAGED_FILES" ]; then
+                 echo "❌ No staged files after patch"
+                 echo "patch_applied=false" >> "$GITHUB_OUTPUT"
+                 exit 0
+               fi
 
-            # Require at least one concrete code/config file under Frontend or Backend.
-            if echo "$STAGED_FILES" | grep -E '^Frontend/.*\.(ts|tsx|js|jsx|html|scss|css|json)$|^Backend/.*\.(ts|tsx|js|jsx|json|cs|csproj|sln|props|targets|config)$' > /dev/null; then
-              echo "Real source changes detected."
-              echo "patch_applied=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "Patch does not include valid source file changes; skipping PR."
-              git reset
-              echo "patch_applied=false" >> "$GITHUB_OUTPUT"
-            fi
-          else
-            echo "First 80 lines of extracted patch for debugging:"
-            sed -n '1,80p' "$PATCH_FILE"
-            echo "Patch apply failed; no PR will be created."
-            echo "patch_applied=false" >> "$GITHUB_OUTPUT"
-          fi
+               # Only allow patches that touch repo source surfaces.
+               if echo "$STAGED_FILES" | grep -E -v '^(Frontend|Backend)/' > /dev/null; then
+                 echo "❌ Patch touches non-source paths; rejecting"
+                 git reset
+                 echo "patch_applied=false" >> "$GITHUB_OUTPUT"
+                 exit 0
+               fi
+
+               # Require edits to existing files only (no newly created source files).
+               while IFS= read -r f; do
+                 if [ -n "$f" ] && ! git cat-file -e "HEAD:$f" 2>/dev/null; then
+                   echo "❌ Patch created new file '$f'; rejecting"
+                   git reset
+                   echo "patch_applied=false" >> "$GITHUB_OUTPUT"
+                   exit 0
+                 fi
+               done <<< "$STAGED_FILES"
+
+               # Require at least one concrete code/config file under Frontend or Backend.
+               if echo "$STAGED_FILES" | grep -E '^Frontend/.*\.(ts|tsx|js|jsx|html|scss|css|json)$|^Backend/.*\.(ts|tsx|js|jsx|json|cs|csproj|sln|props|targets|config)$' > /dev/null; then
+                 echo "✓ Valid source file changes detected"
+                 echo "patch_applied=true" >> "$GITHUB_OUTPUT"
+               else
+                 echo "❌ Patch does not include valid source file changes"
+                 git reset
+                 echo "patch_applied=false" >> "$GITHUB_OUTPUT"
+               fi
+             else
+               echo "❌ git apply --index failed"
+               echo "First 80 lines of patch:"
+               head -80 "$PATCH_FILE"
+               echo "patch_applied=false" >> "$GITHUB_OUTPUT"
+             fi
+           else
+             echo "❌ git apply --check validation failed"
+             echo "First 80 lines of patch for debugging:"
+             head -80 "$PATCH_FILE"
+             echo "patch_applied=false" >> "$GITHUB_OUTPUT"
+           fi
 
       - name: Create or update healing PR
         if: ${{ steps.apply_patch.outputs.patch_applied == 'true' }}
