@@ -364,74 +364,78 @@ jobs:
            echo "📄 Found report at $REPORT_PATH"
            echo "---"
           
-           # Extract and normalize the fenced patch block to reduce malformed model output.
-           printf '%s\n' \
-             'import re' \
-             'import sys' \
-             '' \
-             'report_path, patch_path = sys.argv[1], sys.argv[2]' \
-             'text = open(report_path, "r", encoding="utf-8", errors="ignore").read()' \
-             '' \
-             'lowered = text.lower()' \
-             'marker = lowered.find("## proposed patch")' \
-             '' \
-             'if marker < 0:' \
-             '    print("❌ ERROR: \"## Proposed Patch\" section not found in report")' \
-             '    print(f"Report preview (first 1000 chars):\n{text[:1000]}")' \
-             '    open(patch_path, "w", encoding="utf-8").write("")' \
-             '    sys.exit(0)' \
-             '' \
-             'section = text[marker:]' \
-             'print(f"✓ Found Proposed Patch section at position {marker}")' \
-             '' \
-             'plain_section = section.splitlines()[1:]' \
-             'meaningful = [line.strip() for line in plain_section if line.strip()]' \
-             'if meaningful and meaningful[0].upper() == "NO_PATCH":' \
-             '    print("⚠️ Model returned NO_PATCH (plain text under heading)")' \
-             '    open(patch_path, "w", encoding="utf-8").write("NO_PATCH\n")' \
-             '    sys.exit(0)' \
-             '' \
-             'm = re.search(r"```[^\n]*\n(.*?)\n```", section, flags=re.S)' \
-             'if not m:' \
-             '    print("❌ ERROR: No fenced code block found in Proposed Patch section")' \
-             '    print(f"Section preview:\n{section[:500]}")' \
-             '    open(patch_path, "w", encoding="utf-8").write("")' \
-             '    sys.exit(0)' \
-             '' \
-             'payload = m.group(1)' \
-             'print(f"✓ Extracted fenced block: {len(payload)} bytes")' \
-             '' \
-             'if payload.strip().upper() == "NO_PATCH":' \
-             '    print("⚠️ Model returned NO_PATCH (insufficient info to generate code)")' \
-             '    open(patch_path, "w", encoding="utf-8").write("NO_PATCH\n")' \
-             '    sys.exit(0)' \
-             '' \
-             'lines = []' \
-             'for raw in payload.replace("\r\n", "\n").replace("\r", "\n").split("\n"):' \
-             '    line = raw' \
-             '    if line.startswith("> "):' \
-             '        line = line[2:]' \
-             '    if line.startswith("    diff --git ") or line.startswith("\tdiff --git "):' \
-             '        line = line.lstrip()' \
-             '    lines.append(line)' \
-             '' \
-             'start = None' \
-             'for i, line in enumerate(lines):' \
-             '    if line.startswith("diff --git "):' \
-             '        start = i' \
-             '        break' \
-             '' \
-             'if start is None:' \
-             '    print("❌ ERROR: No diff header found in patch")' \
-             '    print(f"Extracted content preview (first 500 chars):\n{payload[:500]}")' \
-             '    open(patch_path, "w", encoding="utf-8").write("")' \
-             '    sys.exit(0)' \
-             '' \
-             'normalized = "\n".join(lines[start:]).strip()' \
-             'open(patch_path, "w", encoding="utf-8").write(normalized + ("\n" if normalized else ""))' \
-             'print(f"✓ Normalized patch: {len(normalized)} bytes")' \
-             'print(f"✓ First line: {normalized.splitlines()[0] if normalized else "EMPTY"}")' \
-             | python3 - "$REPORT_PATH" "$PATCH_FILE"
+           # Extract and normalize patch content. Do not depend strictly on "## Proposed Patch".
+           python3 - "$REPORT_PATH" "$PATCH_FILE" <<'PY'
+import re
+import sys
+
+report_path, patch_path = sys.argv[1], sys.argv[2]
+text = open(report_path, "r", encoding="utf-8", errors="ignore").read()
+lowered = text.lower()
+
+marker = lowered.find("## proposed patch")
+scope = text[marker:] if marker >= 0 else text
+if marker >= 0:
+    print(f"✓ Found Proposed Patch section at position {marker}")
+else:
+    print("⚠️ Proposed Patch heading not found; scanning full report for diff")
+
+def normalize_payload(payload):
+    lines = []
+    for raw in payload.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+        line = raw
+        if line.startswith("> "):
+            line = line[2:]
+        if line.startswith("    diff --git ") or line.startswith("\tdiff --git "):
+            line = line.lstrip()
+        lines.append(line)
+
+    start = next((i for i, line in enumerate(lines) if line.startswith("diff --git ")), None)
+    if start is None:
+        return ""
+    return "\n".join(lines[start:]).strip()
+
+def extract_diff_from_text(source):
+    # Prefer fenced code blocks that contain unified diff content.
+    fenced_blocks = re.findall(r"```[^\n]*\n(.*?)\n```", source, flags=re.S)
+    for block in fenced_blocks:
+        if "diff --git " in block:
+            return block
+
+    # Fallback to raw text starting from first diff header.
+    idx = source.find("diff --git ")
+    if idx >= 0:
+        return source[idx:]
+    return ""
+
+payload = extract_diff_from_text(scope)
+if not payload and scope is not text:
+    payload = extract_diff_from_text(text)
+
+if not payload:
+    meaningful = [line.strip() for line in scope.splitlines() if line.strip()]
+    if any(line.upper() == "NO_PATCH" for line in meaningful):
+        print("⚠️ Model returned NO_PATCH")
+        open(patch_path, "w", encoding="utf-8").write("NO_PATCH\n")
+        sys.exit(0)
+
+    print("❌ ERROR: No diff block found in report")
+    print(f"Report preview (first 800 chars):\n{text[:800]}")
+    open(patch_path, "w", encoding="utf-8").write("")
+    sys.exit(0)
+
+normalized = normalize_payload(payload)
+if not normalized:
+    print("❌ ERROR: Found patch-like content, but no valid 'diff --git' header after normalization")
+    print(f"Payload preview (first 500 chars):\n{payload[:500]}")
+    open(patch_path, "w", encoding="utf-8").write("")
+    sys.exit(0)
+
+open(patch_path, "w", encoding="utf-8").write(normalized + "\n")
+print(f"✓ Normalized patch: {len(normalized)} bytes")
+first_line = normalized.splitlines()[0] if normalized else "EMPTY"
+print("✓ First line:", first_line)
+PY
 
            if [ ! -s "$PATCH_FILE" ]; then
              echo "❌ No patch block detected in report."
