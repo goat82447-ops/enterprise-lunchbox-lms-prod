@@ -31,7 +31,7 @@ class ProjectContextMCPServer {
     const relevantFiles = this.findRelevantFiles(keywords);
     const fileContents = relevantFiles.slice(0, 5).map(fp => ({
       path: fp,
-      content: this.getFileContentSync(fp).slice(0, 500), // First 500 chars
+      content: this.buildRelevantSnippet(fp, keywords),
     }));
 
     return {
@@ -87,7 +87,7 @@ class ProjectContextMCPServer {
       }
 
       if (matchScore > 0) {
-        results.push({ path: filePath, score: matchScore });
+        results.push({ path: this.normalizePath(filePath), score: matchScore });
       }
     }
 
@@ -120,6 +120,53 @@ class ProjectContextMCPServer {
     }
   }
 
+  normalizePath(filePath) {
+    return filePath.replace(/\\/g, '/');
+  }
+
+  buildRelevantSnippet(filePath, keywords) {
+    const content = this.getFileContentSync(filePath);
+    if (!content) return '';
+
+    const snippets = [];
+    const lower = content.toLowerCase();
+
+    const addSlice = (start, end) => {
+      const slice = content.slice(Math.max(0, start), Math.min(content.length, end)).trim();
+      if (slice && !snippets.includes(slice)) {
+        snippets.push(slice);
+      }
+    };
+
+    const decoratorIndex = lower.indexOf('@component({');
+    if (decoratorIndex >= 0) {
+      addSlice(decoratorIndex, decoratorIndex + 5000);
+    }
+
+    const styleIndex = lower.indexOf('styles:');
+    if (styleIndex >= 0) {
+      addSlice(styleIndex, styleIndex + 3000);
+    }
+
+    const templateIndex = lower.indexOf('template:');
+    if (templateIndex >= 0) {
+      addSlice(templateIndex, templateIndex + 3000);
+    }
+
+    for (const keyword of keywords) {
+      const matchIndex = lower.indexOf(keyword.toLowerCase());
+      if (matchIndex >= 0) {
+        addSlice(matchIndex - 600, matchIndex + 1800);
+      }
+    }
+
+    if (snippets.length === 0) {
+      addSlice(0, 4000);
+    }
+
+    return snippets.join('\n\n--- SNIPPET BREAK ---\n\n').slice(0, 9000);
+  }
+
   /**
    * List source files synchronously (for analysis)
    */
@@ -138,7 +185,7 @@ class ProjectContextMCPServer {
           } else if (file.isFile()) {
             const ext = path.extname(file.name);
             if (extensions.includes(ext)) {
-              sourceFiles.push(path.relative(PROJECT_ROOT, fullPath));
+              sourceFiles.push(this.normalizePath(path.relative(PROJECT_ROOT, fullPath)));
             }
           }
         }
@@ -477,8 +524,8 @@ class ProjectContextMCPServer {
           return { success: true, data: this.getHealingContextFiles() };
 
         case 'issue:analyze':
-          if (!params.title || !params.body) throw new Error('Missing title or body parameter');
-          return { success: true, data: this.analyzeIssue(params.title, params.body) };
+          if (!params.title && !params.body) throw new Error('Missing title or body parameter');
+          return { success: true, data: this.analyzeIssue(params.title || '', params.body || '') };
 
         default:
           throw new Error(`Unknown method: ${method}`);
