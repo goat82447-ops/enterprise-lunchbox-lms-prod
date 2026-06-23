@@ -118,7 +118,7 @@ jobs:
               parts.append("=== FILE CONTENTS (Most Relevant) ===")
               for fc in file_contents[:5]:
                   parts.append(f"FILE: {fc.get('path', '')}")
-                  parts.append(fc.get('content', '')[:800])
+                  parts.append(fc.get('content', '')[:3500])
                   parts.append("")
           
           # Add baseline files for context
@@ -339,10 +339,17 @@ jobs:
              print("❌ ERROR: '## Proposed Patch' section not found in report")
              print(f"Report preview (first 1000 chars):\n{text[:1000]}")
              open(patch_path, "w", encoding="utf-8").write("")
-            sys.exit(0)
-          
+             sys.exit(0)
+           
            section = text[marker:]
            print(f"✓ Found 'Proposed Patch' section at position {marker}")
+
+           plain_section = section.splitlines()[1:]
+           meaningful = [line.strip() for line in plain_section if line.strip()]
+           if meaningful and meaningful[0].upper() == "NO_PATCH":
+             print("⚠️ Model returned NO_PATCH (plain text under heading)")
+             open(patch_path, "w", encoding="utf-8").write("NO_PATCH\n")
+             sys.exit(0)
 
            # Capture first fenced block under Proposed Patch (accept any fence language).
            m = re.search(r"```[^\n]*\n(.*?)\n```", section, flags=re.S)
