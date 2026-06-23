@@ -74,11 +74,15 @@ jobs:
           printf '%s\n' "$KEYWORDS" >> "$CONTEXT_FILE"
           echo "" >> "$CONTEXT_FILE"
 
-          # Search for relevant files using keywords
+          # Search for relevant files using keywords (src only — skip node_modules/dist)
           RELEVANT_FILES=""
           for kw in $KEYWORDS; do
-            hits=$(grep -rl "$kw" Frontend/ Backend/ 2>/dev/null \
-              | grep -E '\.(ts|html|scss|css|json|cs)$' | head -5 || true)
+            hits=$(grep -rl "$kw" \
+              --include="*.ts" --include="*.html" --include="*.scss" \
+              --include="*.css" --include="*.json" --include="*.cs" \
+              --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=.git \
+              Frontend/lunchbox-app/src/ Backend/src/ 2>/dev/null \
+              | head -5 || true)
             RELEVANT_FILES="${RELEVANT_FILES}"$'\n'"${hits}"
           done
 
