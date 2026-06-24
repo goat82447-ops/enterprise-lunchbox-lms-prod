@@ -88,26 +88,38 @@ jobs:
           echo "" >> "$CONTEXT_FILE"
 
           # Search for relevant files using keywords across ALL modules
-          # (skip build output / vendored dirs).
+          # (skip build output / vendored dirs). We rank by relevance:
+          #  - every CONTENT match counts once
+          #  - every FILENAME/PATH match counts 5x (a file literally named after
+          #    a keyword, e.g. login.component.ts for a "login" issue, is by far
+          #    the most likely target and must not be truncated away).
           RELEVANT_FILES=""
           for kw in $KEYWORDS; do
-            hits=$(grep -rl "$kw" \
+            # content matches (no per-keyword truncation — rank globally instead)
+            content_hits=$(grep -rIl "$kw" \
               --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" \
               --include="*.mjs" --include="*.cjs" --include="*.html" --include="*.scss" \
               --include="*.css" --include="*.json" --include="*.cs" \
               --include="*.yml" --include="*.yaml" \
               --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=.git \
               --exclude-dir=bin --exclude-dir=obj \
-              $SRC_ROOTS 2>/dev/null \
-              | head -5 || true)
-            RELEVANT_FILES="${RELEVANT_FILES}"$'\n'"${hits}"
+              $SRC_ROOTS 2>/dev/null | head -40 || true)
+            RELEVANT_FILES="${RELEVANT_FILES}"$'\n'"${content_hits}"
+
+            # filename/path matches — weighted heavily by listing them 5 times
+            name_hits=$(find $SRC_ROOTS \
+              -not \( -path "*/node_modules/*" -o -path "*/dist/*" -o -path "*/bin/*" -o -path "*/obj/*" \) \
+              -type f -ipath "*${kw}*" 2>/dev/null | head -10 || true)
+            for _ in 1 2 3 4 5; do
+              RELEVANT_FILES="${RELEVANT_FILES}"$'\n'"${name_hits}"
+            done
           done
 
-          # Sort files by match frequency — most-matched files first
+          # Sort files by weighted match frequency — most-relevant files first
           TOP_FILES=$(printf '%s\n' "$RELEVANT_FILES" \
             | grep -v '^[[:space:]]*$' \
             | sort | uniq -c | sort -rn \
-            | awk '{print $2}' | head -8 || true)
+            | awk '{print $2}' | head -10 || true)
 
           echo "=== RELEVANT FILES ===" >> "$CONTEXT_FILE"
           printf '%s\n' "$TOP_FILES" >> "$CONTEXT_FILE"
