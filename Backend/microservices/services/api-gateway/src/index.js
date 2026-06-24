@@ -11,7 +11,7 @@ const orderServiceUrl = process.env.ORDER_SERVICE_URL || 'http://localhost:3002'
 const authServiceUrl = process.env.AUTH_SERVICE_URL || 'http://localhost:3003';
 
 app.use(cors());
-app.use(morgan('dev'));
+app.use(morgan('dev')
 app.use(express.json());
 
 app.get('/health', (_req, res) => {
