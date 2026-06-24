@@ -76,12 +76,20 @@ jobs:
             echo ""
           } > "$CONTEXT_FILE"
 
-          # Extract meaningful keywords (|| true prevents pipefail on no matches)
-          KEYWORDS=$(printf '%s %s' "${ISSUE_TITLE}" "${ISSUE_BODY}" \
-            | tr '[:upper:]' '[:lower:]' \
-            | grep -oE '[a-z][a-z0-9]{3,}' \
-            | grep -vxE 'this|that|with|from|have|will|been|when|then|they|also|into|more|some|what|which|there|their|after|before|should|would|could|using|error|issue|problem|please|working|getting|cannot|doesnt|https|http|the|and|for|not|are|but|was|has|its' \
-            | sort -u | head -20 || true)
+          # Extract meaningful keywords. IMPORTANT: title words carry the most
+          # signal, so we list them FIRST and de-duplicate while PRESERVING order
+          # (awk '!seen'). We must NOT use `sort -u | head` here — alphabetical
+          # truncation silently drops critical terms like "login"/"roles"/"screen"
+          # that happen to sort late, which then never get searched for.
+          STOP='this|that|with|from|have|will|been|when|then|they|also|into|more|some|what|which|there|their|after|before|should|would|could|using|error|issue|problem|please|working|getting|cannot|doesnt|https|http|the|and|for|not|are|but|was|has|its'
+          extract_kw() {
+            printf '%s' "$1" \
+              | tr '[:upper:]' '[:lower:]' \
+              | grep -oE '[a-z][a-z0-9]{3,}' \
+              | grep -vxE "$STOP" || true
+          }
+          KEYWORDS=$( { extract_kw "${ISSUE_TITLE}"; extract_kw "${ISSUE_BODY}"; } \
+            | awk 'NF && !seen[$0]++' | head -30 || true)
 
           echo "=== KEYWORDS ===" >> "$CONTEXT_FILE"
           printf '%s\n' "$KEYWORDS" >> "$CONTEXT_FILE"
