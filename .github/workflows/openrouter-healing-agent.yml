@@ -55,6 +55,19 @@ jobs:
           mkdir -p healing-reports
           CONTEXT_FILE="healing-reports/openrouter-context-${ISSUE_NUMBER}.txt"
 
+          # All real source modules in this repo (only those that exist).
+          # Add new module roots here when the repo grows.
+          SRC_ROOTS=""
+          for root in \
+            "Frontend/lunchbox-app/src" \
+            "Backend/dotnet" \
+            "Backend/microservices/services" \
+            "DotnetRoutix-Server" \
+            "mcp-server"; do
+            [ -d "$root" ] && SRC_ROOTS="$SRC_ROOTS $root"
+          done
+          echo "Scanning source roots:$SRC_ROOTS"
+
           {
             echo "=== ISSUE ==="
             echo "Title: ${ISSUE_TITLE}"
@@ -74,14 +87,18 @@ jobs:
           printf '%s\n' "$KEYWORDS" >> "$CONTEXT_FILE"
           echo "" >> "$CONTEXT_FILE"
 
-          # Search for relevant files using keywords (src only — skip node_modules/dist)
+          # Search for relevant files using keywords across ALL modules
+          # (skip build output / vendored dirs).
           RELEVANT_FILES=""
           for kw in $KEYWORDS; do
             hits=$(grep -rl "$kw" \
-              --include="*.ts" --include="*.html" --include="*.scss" \
+              --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" \
+              --include="*.mjs" --include="*.cjs" --include="*.html" --include="*.scss" \
               --include="*.css" --include="*.json" --include="*.cs" \
+              --include="*.yml" --include="*.yaml" \
               --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=.git \
-              Frontend/lunchbox-app/src/ Backend/src/ 2>/dev/null \
+              --exclude-dir=bin --exclude-dir=obj \
+              $SRC_ROOTS 2>/dev/null \
               | head -5 || true)
             RELEVANT_FILES="${RELEVANT_FILES}"$'\n'"${hits}"
           done
@@ -108,10 +125,10 @@ jobs:
 
           # Write exact file tree so AI uses correct paths (not guessed ones)
           echo "=== EXACT FILE TREE (use ONLY these paths in patches) ===" >> "$CONTEXT_FILE"
-          find Frontend/lunchbox-app/src Backend/src \
-            -not \( -path "*/node_modules/*" -o -path "*/dist/*" \) \
-            -type f \( -name "*.ts" -o -name "*.html" -o -name "*.scss" -o -name "*.css" -o -name "*.json" -o -name "*.cs" \) \
-            2>/dev/null | sort | head -60 >> "$CONTEXT_FILE" || true
+          find $SRC_ROOTS \
+            -not \( -path "*/node_modules/*" -o -path "*/dist/*" -o -path "*/bin/*" -o -path "*/obj/*" \) \
+            -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" -o -name "*.mjs" -o -name "*.cjs" -o -name "*.html" -o -name "*.scss" -o -name "*.css" -o -name "*.json" -o -name "*.cs" -o -name "*.yml" -o -name "*.yaml" \) \
+            2>/dev/null | sort | head -200 >> "$CONTEXT_FILE" || true
           echo "" >> "$CONTEXT_FILE"
 
           # Always include these baseline files (FULL content)
@@ -165,7 +182,7 @@ jobs:
               'Issue body:',
               process.env.ISSUE_BODY,
               '',
-              'TASK: Analyze this issue and fix the code.',
+              'TASK: Analyze this issue and fix the code. The issue may be a BUG to fix OR a NEW FEATURE / enhancement to add. Handle both.',
               '',
               'Return EXACTLY these sections:',
               '## Error Observed',
@@ -175,7 +192,9 @@ jobs:
               '## Proposed Patch',
               '',
               '── FORMAT FOR ## Proposed Patch ──',
-              'Use this search/replace block (NOT git diff):',
+              'You may emit one or MORE blocks. Two block types are allowed:',
+              '',
+              '(A) To CHANGE an existing file, use a search/replace block (NOT git diff):',
               '',
               'FILE: <exact path from EXACT FILE TREE below>',
               '<<<SEARCH',
@@ -184,13 +203,25 @@ jobs:
               '<the new lines to put in their place>',
               '>>>END',
               '',
+              '(B) To ADD a brand-new file (for a new feature/component/service), use:',
+              '',
+              'NEWFILE: <new path under Frontend/ or Backend/ that does NOT exist yet>',
+              '<<<CONTENT',
+              '<the complete contents of the new file>',
+              '>>>END',
+              '',
+              'For a feature you will usually combine both: a NEWFILE for the new code,',
+              'plus a FILE search/replace to wire it in (e.g. add a route, import, or nav link).',
+              '',
               'RULES:',
               '- FILE path must exactly match a path in the EXACT FILE TREE section. Do NOT invent names like "app.component.html" — this project uses Angular standalone naming (app.ts, app.html).',
+              '- Valid module roots are: Frontend/, Backend/dotnet/, Backend/microservices/services/, DotnetRoutix-Server/, mcp-server/. Pick the module the issue is about.',
+              '- NEWFILE path must NOT already exist and must live under one of those module roots. Follow the existing folder conventions you can see in the EXACT FILE TREE.',
               '- <<<SEARCH must be COPIED CHARACTER-FOR-CHARACTER from the FILE CONTENTS shown below. Do not retype from memory, do not fix indentation, do not paraphrase.',
               '- Copy enough lines to be unique (3-10 lines), do not copy the whole file.',
-              '- Only modify EXISTING files under Frontend/ or Backend/ that appear in the EXACT FILE TREE.',
-              '- If the file you need is not shown in the FILE CONTENTS section, write exactly: NO_PATCH',
-              '- If you cannot produce a fix, write exactly: NO_PATCH',
+              '- Only modify EXISTING files that appear in the EXACT FILE TREE.',
+              '- If the existing file you need to change is not shown in the FILE CONTENTS section, write exactly: NO_PATCH',
+              '- If you cannot produce a safe fix or feature, write exactly: NO_PATCH',
               '',
               'EXAMPLE:',
               'FILE: Frontend/lunchbox-app/src/app/app.ts',
@@ -232,7 +263,7 @@ jobs:
                   messages: [
                     {
                       role: 'system',
-                      content: 'You are a code healing assistant. When you produce a patch it must be a syntactically valid git unified diff that applies cleanly with "git apply". Never invent file paths — only use paths from the repository context provided.'
+                      content: 'You are a code healing assistant that both fixes bugs and implements small new features. Produce patches ONLY in the FILE/<<<SEARCH/>>>REPLACE/>>>END and NEWFILE/<<<CONTENT/>>>END formats described by the user — never a git diff. Copy SEARCH text character-for-character from the provided file contents, and never invent file paths that are not in the repository context.'
                     },
                     { role: 'user', content: prompt }
                   ]
@@ -333,6 +364,8 @@ jobs:
             // variants (<<<SEARCH / >>>REPLACE / REPLACE / >>>END / END) and
             // strips markdown code fences the model sometimes adds, which would
             // otherwise become part of the SEARCH text and never match.
+            // Also supports NEWFILE: blocks for creating brand-new files
+            // (needed for feature additions, not just bug fixes).
             function parseBlocks(text) {
               const lines = norm(text).split('\n');
               const isFence   = (l) => /^\s*```/.test(l);
@@ -342,6 +375,24 @@ jobs:
               const blocks = [];
               let i = 0;
               while (i < lines.length) {
+                // NEWFILE block: create a brand-new file from full content
+                const newM = lines[i].match(/^\s*NEWFILE:\s*(.+?)\s*$/);
+                if (newM) {
+                  const file = newM[1].trim();
+                  i++;
+                  // optional <<<CONTENT / <<<SEARCH style opener
+                  if (i < lines.length && (isSearch(lines[i]) || /[<>]{3}\s*CONTENT/i.test(lines[i]))) i++;
+                  const content = [];
+                  while (i < lines.length && !isEnd(lines[i]) &&
+                         !/^\s*FILE:/.test(lines[i]) && !/^\s*NEWFILE:/.test(lines[i])) {
+                    if (!isFence(lines[i])) content.push(lines[i]);
+                    i++;
+                  }
+                  if (i < lines.length && isEnd(lines[i])) i++;
+                  blocks.push({ type: 'new', file, content: content.join('\n') });
+                  continue;
+                }
+
                 const fileM = lines[i].match(/^\s*FILE:\s*(.+?)\s*$/);
                 if (!fileM) { i++; continue; }
                 const file = fileM[1].replace(/[<>]{3}\s*SEARCH.*$/i, '').trim();
@@ -349,18 +400,18 @@ jobs:
                 while (i < lines.length && lines[i].trim() === '') i++;
                 if (i < lines.length && isSearch(lines[i])) i++;
                 const search = [];
-                while (i < lines.length && !isReplace(lines[i]) && !/^\s*FILE:/.test(lines[i])) {
+                while (i < lines.length && !isReplace(lines[i]) && !/^\s*FILE:/.test(lines[i]) && !/^\s*NEWFILE:/.test(lines[i])) {
                   if (!isFence(lines[i])) search.push(lines[i]);
                   i++;
                 }
                 if (i < lines.length && isReplace(lines[i])) i++;
                 const replace = [];
-                while (i < lines.length && !isEnd(lines[i]) && !/^\s*FILE:/.test(lines[i])) {
+                while (i < lines.length && !isEnd(lines[i]) && !/^\s*FILE:/.test(lines[i]) && !/^\s*NEWFILE:/.test(lines[i])) {
                   if (!isFence(lines[i])) replace.push(lines[i]);
                   i++;
                 }
                 if (i < lines.length && isEnd(lines[i])) i++;
-                blocks.push({ file, search: search.join('\n'), replace: replace.join('\n') });
+                blocks.push({ type: 'patch', file, search: search.join('\n'), replace: replace.join('\n') });
               }
               return blocks;
             }
@@ -379,7 +430,7 @@ jobs:
 
               let tracked = [];
               try {
-                tracked = execSync('git ls-files Frontend Backend', { encoding: 'utf8' })
+                tracked = execSync('git ls-files Frontend Backend DotnetRoutix-Server mcp-server', { encoding: 'utf8' })
                   .split('\n').map((s) => s.trim()).filter(Boolean);
               } catch (e) { /* ignore */ }
 
@@ -441,14 +492,37 @@ jobs:
 
             for (const block of parseBlocks(section)) {
               const rawPath = block.file.trim();
-              const search  = block.search;
-              const replace = block.replace;
 
-              if (!/^(Frontend|Backend)\//.test(rawPath)) {
+              // Accept any real source module in this repo
+              const SRC_ROOT_RE = /^(Frontend|Backend|DotnetRoutix-Server|mcp-server)\//;
+              if (!SRC_ROOT_RE.test(rawPath)) {
                 core.warning(`Skipping path outside source dirs: ${rawPath}`);
-                failures.push(`\`${rawPath}\` — outside Frontend/ or Backend/`);
+                failures.push(`\`${rawPath}\` — outside known source modules`);
                 continue;
               }
+
+              // NEWFILE: create a brand-new file (feature additions)
+              if (block.type === 'new') {
+                if (fs.existsSync(rawPath)) {
+                  core.warning(`NEWFILE target already exists: ${rawPath}`);
+                  failures.push(`\`${rawPath}\` — NEWFILE skipped, file already exists`);
+                  continue;
+                }
+                if (!block.content || !block.content.trim()) {
+                  failures.push(`\`${rawPath}\` — NEWFILE skipped, empty content`);
+                  continue;
+                }
+                const dir = require('path').dirname(rawPath);
+                fs.mkdirSync(dir, { recursive: true });
+                fs.writeFileSync(rawPath, norm(block.content) + '\n', 'utf8');
+                execSync(`git add "${rawPath}"`);
+                core.info(`✓ Created new file: ${rawPath}`);
+                changed.push(rawPath);
+                continue;
+              }
+
+              const search  = block.search;
+              const replace = block.replace;
               const filepath = resolvePath(rawPath);
               if (!filepath) {
                 core.warning(`File not found: ${rawPath}`);
@@ -527,4 +601,6 @@ jobs:
           add-paths: |
             Frontend/**
             Backend/**
+            DotnetRoutix-Server/**
+            mcp-server/**
             healing-reports/openrouter-issue-${{ github.event.issue.number }}.md
