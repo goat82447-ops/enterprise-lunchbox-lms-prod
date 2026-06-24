@@ -323,13 +323,47 @@ jobs:
               return;
             }
 
-            // Parse FILE / <<<SEARCH ... >>>REPLACE ... >>>END blocks
-            const re = /FILE:\s*([^\n]+)\n<<<SEARCH\n([\s\S]*?)>>>REPLACE\n([\s\S]*?)>>>END/g;
-            let match;
+            // Parse FILE / SEARCH / REPLACE / END blocks
             const changed = [];
             const failures = [];
 
             const norm = (s) => s.replace(/\r\n/g, '\n');
+
+            // Tolerant parser for the model's patch blocks. Accepts marker
+            // variants (<<<SEARCH / >>>REPLACE / REPLACE / >>>END / END) and
+            // strips markdown code fences the model sometimes adds, which would
+            // otherwise become part of the SEARCH text and never match.
+            function parseBlocks(text) {
+              const lines = norm(text).split('\n');
+              const isFence   = (l) => /^\s*```/.test(l);
+              const isSearch  = (l) => /[<>]{3}\s*SEARCH/i.test(l);
+              const isReplace = (l) => /^[<>]{0,3}\s*REPLACE\s*$/i.test(l);
+              const isEnd     = (l) => /^[<>]{0,3}\s*END\s*$/i.test(l);
+              const blocks = [];
+              let i = 0;
+              while (i < lines.length) {
+                const fileM = lines[i].match(/^\s*FILE:\s*(.+?)\s*$/);
+                if (!fileM) { i++; continue; }
+                const file = fileM[1].replace(/[<>]{3}\s*SEARCH.*$/i, '').trim();
+                i++;
+                while (i < lines.length && lines[i].trim() === '') i++;
+                if (i < lines.length && isSearch(lines[i])) i++;
+                const search = [];
+                while (i < lines.length && !isReplace(lines[i]) && !/^\s*FILE:/.test(lines[i])) {
+                  if (!isFence(lines[i])) search.push(lines[i]);
+                  i++;
+                }
+                if (i < lines.length && isReplace(lines[i])) i++;
+                const replace = [];
+                while (i < lines.length && !isEnd(lines[i]) && !/^\s*FILE:/.test(lines[i])) {
+                  if (!isFence(lines[i])) replace.push(lines[i]);
+                  i++;
+                }
+                if (i < lines.length && isEnd(lines[i])) i++;
+                blocks.push({ file, search: search.join('\n'), replace: replace.join('\n') });
+              }
+              return blocks;
+            }
 
             // Resolve a model-provided path to a real file. If the exact path
             // does not exist, try (a) the same path with the Angular-CLI
@@ -369,43 +403,46 @@ jobs:
               return null;
             }
 
-            // Whitespace-tolerant fallback: find a contiguous run of lines in the
-            // file whose trimmed text equals the trimmed SEARCH lines, then splice.
+            // Whitespace- AND blank-line-tolerant fallback: compare only the
+            // non-blank lines (with internal whitespace collapsed), then splice
+            // the real file range between the first and last matched lines.
             function applyLineTrimmed(content, search, replace) {
               const fileLines = content.split('\n');
-              let searchLines = search.split('\n');
-              // Drop trailing empty line produced by the block's final newline
-              if (searchLines.length && searchLines[searchLines.length - 1] === '') {
-                searchLines = searchLines.slice(0, -1);
+              const flat = (s) => s.replace(/\s+/g, ' ').trim();
+
+              const target = search.split('\n').map(flat).filter(Boolean);
+              if (target.length === 0) return null;
+
+              // Indices of non-blank file lines
+              const idxs = [];
+              for (let i = 0; i < fileLines.length; i++) {
+                if (flat(fileLines[i])) idxs.push(i);
               }
-              if (searchLines.length === 0) return null;
 
-              const trim = (s) => s.replace(/\s+/g, ' ').trim();
-              const target = searchLines.map(trim);
-
-              for (let i = 0; i + target.length <= fileLines.length; i++) {
+              for (let s = 0; s + target.length <= idxs.length; s++) {
                 let hit = true;
                 for (let j = 0; j < target.length; j++) {
-                  if (trim(fileLines[i + j]) !== target[j]) { hit = false; break; }
+                  if (flat(fileLines[idxs[s + j]]) !== target[j]) { hit = false; break; }
                 }
                 if (hit) {
+                  const startLine = idxs[s];
+                  const endLine   = idxs[s + target.length - 1];
                   let replLines = replace.split('\n');
-                  if (replLines.length && replLines[replLines.length - 1] === '') {
-                    replLines = replLines.slice(0, -1);
-                  }
-                  const merged = fileLines.slice(0, i)
+                  while (replLines.length && replLines[0].trim() === '') replLines.shift();
+                  while (replLines.length && replLines[replLines.length - 1].trim() === '') replLines.pop();
+                  return fileLines.slice(0, startLine)
                     .concat(replLines)
-                    .concat(fileLines.slice(i + target.length));
-                  return merged.join('\n');
+                    .concat(fileLines.slice(endLine + 1))
+                    .join('\n');
                 }
               }
               return null;
             }
 
-            while ((match = re.exec(section)) !== null) {
-              const rawPath  = match[1].trim();
-              const search   = match[2];
-              const replace  = match[3];
+            for (const block of parseBlocks(section)) {
+              const rawPath = block.file.trim();
+              const search  = block.search;
+              const replace = block.replace;
 
               if (!/^(Frontend|Backend)\//.test(rawPath)) {
                 core.warning(`Skipping path outside source dirs: ${rawPath}`);
@@ -448,6 +485,7 @@ jobs:
 
               // Leave visible feedback on the issue instead of failing silently
               if (issueNumber && failures.length) {
+                const uniqueFailures = [...new Set(failures)];
                 await github.rest.issues.createComment({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
@@ -457,7 +495,7 @@ jobs:
                     '',
                     'The generated SEARCH/REPLACE block did not match the repository, so no PR was created:',
                     '',
-                    ...failures.map((f) => `- ${f}`),
+                    ...uniqueFailures.map((f) => `- ${f}`),
                     '',
                     'This usually means the model guessed lines that differ from the real file ' +
                     '(indentation, paraphrased code, or a section that was not included in its context). ' +
