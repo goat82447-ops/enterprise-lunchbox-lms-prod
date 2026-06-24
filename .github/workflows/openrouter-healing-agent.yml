@@ -96,12 +96,13 @@ jobs:
           printf '%s\n' "$TOP_FILES" >> "$CONTEXT_FILE"
           echo "" >> "$CONTEXT_FILE"
 
-          # Include content of top matched files
+          # Include FULL content of top matched files (no truncation) so the
+          # model copies real lines instead of guessing unseen code.
           echo "=== FILE CONTENTS ===" >> "$CONTEXT_FILE"
           while IFS= read -r f; do
             { [ -z "$f" ] || [ ! -f "$f" ]; } && continue
             echo "--- FILE: $f ---" >> "$CONTEXT_FILE"
-            head -120 "$f" >> "$CONTEXT_FILE"
+            cat "$f" >> "$CONTEXT_FILE"
             echo "" >> "$CONTEXT_FILE"
           done <<< "$TOP_FILES"
 
@@ -113,7 +114,7 @@ jobs:
             2>/dev/null | sort | head -60 >> "$CONTEXT_FILE" || true
           echo "" >> "$CONTEXT_FILE"
 
-          # Always include these baseline files
+          # Always include these baseline files (FULL content)
           for baseline in \
             "Frontend/lunchbox-app/src/app/app.routes.ts" \
             "Frontend/lunchbox-app/src/app/app.config.ts" \
@@ -123,7 +124,7 @@ jobs:
             ".github/copilot-instructions.md"; do
             [ -f "$baseline" ] || continue
             echo "--- BASELINE: $baseline ---" >> "$CONTEXT_FILE"
-            head -80 "$baseline" >> "$CONTEXT_FILE"
+            cat "$baseline" >> "$CONTEXT_FILE"
             echo "" >> "$CONTEXT_FILE"
           done
 
@@ -155,7 +156,7 @@ jobs:
             let repoContext = '';
             const ctxFile = process.env.ISSUE_CONTEXT_FILE;
             if (ctxFile && fs.existsSync(ctxFile)) {
-              repoContext = fs.readFileSync(ctxFile, 'utf8').slice(0, 12000);
+              repoContext = fs.readFileSync(ctxFile, 'utf8').slice(0, 180000);
             }
 
             const prompt = [
@@ -184,10 +185,11 @@ jobs:
               '>>>END',
               '',
               'RULES:',
-              '- FILE path must exactly match a path in the EXACT FILE TREE section.',
-              '- <<<SEARCH must contain lines that exist verbatim in the file shown in context.',
+              '- FILE path must exactly match a path in the EXACT FILE TREE section. Do NOT invent names like "app.component.html" — this project uses Angular standalone naming (app.ts, app.html).',
+              '- <<<SEARCH must be COPIED CHARACTER-FOR-CHARACTER from the FILE CONTENTS shown below. Do not retype from memory, do not fix indentation, do not paraphrase.',
               '- Copy enough lines to be unique (3-10 lines), do not copy the whole file.',
-              '- Only modify EXISTING files under Frontend/ or Backend/.',
+              '- Only modify EXISTING files under Frontend/ or Backend/ that appear in the EXACT FILE TREE.',
+              '- If the file you need is not shown in the FILE CONTENTS section, write exactly: NO_PATCH',
               '- If you cannot produce a fix, write exactly: NO_PATCH',
               '',
               'EXAMPLE:',
@@ -329,6 +331,24 @@ jobs:
 
             const norm = (s) => s.replace(/\r\n/g, '\n');
 
+            // Resolve a model-provided path to a real file. If the exact path
+            // does not exist, try to find a unique file with the same basename
+            // under Frontend/ or Backend/ (handles minor path guesses).
+            function resolvePath(p) {
+              if (fs.existsSync(p)) return p;
+              const base = p.split('/').pop();
+              try {
+                const out = execSync('git ls-files Frontend Backend', { encoding: 'utf8' })
+                  .split('\n').map((s) => s.trim()).filter(Boolean)
+                  .filter((f) => f.split('/').pop() === base);
+                if (out.length === 1) {
+                  core.info(`↪ Resolved ${p} → ${out[0]}`);
+                  return out[0];
+                }
+              } catch (e) { /* ignore */ }
+              return null;
+            }
+
             // Whitespace-tolerant fallback: find a contiguous run of lines in the
             // file whose trimmed text equals the trimmed SEARCH lines, then splice.
             function applyLineTrimmed(content, search, replace) {
@@ -363,18 +383,19 @@ jobs:
             }
 
             while ((match = re.exec(section)) !== null) {
-              const filepath = match[1].trim();
+              const rawPath  = match[1].trim();
               const search   = match[2];
               const replace  = match[3];
 
-              if (!/^(Frontend|Backend)\//.test(filepath)) {
-                core.warning(`Skipping path outside source dirs: ${filepath}`);
-                failures.push(`\`${filepath}\` — outside Frontend/ or Backend/`);
+              if (!/^(Frontend|Backend)\//.test(rawPath)) {
+                core.warning(`Skipping path outside source dirs: ${rawPath}`);
+                failures.push(`\`${rawPath}\` — outside Frontend/ or Backend/`);
                 continue;
               }
-              if (!fs.existsSync(filepath)) {
-                core.warning(`File not found: ${filepath}`);
-                failures.push(`\`${filepath}\` — file does not exist`);
+              const filepath = resolvePath(rawPath);
+              if (!filepath) {
+                core.warning(`File not found: ${rawPath}`);
+                failures.push(`\`${rawPath}\` — file does not exist (no unique basename match)`);
                 continue;
               }
 
