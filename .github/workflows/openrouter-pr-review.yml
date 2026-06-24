@@ -215,13 +215,6 @@ jobs:
             if (mustFixMatch) mustFixCount = Number(mustFixMatch[1]) || 0;
             const blocking = mustFixCount > 0 || event === 'REQUEST_CHANGES';
 
-            // Count blocking issues. "MUST_FIX (N)" with N>0 (or a REQUEST_CHANGES
-            // verdict) must BLOCK the merge, not just comment.
-            let mustFixCount = 0;
-            const mustFixMatch = content.match(/MUST_FIX\s*\(\s*(\d+)\s*\)/i);
-            if (mustFixMatch) mustFixCount = Number(mustFixMatch[1]) || 0;
-            const blocking = mustFixCount > 0 || event === 'REQUEST_CHANGES';
-
             // Note: GitHub does not allow APPROVE / REQUEST_CHANGES on a PR you
             // authored via the default GITHUB_TOKEN. If createReview rejects the
             // event we fall back to a plain comment below.
@@ -286,33 +279,6 @@ jobs:
               }
             } else {
               core.info(`Skipped adding a reviewer — you authored this PR (or no assignee set). Review comments were still posted.`);
-            }
-
-            // ── MERGE GATE ──────────────────────────────────────────────────
-            // Post a commit status on the PR head so it can be made a REQUIRED
-            // status check in branch protection. When MUST_FIX > 0 the status is
-            // `failure`, which disables the merge button until a later clean
-            // re-review (push a fix -> `synchronize` re-runs this -> status goes
-            // green). We also fail the job itself so the run is visibly red.
-            const statusContext = `${reviewerName} review`;
-            try {
-              await github.rest.repos.createCommitStatus({
-                owner, repo,
-                sha: pr.head.sha,
-                state: blocking ? 'failure' : 'success',
-                context: statusContext,
-                description: blocking
-                  ? `${mustFixCount} MUST_FIX issue(s) — resolve before merge`
-                  : 'No blocking issues found',
-                target_url: `${process.env.GITHUB_SERVER_URL}/${owner}/${repo}/actions/runs/${context.runId}`
-              });
-              core.info(`Set commit status "${statusContext}" = ${blocking ? 'failure' : 'success'} on ${pr.head.sha}`);
-            } catch (e) {
-              core.warning(`Could not set commit status (${e.status || ''}): ${e.message}`);
-            }
-
-            if (blocking) {
-              core.setFailed(`${reviewerName} found ${mustFixCount} MUST_FIX issue(s). Merging is blocked until they are resolved.`);
             }
 
             // ── MERGE GATE ──────────────────────────────────────────────────
