@@ -94,7 +94,7 @@ import { SupportService } from './core/services/support.service';
                   type="button"
                   class="btn btn-outline-light"
                   [class.active]="(currentLanguage$ | async) === 'en'"
-                  (click)="changeLanguage('en')"
+                  (click)="changeLanguage('en'); handleNavLinkClick()"
                 >
                   EN
                 </button>
@@ -102,7 +102,7 @@ import { SupportService } from './core/services/support.service';
                   type="button"
                   class="btn btn-outline-light"
                   [class.active]="(currentLanguage$ | async) === 'hi'"
-                  (click)="changeLanguage('hi')"
+                  (click)="changeLanguage('hi'); handleNavLinkClick()"
                 >
                   हि
                 </button>
@@ -110,7 +110,7 @@ import { SupportService } from './core/services/support.service';
                   type="button"
                   class="btn btn-outline-light"
                   [class.active]="(currentLanguage$ | async) === 'te'"
-                  (click)="changeLanguage('te')"
+                  (click)="changeLanguage('te'); handleNavLinkClick()"
                 >
                   తె
                 </button>
@@ -119,7 +119,7 @@ import { SupportService } from './core/services/support.service';
 
             <!-- Theme toggle -->
             <li class="nav-item">
-              <button class="btn btn-outline-light btn-sm ms-2" (click)="toggleTheme()" title="Toggle theme">
+              <button class="btn btn-outline-light btn-sm ms-2" (click)="toggleTheme(); handleNavLinkClick()" title="Toggle theme">
                 {{ (currentTheme$ | async) === 'dark' ? '🌙' : ((currentTheme$ | async) === 'ocean' ? '🌊' : '☀️') }}
               </button>
             </li>
