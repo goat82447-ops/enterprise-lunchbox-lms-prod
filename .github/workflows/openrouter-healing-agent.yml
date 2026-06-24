@@ -453,9 +453,9 @@ jobs:
               let i = 0;
               while (i < lines.length) {
                 // NEWFILE block: create a brand-new file from full content
-                const newM = lines[i].match(/^\s*NEWFILE:\s*(.+?)\s*$/);
+                const newM = lines[i].match(/^\s*(?:#+\s*)?(?:\*\*\s*)?NEWFILE:\s*(.+?)\s*\**\s*$/i);
                 if (newM) {
-                  const file = newM[1].trim();
+                  const file = newM[1].replace(/[`*]/g, '').trim();
                   i++;
                   // optional <<<CONTENT / <<<SEARCH style opener
                   if (i < lines.length && (isSearch(lines[i]) || /[<>]{3}\s*CONTENT/i.test(lines[i]))) i++;
@@ -470,9 +470,9 @@ jobs:
                   continue;
                 }
 
-                const fileM = lines[i].match(/^\s*FILE:\s*(.+?)\s*$/);
+                const fileM = lines[i].match(/^\s*(?:#+\s*)?(?:\*\*\s*)?FILE:\s*(.+?)\s*\**\s*$/i);
                 if (!fileM) { i++; continue; }
-                const file = fileM[1].replace(/[<>]{3}\s*SEARCH.*$/i, '').trim();
+                const file = fileM[1].replace(/[<>]{3}\s*SEARCH.*$/i, '').replace(/[`*]/g, '').trim();
                 i++;
                 while (i < lines.length && lines[i].trim() === '') i++;
                 if (i < lines.length && isSearch(lines[i])) i++;
@@ -499,13 +499,26 @@ jobs:
             // so those patches still apply instead of being dropped as "no patch".
             function parseDiffBlocks(text) {
               const lines = norm(text).split('\n');
-              const fileRe = /^\s*(?:#+\s*)?FILE:\s*(.+?)\s*$/;
+              // File-header variants we accept (in priority order):
+              //   FILE: path          (optionally  #### / **bold** wrapped)
+              //   diff --git a/x b/x  (standard git diff)
+              //   +++ b/path          (unified diff "new file" header)
+              const fileRe = /^\s*(?:#+\s*)?(?:\*\*\s*)?FILE:\s*(.+?)\s*\**\s*$/i;
+              const gitRe  = /^\s*diff --git\s+a\/.+?\s+b\/(.+?)\s*$/;
+              const plusRe = /^\s*\+\+\+\s+(?:b\/)?(.+?)\s*$/;       // +++ b/path
+              const minusRe = /^\s*---\s+(?:a\/|b\/)/;               // --- a/path (header, skip)
+              const clean = (s) => s.replace(/[`*]/g, '').trim();
               const out = [];
               let curFile = null;
               let i = 0;
               while (i < lines.length) {
                 const fm = lines[i].match(fileRe);
-                if (fm) { curFile = fm[1].replace(/[`*]/g, '').trim(); i++; continue; }
+                if (fm) { curFile = clean(fm[1]); i++; continue; }
+                const gm = lines[i].match(gitRe);
+                if (gm) { curFile = clean(gm[1]); i++; continue; }
+                const pm = lines[i].match(plusRe);
+                if (pm && clean(pm[1]) !== '/dev/null') { curFile = clean(pm[1]); i++; continue; }
+                if (minusRe.test(lines[i])) { i++; continue; } // skip "--- a/path" header
                 const hunk = lines[i].match(/^(\s*)@@/);
                 if (hunk && curFile) {
                   const indent = hunk[1] || '';
@@ -515,7 +528,8 @@ jobs:
                   let any = false;
                   while (i < lines.length) {
                     let l = lines[i];
-                    if (/^\s*@@/.test(l) || fileRe.test(l) || /^\s*NEWFILE:/.test(l)) break;
+                    if (/^\s*@@/.test(l) || fileRe.test(l) || gitRe.test(l) ||
+                        plusRe.test(l) || minusRe.test(l) || /^\s*NEWFILE:/.test(l)) break;
                     if (indent && l.startsWith(indent)) l = l.slice(indent.length);
                     const m = l.match(/^([ +\-\\])(.*)$/);
                     if (!m) break;
