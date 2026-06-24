@@ -52,6 +52,7 @@ import { LoginStartResponse, UserRole } from '../../core/models/delivery.models'
               </button>
 
               <button class="btn btn-danger w-100 auth-primary" [disabled]="loading" (click)="startLogin()">Start Login</button>
+              <button class="btn btn-secondary w-100 mt-2" [disabled]="loading" (click)="tryBiometricLogin()">Login with Biometrics</button>
               <div *ngIf="errorMessage" class="alert alert-danger mt-3 mb-0">{{ errorMessage }}</div>
             </div>
           </div>
