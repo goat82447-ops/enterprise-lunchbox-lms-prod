@@ -1,4 +1,4 @@
-name: MCP+ PROXIMA 🚀 Healing Agent
+name: PROXIMA 🚀 Healing Agent
 
 on:
   issues:
@@ -281,6 +281,7 @@ jobs:
               '- NEWFILE path must NOT already exist and must live under one of those module roots. Follow the existing folder conventions you can see in the EXACT FILE TREE.',
               '- <<<SEARCH must be COPIED CHARACTER-FOR-CHARACTER from the FILE CONTENTS shown below. Do not retype from memory, do not fix indentation, do not paraphrase.',
               '- Copy enough lines to be unique (3-10 lines), do not copy the whole file.',
+              '- DO NOT output @@ hunk headers or +/- diff lines. Use ONLY the <<<SEARCH / >>>REPLACE / >>>END markers shown above — a git/unified diff is NOT accepted.',
               '- Only modify EXISTING files that appear in the EXACT FILE TREE.',
               '',
               'WHOLE-APP THINKING (do NOT tunnel-vision on a single file):',
@@ -407,6 +408,9 @@ jobs:
         uses: actions/github-script@v8
         env:
           ISSUE_NUMBER: ${{ github.event.issue.number }}
+          OPENROUTER_API_BASE_URL: ${{ env.OPENROUTER_API_BASE_URL }}
+          OPENROUTER_MODEL: ${{ env.OPENROUTER_MODEL }}
+          OPENROUTER_API_KEY: ${{ env.OPENROUTER_API_KEY }}
         with:
           script: |
             const fs   = require('fs');
@@ -489,11 +493,70 @@ jobs:
               return blocks;
             }
 
+            // Fallback parser: some models ignore the SEARCH/REPLACE format and
+            // emit a git-style unified diff (a FILE header then @@ hunks made of
+            // space/'-'/'+' lines). Convert each hunk into a search/replace block
+            // so those patches still apply instead of being dropped as "no patch".
+            function parseDiffBlocks(text) {
+              const lines = norm(text).split('\n');
+              const fileRe = /^\s*(?:#+\s*)?FILE:\s*(.+?)\s*$/;
+              const out = [];
+              let curFile = null;
+              let i = 0;
+              while (i < lines.length) {
+                const fm = lines[i].match(fileRe);
+                if (fm) { curFile = fm[1].replace(/[`*]/g, '').trim(); i++; continue; }
+                const hunk = lines[i].match(/^(\s*)@@/);
+                if (hunk && curFile) {
+                  const indent = hunk[1] || '';
+                  i++;
+                  const searchLines = [];
+                  const replaceLines = [];
+                  let any = false;
+                  while (i < lines.length) {
+                    let l = lines[i];
+                    if (/^\s*@@/.test(l) || fileRe.test(l) || /^\s*NEWFILE:/.test(l)) break;
+                    if (indent && l.startsWith(indent)) l = l.slice(indent.length);
+                    const m = l.match(/^([ +\-\\])(.*)$/);
+                    if (!m) break;
+                    const marker = m[1];
+                    const rest = m[2];
+                    if (marker === '\\') { i++; continue; } // "\ No newline at end of file"
+                    if (marker === ' ') { searchLines.push(rest); replaceLines.push(rest); }
+                    else if (marker === '-') { searchLines.push(rest); }
+                    else if (marker === '+') { replaceLines.push(rest); }
+                    any = true;
+                    i++;
+                  }
+                  if (any) {
+                    out.push({
+                      type: 'patch', file: curFile,
+                      search: searchLines.join('\n'), replace: replaceLines.join('\n')
+                    });
+                  }
+                  continue;
+                }
+                i++;
+              }
+              return out;
+            }
+
+            // Prefer the explicit SEARCH/REPLACE + NEWFILE blocks; if none are
+            // present, recover changes from a unified-diff style response.
+            let blocks = parseBlocks(section);
+            if (blocks.length === 0) {
+              const recovered = parseDiffBlocks(section);
+              if (recovered.length) {
+                core.info(`ℹ️ Recovered ${recovered.length} change(s) from unified-diff format`);
+                blocks = recovered;
+              }
+            }
+
             // Only treat the response as NO_PATCH when the model produced NO
             // actual patch blocks. This lets partial-progress responses (which
             // emit a real patch AND mention a skipped part) still be applied,
             // instead of aborting on the word "NO_PATCH" appearing in prose.
-            if (parseBlocks(section).length === 0) {
+            if (blocks.length === 0) {
               if (/^\s*NO_PATCH\s*$/m.test(section) || /\bNO_PATCH\b/.test(section)) {
                 core.info('⚠️ Model returned NO_PATCH (no patch blocks present)');
               } else {
@@ -577,67 +640,165 @@ jobs:
               return null;
             }
 
-            for (const block of parseBlocks(section)) {
-              const rawPath = block.file.trim();
+            // Apply a list of parsed blocks to the working tree. Returns the
+            // list of human-readable failures (matched changes are pushed onto
+            // the shared `changed` array). Factored out so we can run it twice:
+            // once on the model's first patch, and again on a repaired patch.
+            function applyBlocks(blockList) {
+              const localFail = [];
+              for (const block of blockList) {
+                const rawPath = block.file.trim();
 
-              // Accept any real source module in this repo
-              const SRC_ROOT_RE = /^(Frontend|Backend|DotnetRoutix-Server|mcp-server)\//;
-              if (!SRC_ROOT_RE.test(rawPath)) {
-                core.warning(`Skipping path outside source dirs: ${rawPath}`);
-                failures.push(`\`${rawPath}\` — outside known source modules`);
-                continue;
-              }
-
-              // NEWFILE: create a brand-new file (feature additions)
-              if (block.type === 'new') {
-                if (fs.existsSync(rawPath)) {
-                  core.warning(`NEWFILE target already exists: ${rawPath}`);
-                  failures.push(`\`${rawPath}\` — NEWFILE skipped, file already exists`);
+                // Accept any real source module in this repo
+                const SRC_ROOT_RE = /^(Frontend|Backend|DotnetRoutix-Server|mcp-server)\//;
+                if (!SRC_ROOT_RE.test(rawPath)) {
+                  core.warning(`Skipping path outside source dirs: ${rawPath}`);
+                  localFail.push(`\`${rawPath}\` — outside known source modules`);
                   continue;
                 }
-                if (!block.content || !block.content.trim()) {
-                  failures.push(`\`${rawPath}\` — NEWFILE skipped, empty content`);
+
+                // NEWFILE: create a brand-new file (feature additions)
+                if (block.type === 'new') {
+                  if (fs.existsSync(rawPath)) {
+                    core.warning(`NEWFILE target already exists: ${rawPath}`);
+                    localFail.push(`\`${rawPath}\` — NEWFILE skipped, file already exists`);
+                    continue;
+                  }
+                  if (!block.content || !block.content.trim()) {
+                    localFail.push(`\`${rawPath}\` — NEWFILE skipped, empty content`);
+                    continue;
+                  }
+                  const dir = require('path').dirname(rawPath);
+                  fs.mkdirSync(dir, { recursive: true });
+                  fs.writeFileSync(rawPath, norm(block.content) + '\n', 'utf8');
+                  execSync(`git add "${rawPath}"`);
+                  core.info(`✓ Created new file: ${rawPath}`);
+                  changed.push(rawPath);
                   continue;
                 }
-                const dir = require('path').dirname(rawPath);
-                fs.mkdirSync(dir, { recursive: true });
-                fs.writeFileSync(rawPath, norm(block.content) + '\n', 'utf8');
-                execSync(`git add "${rawPath}"`);
-                core.info(`✓ Created new file: ${rawPath}`);
-                changed.push(rawPath);
-                continue;
+
+                const search  = block.search;
+                const replace = block.replace;
+                const filepath = resolvePath(rawPath);
+                if (!filepath) {
+                  core.warning(`File not found: ${rawPath}`);
+                  localFail.push(`\`${rawPath}\` — file does not exist (no unique basename match)`);
+                  continue;
+                }
+
+                const raw = norm(fs.readFileSync(filepath, 'utf8'));
+                let newContent = null;
+
+                // 1) Exact match (after CRLF normalisation)
+                if (raw.includes(norm(search))) {
+                  newContent = raw.replace(norm(search), norm(replace));
+                } else {
+                  // 2) Whitespace-tolerant line-trimmed fallback
+                  newContent = applyLineTrimmed(raw, norm(search), norm(replace));
+                }
+
+                if (newContent === null) {
+                  core.warning(`Search text not found in ${filepath}`);
+                  localFail.push(`\`${filepath}\` — SEARCH block did not match the current file content`);
+                  continue;
+                }
+
+                fs.writeFileSync(filepath, newContent, 'utf8');
+                execSync(`git add "${filepath}"`);
+                core.info(`✓ Patched and staged: ${filepath}`);
+                changed.push(filepath);
               }
+              return localFail;
+            }
 
-              const search  = block.search;
-              const replace = block.replace;
-              const filepath = resolvePath(rawPath);
-              if (!filepath) {
-                core.warning(`File not found: ${rawPath}`);
-                failures.push(`\`${rawPath}\` — file does not exist (no unique basename match)`);
-                continue;
+            // Second-chance repair: re-query the model with the REAL current file
+            // contents so it can correct SEARCH text that did not match, then
+            // re-apply. This is what pushes most issues over the line into an
+            // actual branch + PR instead of a "could not apply" comment.
+            async function repairBlocks(origBlocks) {
+              const baseUrl = process.env.OPENROUTER_API_BASE_URL;
+              const model   = process.env.OPENROUTER_MODEL;
+              const apiKey  = process.env.OPENROUTER_API_KEY;
+              if (!apiKey) return [];
+
+              const seen = new Set();
+              const fileSections = [];
+              for (const b of origBlocks) {
+                if (b.type !== 'patch') continue;
+                const fp = resolvePath((b.file || '').trim());
+                if (!fp || seen.has(fp)) continue;
+                seen.add(fp);
+                let txt = '';
+                try { txt = fs.readFileSync(fp, 'utf8'); } catch (e) { continue; }
+                const lines = txt.split('\n');
+                const capped = lines.length > 1200
+                  ? lines.slice(0, 1200).join('\n') + '\n... [truncated] ...'
+                  : txt;
+                fileSections.push(`--- FILE: ${fp} ---\n${capped}`);
+                if (fileSections.length >= 5) break;
               }
+              if (!fileSections.length) return [];
 
-              const raw = norm(fs.readFileSync(filepath, 'utf8'));
-              let newContent = null;
+              const repairPrompt = [
+                'Your previous patch did NOT apply because the SEARCH text did not match the real file.',
+                'Below is the EXACT current content of each file. Re-emit corrected patch blocks that resolve the issue.',
+                'Copy the SEARCH lines CHARACTER-FOR-CHARACTER from the content below (exact indentation, no paraphrasing).',
+                'Use ONLY this format — no git diff, no @@ hunks:',
+                'FILE: <path>',
+                '<<<SEARCH',
+                '<exact lines copied from below>',
+                '>>>REPLACE',
+                '<the new lines>',
+                '>>>END',
+                'You may also add a new file with: NEWFILE: <path> / <<<CONTENT / >>>END.',
+                'Output ONLY patch blocks, nothing else.',
+                '',
+                '=== CURRENT FILE CONTENTS ===',
+                fileSections.join('\n\n')
+              ].join('\n');
 
-              // 1) Exact match (after CRLF normalisation)
-              if (raw.includes(norm(search))) {
-                newContent = raw.replace(norm(search), norm(replace));
-              } else {
-                // 2) Whitespace-tolerant line-trimmed fallback
-                newContent = applyLineTrimmed(raw, norm(search), norm(replace));
+              const response = await fetch(`${baseUrl}/chat/completions`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${apiKey}`,
+                  'Content-Type': 'application/json',
+                  'HTTP-Referer': `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}`,
+                  'X-Title': `${process.env.GITHUB_REPOSITORY} Healing Repair`
+                },
+                body: JSON.stringify({
+                  model,
+                  temperature: 0.1,
+                  messages: [
+                    { role: 'system', content: 'You output ONLY FILE/<<<SEARCH/>>>REPLACE/>>>END or NEWFILE/<<<CONTENT/>>>END patch blocks. Copy SEARCH text exactly from the provided file content. Never output a git diff or @@ hunks.' },
+                    { role: 'user', content: repairPrompt }
+                  ]
+                })
+              });
+              if (!response.ok) return [];
+              const data = await response.json();
+              const txt = ((((data || {}).choices || [])[0] || {}).message || {}).content || '';
+              const trimmed = txt.trim();
+              if (!trimmed) return [];
+              let rb = parseBlocks(trimmed);
+              if (rb.length === 0) rb = parseDiffBlocks(trimmed);
+              return rb;
+            }
+
+            // First pass — apply the model's original patch.
+            failures.push(...applyBlocks(blocks));
+
+            // If nothing matched, run one automatic repair round so the issue
+            // still results in a branch + PR with the relevant code change.
+            if (changed.length === 0) {
+              try {
+                const repaired = await repairBlocks(blocks);
+                if (repaired.length) {
+                  core.info(`🔧 Repair attempt produced ${repaired.length} corrected block(s); re-applying`);
+                  failures.push(...applyBlocks(repaired));
+                }
+              } catch (e) {
+                core.warning(`Repair attempt failed: ${e.message}`);
               }
-
-              if (newContent === null) {
-                core.warning(`Search text not found in ${filepath}`);
-                failures.push(`\`${filepath}\` — SEARCH block did not match the current file content`);
-                continue;
-              }
-
-              fs.writeFileSync(filepath, newContent, 'utf8');
-              execSync(`git add "${filepath}"`);
-              core.info(`✓ Patched and staged: ${filepath}`);
-              changed.push(filepath);
             }
 
             if (changed.length === 0) {
