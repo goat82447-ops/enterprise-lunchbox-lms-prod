@@ -25,7 +25,7 @@ jobs:
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -132,7 +132,7 @@ jobs:
 
       - name: Analyze issue and generate patch
         id: analyze
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           ISSUE_TITLE: ${{ github.event.issue.title || '' }}
           ISSUE_BODY: ${{ github.event.issue.body || '' }}
@@ -292,7 +292,7 @@ jobs:
 
       - name: Extract and apply patch
         id: apply_patch
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         with:
@@ -325,6 +325,42 @@ jobs:
             const re = /FILE:\s*([^\n]+)\n<<<SEARCH\n([\s\S]*?)>>>REPLACE\n([\s\S]*?)>>>END/g;
             let match;
             const changed = [];
+            const failures = [];
+
+            const norm = (s) => s.replace(/\r\n/g, '\n');
+
+            // Whitespace-tolerant fallback: find a contiguous run of lines in the
+            // file whose trimmed text equals the trimmed SEARCH lines, then splice.
+            function applyLineTrimmed(content, search, replace) {
+              const fileLines = content.split('\n');
+              let searchLines = search.split('\n');
+              // Drop trailing empty line produced by the block's final newline
+              if (searchLines.length && searchLines[searchLines.length - 1] === '') {
+                searchLines = searchLines.slice(0, -1);
+              }
+              if (searchLines.length === 0) return null;
+
+              const trim = (s) => s.replace(/\s+/g, ' ').trim();
+              const target = searchLines.map(trim);
+
+              for (let i = 0; i + target.length <= fileLines.length; i++) {
+                let hit = true;
+                for (let j = 0; j < target.length; j++) {
+                  if (trim(fileLines[i + j]) !== target[j]) { hit = false; break; }
+                }
+                if (hit) {
+                  let replLines = replace.split('\n');
+                  if (replLines.length && replLines[replLines.length - 1] === '') {
+                    replLines = replLines.slice(0, -1);
+                  }
+                  const merged = fileLines.slice(0, i)
+                    .concat(replLines)
+                    .concat(fileLines.slice(i + target.length));
+                  return merged.join('\n');
+                }
+              }
+              return null;
+            }
 
             while ((match = re.exec(section)) !== null) {
               const filepath = match[1].trim();
@@ -333,22 +369,32 @@ jobs:
 
               if (!/^(Frontend|Backend)\//.test(filepath)) {
                 core.warning(`Skipping path outside source dirs: ${filepath}`);
+                failures.push(`\`${filepath}\` — outside Frontend/ or Backend/`);
                 continue;
               }
               if (!fs.existsSync(filepath)) {
                 core.warning(`File not found: ${filepath}`);
+                failures.push(`\`${filepath}\` — file does not exist`);
                 continue;
               }
 
-              let content = fs.readFileSync(filepath, 'utf8');
-              // Normalise line endings then try match
-              const norm = (s) => s.replace(/\r\n/g, '\n');
-              if (!norm(content).includes(norm(search))) {
+              const raw = norm(fs.readFileSync(filepath, 'utf8'));
+              let newContent = null;
+
+              // 1) Exact match (after CRLF normalisation)
+              if (raw.includes(norm(search))) {
+                newContent = raw.replace(norm(search), norm(replace));
+              } else {
+                // 2) Whitespace-tolerant line-trimmed fallback
+                newContent = applyLineTrimmed(raw, norm(search), norm(replace));
+              }
+
+              if (newContent === null) {
                 core.warning(`Search text not found in ${filepath}`);
+                failures.push(`\`${filepath}\` — SEARCH block did not match the current file content`);
                 continue;
               }
 
-              const newContent = norm(content).replace(norm(search), replace);
               fs.writeFileSync(filepath, newContent, 'utf8');
               execSync(`git add "${filepath}"`);
               core.info(`✓ Patched and staged: ${filepath}`);
@@ -358,6 +404,26 @@ jobs:
             if (changed.length === 0) {
               core.info('❌ No files were modified');
               core.setOutput('patch_applied', 'false');
+
+              // Leave visible feedback on the issue instead of failing silently
+              if (issueNumber && failures.length) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: Number(issueNumber),
+                  body: [
+                    '### ⚠️ Healing Agent could not apply an automatic patch',
+                    '',
+                    'The generated SEARCH/REPLACE block did not match the repository, so no PR was created:',
+                    '',
+                    ...failures.map((f) => `- ${f}`),
+                    '',
+                    'This usually means the model guessed lines that differ from the real file ' +
+                    '(indentation, paraphrased code, or a section that was not included in its context). ' +
+                    'Re-run the workflow or refine the issue with the exact code snippet to change.'
+                  ].join('\n')
+                });
+              }
               return;
             }
 
@@ -366,7 +432,7 @@ jobs:
 
       - name: Create healing PR
         if: ${{ steps.apply_patch.outputs.patch_applied == 'true' }}
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: open_router-healing/issue-${{ github.event.issue.number }}
