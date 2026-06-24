@@ -19,6 +19,14 @@ frontend-ts - Angular TypeScript components frontend-html - Angular templates fr
 
 echo '{"method": "issue:analyze", "params": {"title": "Order API returns 500 on missing coupon", "body": "Backend endpoint should treat coupon as optional", "surface": "backend_node"}}' | node mcp-server/server.js Response:
 
+--- Updated Documentation ---
+The backend server has been migrated from Node.js microservices to .NET services. The primary .NET services are:
+
+- **AuthService** (`Backend/dotnet/AuthService`) – Handles authentication, user management, and PIN verification.
+- **ParcelService** (`Backend/dotnet/ParcelService`) – Manages parcel bookings, tracking, and delivery operations.
+
+All backend functionality is now provided via these .NET services, and the MCP server reflects this change in its statistics (see `backend_dotnet` count). The `backend_node` count remains for legacy files but is no longer the active backend implementation.
+
 { "success": true, "data": { "keywords": ["order", "api", "500", "coupon", "backend", "endpoint"], "phrases": ["order api", "missing coupon"], "surfaceHints": ["backend_node"], "confidence": "high", "relevantFiles": [ "Backend/microservices/services/order-service/src/index.js", "Backend/microservices/services/api-gateway/src/index.js" ], "rankedMatches": [ { "path": "Backend/microservices/services/order-service/src/index.js", "score": 62, "surface": "backend_node", "matchedKeywords": ["order", "api", "coupon"], "matchedPhrases": ["missing coupon"], "snippetLineStart": 40, "snippetLineEnd": 60 } ], "fileContents": [ { "path": "Backend/microservices/services/order-service/src/index.js", "lineStart": 40, "lineEnd": 60, "matchedKeywords": ["order", "api", "coupon"], "content": "..." } ], "analysis": "Found 8 files matching keywords/phrases: order, api, 500, coupon, backend, endpoint" } } How it works:
 
 Extracts keywords from issue title + body (stops words filtered) Extracts short phrases and optional surface hint (frontend/backend/config) Scores files by keyword + phrase matches in: filename, directory path, file content Applies surface-aware ranking and de-prioritizes lock/minified files Returns ranked list of relevant files (top 10 by default) Includes targeted file snippets with line ranges for top matches Healing Agent uses this to find files WITHOUT user specifying paths! 7. Get Healing Context Retrieve key project files for issue analysis:
