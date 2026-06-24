@@ -34,9 +34,6 @@ import { LoginStartResponse, UserRole } from '../../core/models/delivery.models'
                 <div class="mode-grid">
                   <button class="btn" [class.mode-active]="role === 'rider'" (click)="setRole('rider')" type="button">Customer/Rider</button>
                   <button class="btn" [class.mode-active]="role === 'driver'" (click)="setRole('driver')" type="button">Driver</button>
-                  <button class="btn" [class.mode-active]="role === 'admin'" (click)="setRole('admin')" type="button">Admin</button>
-                  <button class="btn" [class.mode-active]="role === 'fleet_owner'" (click)="setRole('fleet_owner')" type="button">Fleet Owner</button>
-                  <button class="btn" [class.mode-active]="role === 'support_executive'" (click)="setRole('support_executive')" type="button">Support Exec</button>
                 </div>
               </div>
 

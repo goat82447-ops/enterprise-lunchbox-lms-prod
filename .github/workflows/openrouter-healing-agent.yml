@@ -9,6 +9,7 @@ permissions:
   contents: write
   issues: write
   pull-requests: write
+  actions: write
 
 concurrency:
   group: open_router-healing-${{ github.event.issue.number || github.run_id }}
@@ -670,6 +671,7 @@ jobs:
             core.setOutput('patch_applied', 'true');
 
       - name: Create healing PR
+        id: cpr
         if: ${{ steps.apply_patch.outputs.patch_applied == 'true' }}
         uses: peter-evans/create-pull-request@v7
         with:
@@ -690,3 +692,29 @@ jobs:
             DotnetRoutix-Server/**
             mcp-server/**
             healing-reports/openrouter-issue-${{ github.event.issue.number }}.md
+
+      # PRs created with GITHUB_TOKEN do NOT trigger the pull_request event, so
+      # the reviewer would never run on this bot PR automatically. We explicitly
+      # dispatch the reviewer with the new PR number so EVERY healing PR is
+      # reviewed and commented on, just like a human-opened PR.
+      - name: Request automated PR review
+        if: ${{ steps.apply_patch.outputs.patch_applied == 'true' && steps.cpr.outputs.pull-request-number }}
+        uses: actions/github-script@v8
+        env:
+          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
+        with:
+          script: |
+            const prNumber = String(process.env.PR_NUMBER || '');
+            if (!prNumber) { core.info('No PR number to review.'); return; }
+            try {
+              await github.rest.actions.createWorkflowDispatch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: 'openrouter-pr-review.yml',
+                ref: context.payload.repository.default_branch,
+                inputs: { pr_number: prNumber }
+              });
+              core.info(`✓ Requested automated review for PR #${prNumber}`);
+            } catch (e) {
+              core.warning(`Could not dispatch PR review (the reviewer workflow must exist on the default branch): ${e.message}`);
+            }

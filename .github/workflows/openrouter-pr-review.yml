@@ -1,0 +1,228 @@
+name: PROXIMA 🔍 PR Reviewer behalf Goat
+
+# Automatically reviews every pull request and posts review comments on your
+# behalf using OpenRouter. Mirrors the conventions of the healing agent
+# (openrouter/auto + OPENROUTER_API_KEY + actions/github-script@v8).
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Pull request number to review'
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: open_router-pr-review-${{ github.event.pull_request.number || github.event.inputs.pr_number }}
+  cancel-in-progress: true
+
+jobs:
+  review-pr:
+    # Skip draft PRs; review everything else.
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      OPENROUTER_API_BASE_URL: ${{ vars.OPENROUTER_API_BASE_URL || 'https://openrouter.ai/api/v1' }}
+      OPENROUTER_MODEL: 'openrouter/auto'
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+    steps:
+      - name: Validate configuration
+        shell: bash
+        run: |
+          if [ -z "${OPENROUTER_API_KEY}" ]; then
+            echo "Missing required secret: OPENROUTER_API_KEY" >&2
+            exit 1
+          fi
+
+      - name: Review pull request and post comments
+        uses: actions/github-script@v8
+        env:
+          OPENROUTER_API_BASE_URL: ${{ env.OPENROUTER_API_BASE_URL }}
+          OPENROUTER_MODEL: ${{ env.OPENROUTER_MODEL }}
+          OPENROUTER_API_KEY: ${{ env.OPENROUTER_API_KEY }}
+          INPUT_PR_NUMBER: ${{ github.event.inputs.pr_number || '' }}
+        with:
+          script: |
+            const baseUrl = process.env.OPENROUTER_API_BASE_URL;
+            const model   = process.env.OPENROUTER_MODEL;
+            const apiKey  = process.env.OPENROUTER_API_KEY;
+
+            // Resolve the PR number from either the event or manual dispatch.
+            const prNumber = Number(
+              context.payload.pull_request?.number || process.env.INPUT_PR_NUMBER || 0
+            );
+            if (!prNumber) {
+              core.info('No pull request number available. Skipping.');
+              return;
+            }
+
+            const { owner, repo } = context.repo;
+
+            // Fetch PR metadata.
+            const { data: pr } = await github.rest.pulls.get({
+              owner, repo, pull_number: prNumber
+            });
+
+            // Fetch the changed files + their patches (paginated).
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner, repo, pull_number: prNumber, per_page: 100
+            });
+
+            if (!files.length) {
+              core.info('No changed files found on the PR. Skipping.');
+              return;
+            }
+
+            // Build a bounded diff context. Skip vendored / build / lock files
+            // and very large generated files so the budget goes to real code.
+            const SKIP = /(^|\/)(node_modules|dist|bin|obj)\//i;
+            const SKIP_NAME = /(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|\.min\.(js|css)|\.map)$/i;
+
+            let diffText = '';
+            const MAX_DIFF = 200000; // chars
+            const includedFiles = [];
+            for (const f of files) {
+              if (SKIP.test(f.filename) || SKIP_NAME.test(f.filename)) continue;
+              const header =
+                `\n=== FILE: ${f.filename} (status: ${f.status}, +${f.additions} -${f.deletions}) ===\n`;
+              const patch = f.patch ? f.patch : '[no textual diff available — binary or too large]';
+              if (diffText.length + header.length + patch.length > MAX_DIFF) {
+                diffText += `\n[diff truncated — remaining files omitted to fit the review budget]\n`;
+                break;
+              }
+              diffText += header + patch + '\n';
+              includedFiles.push(f.filename);
+            }
+
+            if (!diffText.trim()) {
+              core.info('No reviewable textual diff (only vendored/binary/lock files). Skipping.');
+              return;
+            }
+
+            const prompt = [
+              `You are reviewing pull request #${prNumber} in ${owner}/${repo}.`,
+              '',
+              `PR title: ${pr.title}`,
+              'PR description:',
+              (pr.body || '(no description provided)'),
+              '',
+              `Base branch: ${pr.base.ref}  ->  Head branch: ${pr.head.ref}`,
+              `Files changed: ${includedFiles.length}`,
+              '',
+              'TASK: Act as a careful senior code reviewer. Review the unified diff below and give actionable, specific feedback. Reference exact file paths and line numbers from the diff where possible.',
+              '',
+              'Cover (omit a heading if there is nothing to say for it):',
+              '1. Summary — what this PR does, in 1-3 sentences.',
+              '2. Correctness & bugs — logic errors, edge cases, broken behaviour, anything that will not work as intended.',
+              '3. Security — OWASP Top 10 issues: injection, auth/authorization, secrets in code, unsafe input handling, XSS, SSRF, etc. Flag anything risky.',
+              '4. UI / responsiveness — for HTML/CSS/SCSS/template changes, note anything that would break on mobile (<=480px), tablet (<=768px) or desktop, hard-coded widths, removed media queries, or accessibility/tap-target problems.',
+              '5. Maintainability — naming, duplication, dead code, error handling at boundaries, consistency with the rest of the app.',
+              '6. Tests & validation — whether the change appears tested and what the reviewer should verify.',
+              '',
+              'Then end with one line exactly in this form:',
+              'VERDICT: APPROVE | COMMENT | REQUEST_CHANGES',
+              '- Use APPROVE only if you found no blocking issues.',
+              '- Use REQUEST_CHANGES if there are bugs, security problems, or broken UI.',
+              '- Use COMMENT for minor/non-blocking suggestions.',
+              '',
+              'Be concise and concrete. Do not invent code that is not in the diff. Use markdown with short bullet points.',
+              '',
+              '── UNIFIED DIFF ──',
+              diffText
+            ].join('\n');
+
+            let content = '';
+            let apiError = '';
+            try {
+              const response = await fetch(`${baseUrl}/chat/completions`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${apiKey}`,
+                  'Content-Type': 'application/json',
+                  'HTTP-Referer': `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}`,
+                  'X-Title': `${process.env.GITHUB_REPOSITORY} PR Review`
+                },
+                body: JSON.stringify({
+                  model,
+                  temperature: 0.2,
+                  messages: [
+                    {
+                      role: 'system',
+                      content: 'You are a meticulous, constructive senior software engineer reviewing a pull request. You focus on correctness, security (OWASP Top 10), responsive UI on desktop and mobile, and maintainability. You give specific, actionable feedback referencing real files and lines, and you never approve code that contains bugs or security issues.'
+                    },
+                    { role: 'user', content: prompt }
+                  ]
+                })
+              });
+
+              if (!response.ok) {
+                const errorText = await response.text();
+                apiError = `API request failed (${response.status}): ${errorText.slice(0, 800)}`;
+              } else {
+                const data = await response.json();
+                content = data?.choices?.[0]?.message?.content?.trim() || '';
+                if (!content) apiError = 'API returned no content.';
+              }
+            } catch (err) {
+              apiError = `API exception: ${String(err).slice(0, 800)}`;
+            }
+
+            if (apiError) {
+              core.warning(apiError);
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: prNumber,
+                body: [
+                  '## MCP+ PROXIMA 🔍 PR Reviewer',
+                  '',
+                  '### Error',
+                  apiError,
+                  '',
+                  '> Verify the `OPENROUTER_API_KEY` secret and account credits.'
+                ].join('\n')
+              });
+              return;
+            }
+
+            // Map the model verdict to a GitHub review event.
+            let event = 'COMMENT';
+            const verdictMatch = content.match(/VERDICT:\s*(APPROVE|REQUEST_CHANGES|COMMENT)/i);
+            if (verdictMatch) {
+              const v = verdictMatch[1].toUpperCase();
+              if (v === 'APPROVE') event = 'APPROVE';
+              else if (v === 'REQUEST_CHANGES') event = 'REQUEST_CHANGES';
+            }
+
+            // Note: GitHub does not allow APPROVE / REQUEST_CHANGES on a PR you
+            // authored via the default GITHUB_TOKEN. If createReview rejects the
+            // event we fall back to a plain comment below.
+            const reviewEvent = event;
+
+            const reviewBody = [
+              `## MCP+ PROXIMA 🔍 PR Reviewer (${model})`,
+              '',
+              content,
+              '',
+              `> Automated review of ${includedFiles.length} changed file(s). Treat as advisory — a human should confirm before merge.`
+            ].join('\n');
+
+            try {
+              await github.rest.pulls.createReview({
+                owner, repo, pull_number: prNumber,
+                event: reviewEvent,
+                body: reviewBody
+              });
+              core.info(`Posted ${reviewEvent} review on PR #${prNumber}`);
+            } catch (e) {
+              // Most common cause: cannot APPROVE/REQUEST_CHANGES your own PR.
+              core.warning(`createReview failed (${e.status || ''}): ${e.message}. Falling back to a plain comment.`);
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: prNumber, body: reviewBody
+              });
+            }
