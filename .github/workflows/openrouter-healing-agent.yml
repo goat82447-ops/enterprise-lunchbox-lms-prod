@@ -332,20 +332,40 @@ jobs:
             const norm = (s) => s.replace(/\r\n/g, '\n');
 
             // Resolve a model-provided path to a real file. If the exact path
-            // does not exist, try to find a unique file with the same basename
-            // under Frontend/ or Backend/ (handles minor path guesses).
+            // does not exist, try (a) the same path with the Angular-CLI
+            // ".component" segment stripped (app.component.html -> app.html),
+            // then (b) a unique file with the same basename under Frontend/Backend.
             function resolvePath(p) {
               if (fs.existsSync(p)) return p;
-              const base = p.split('/').pop();
+
+              const candidates = [];
+              // Strip ".component" before the extension: foo.component.ts -> foo.ts
+              const stripped = p.replace(/\.component(\.[a-z]+)$/i, '$1');
+              if (stripped !== p) candidates.push(stripped);
+
+              let tracked = [];
               try {
-                const out = execSync('git ls-files Frontend Backend', { encoding: 'utf8' })
-                  .split('\n').map((s) => s.trim()).filter(Boolean)
-                  .filter((f) => f.split('/').pop() === base);
-                if (out.length === 1) {
-                  core.info(`↪ Resolved ${p} → ${out[0]}`);
-                  return out[0];
-                }
+                tracked = execSync('git ls-files Frontend Backend', { encoding: 'utf8' })
+                  .split('\n').map((s) => s.trim()).filter(Boolean);
               } catch (e) { /* ignore */ }
+
+              // (a) Direct existence of stripped candidate
+              for (const c of candidates) {
+                if (fs.existsSync(c)) {
+                  core.info(`↪ Resolved ${p} → ${c}`);
+                  return c;
+                }
+              }
+
+              // (b) Unique basename match (try original, then stripped basenames)
+              for (const cand of [p, ...candidates]) {
+                const base = cand.split('/').pop();
+                const hits = tracked.filter((f) => f.split('/').pop() === base);
+                if (hits.length === 1) {
+                  core.info(`↪ Resolved ${p} → ${hits[0]}`);
+                  return hits[0];
+                }
+              }
               return null;
             }
 
