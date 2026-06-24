@@ -18,7 +18,6 @@ permissions:
   pull-requests: write
   issues: write
   statuses: write  # needed to post a blocking commit status when MUST_FIX > 0
-  statuses: write  # needed to post a blocking commit status when MUST_FIX > 0
 
 concurrency:
   group: open_router-pr-review-${{ github.event.pull_request.number || github.event.inputs.pr_number }}
