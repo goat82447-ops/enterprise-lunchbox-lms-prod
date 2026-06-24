@@ -91,6 +91,16 @@ jobs:
           KEYWORDS=$( { extract_kw "${ISSUE_TITLE}"; extract_kw "${ISSUE_BODY}"; } \
             | awk 'NF && !seen[$0]++' | head -30 || true)
 
+          # Title-only keywords carry the strongest signal about WHICH file the
+          # issue targets (e.g. "login" in a login issue). We rank their
+          # filename/content matches more heavily than generic body words like
+          # "user"/"page"/"button" that match hundreds of unrelated files.
+          TITLE_KW=$(extract_kw "${ISSUE_TITLE}" | awk 'NF && !seen[$0]++' | head -15 || true)
+          is_title_kw() {
+            for t in $TITLE_KW; do [ "$t" = "$1" ] && return 0; done
+            return 1
+          }
+
           echo "=== KEYWORDS ===" >> "$CONTEXT_FILE"
           printf '%s\n' "$KEYWORDS" >> "$CONTEXT_FILE"
           echo "" >> "$CONTEXT_FILE"
@@ -103,6 +113,9 @@ jobs:
           #    the most likely target and must not be truncated away).
           RELEVANT_FILES=""
           for kw in $KEYWORDS; do
+            # Weight title keywords higher than generic body keywords.
+            if is_title_kw "$kw"; then C_REP=2; N_REP=8; else C_REP=1; N_REP=5; fi
+
             # content matches (no per-keyword truncation — rank globally instead)
             content_hits=$(grep -rIl "$kw" \
               --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" \
@@ -112,22 +125,27 @@ jobs:
               --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=.git \
               --exclude-dir=bin --exclude-dir=obj \
               $SRC_ROOTS 2>/dev/null | head -40 || true)
-            RELEVANT_FILES="${RELEVANT_FILES}"$'\n'"${content_hits}"
+            c=0; while [ "$c" -lt "$C_REP" ]; do
+              RELEVANT_FILES="${RELEVANT_FILES}"$'\n'"${content_hits}"; c=$((c+1))
+            done
 
-            # filename/path matches — weighted heavily by listing them 5 times
+            # filename/path matches — the strongest signal (a file literally
+            # named after a keyword). Weighted 8x for title words, 5x otherwise.
             name_hits=$(find $SRC_ROOTS \
               -not \( -path "*/node_modules/*" -o -path "*/dist/*" -o -path "*/bin/*" -o -path "*/obj/*" \) \
               -type f -ipath "*${kw}*" 2>/dev/null | head -10 || true)
-            for _ in 1 2 3 4 5; do
-              RELEVANT_FILES="${RELEVANT_FILES}"$'\n'"${name_hits}"
+            n=0; while [ "$n" -lt "$N_REP" ]; do
+              RELEVANT_FILES="${RELEVANT_FILES}"$'\n'"${name_hits}"; n=$((n+1))
             done
           done
 
-          # Sort files by weighted match frequency — most-relevant files first
+          # Sort files by weighted match frequency — most-relevant files first.
+          # Keep a generous set so the model sees the issue's file AND its
+          # closely-related neighbours (component + service + style + route).
           TOP_FILES=$(printf '%s\n' "$RELEVANT_FILES" \
             | grep -v '^[[:space:]]*$' \
             | sort | uniq -c | sort -rn \
-            | awk '{print $2}' | head -10 || true)
+            | awk '{print $2}' | head -14 || true)
 
           echo "=== RELEVANT FILES ===" >> "$CONTEXT_FILE"
           printf '%s\n' "$TOP_FILES" >> "$CONTEXT_FILE"
@@ -139,16 +157,38 @@ jobs:
           while IFS= read -r f; do
             { [ -z "$f" ] || [ ! -f "$f" ]; } && continue
             echo "--- FILE: $f ---" >> "$CONTEXT_FILE"
-            cat "$f" >> "$CONTEXT_FILE"
+            # Cap very large files so a single huge file (e.g. app.ts) cannot eat
+            # the whole 180k context budget and starve the other relevant files.
+            # 1500 lines comfortably covers real component/service files.
+            total=$(wc -l < "$f" 2>/dev/null || echo 0)
+            if [ "$total" -gt 1500 ]; then
+              head -n 1500 "$f" >> "$CONTEXT_FILE"
+              echo "... [truncated $((total - 1500)) more lines — open the file to see the rest] ..." >> "$CONTEXT_FILE"
+            else
+              cat "$f" >> "$CONTEXT_FILE"
+            fi
             echo "" >> "$CONTEXT_FILE"
           done <<< "$TOP_FILES"
 
-          # Write exact file tree so AI uses correct paths (not guessed ones)
+          # Write exact file tree so AI uses correct paths (not guessed ones).
+          # Show the WHOLE app (all modules) so the model understands the full
+          # architecture, not just the keyword-matched files.
           echo "=== EXACT FILE TREE (use ONLY these paths in patches) ===" >> "$CONTEXT_FILE"
           find $SRC_ROOTS \
             -not \( -path "*/node_modules/*" -o -path "*/dist/*" -o -path "*/bin/*" -o -path "*/obj/*" \) \
             -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" -o -name "*.mjs" -o -name "*.cjs" -o -name "*.html" -o -name "*.scss" -o -name "*.css" -o -name "*.json" -o -name "*.cs" -o -name "*.yml" -o -name "*.yaml" \) \
-            2>/dev/null | sort | head -200 >> "$CONTEXT_FILE" || true
+            2>/dev/null | sort | head -600 >> "$CONTEXT_FILE" || true
+          echo "" >> "$CONTEXT_FILE"
+
+          # High-level APP MAP so the model grasps the ENTIRE app at a glance —
+          # every feature component, service, guard, controller and route file
+          # across all modules. Cheap (paths only) but gives end-to-end context
+          # so multi-file fixes (component + service + route + style) are possible.
+          echo "=== APP STRUCTURE MAP (components, services, controllers across all modules) ===" >> "$CONTEXT_FILE"
+          find $SRC_ROOTS \
+            -not \( -path "*/node_modules/*" -o -path "*/dist/*" -o -path "*/bin/*" -o -path "*/obj/*" \) \
+            -type f \( -iname "*component*" -o -iname "*service*" -o -iname "*guard*" -o -iname "*controller*" -o -iname "*route*" -o -iname "*module*" \) \
+            2>/dev/null | sort | head -400 >> "$CONTEXT_FILE" || true
           echo "" >> "$CONTEXT_FILE"
 
           # Always include these baseline files (FULL content)
@@ -157,6 +197,7 @@ jobs:
             "Frontend/lunchbox-app/src/app/app.config.ts" \
             "Frontend/lunchbox-app/src/app/app.ts" \
             "Frontend/lunchbox-app/src/app/app.html" \
+            "Frontend/lunchbox-app/src/styles.css" \
             "Frontend/lunchbox-app/package.json" \
             ".github/copilot-instructions.md"; do
             [ -f "$baseline" ] || continue
@@ -193,7 +234,7 @@ jobs:
             let repoContext = '';
             const ctxFile = process.env.ISSUE_CONTEXT_FILE;
             if (ctxFile && fs.existsSync(ctxFile)) {
-              repoContext = fs.readFileSync(ctxFile, 'utf8').slice(0, 180000);
+              repoContext = fs.readFileSync(ctxFile, 'utf8').slice(0, 220000);
             }
 
             const prompt = [
@@ -240,6 +281,21 @@ jobs:
               '- <<<SEARCH must be COPIED CHARACTER-FOR-CHARACTER from the FILE CONTENTS shown below. Do not retype from memory, do not fix indentation, do not paraphrase.',
               '- Copy enough lines to be unique (3-10 lines), do not copy the whole file.',
               '- Only modify EXISTING files that appear in the EXACT FILE TREE.',
+              '',
+              'WHOLE-APP THINKING (do NOT tunnel-vision on a single file):',
+              '- Use the EXACT FILE TREE and APP STRUCTURE MAP to understand the ENTIRE app — its routes, shared services, models, guards and related components — before deciding what to change.',
+              '- A correct fix often spans MULTIPLE files. If resolving the issue properly needs a component AND its service AND a route AND a stylesheet, emit a patch block for EACH of them, not just one.',
+              '- Keep the whole app consistent: when you change a shared model, service signature, route path or component selector, update every place that references it that you can see in the context.',
+              '- Do not leave the app in a half-wired state (e.g. a new component with no route, or a renamed method still called by old code).',
+              '',
+              'UI / RESPONSIVE RULES (apply whenever the change touches HTML, templates, CSS or SCSS):',
+              '- Every UI change MUST work end-to-end on BOTH desktop and mobile. Do not fix one and break the other.',
+              '- Reuse the existing breakpoints and media queries you can see in styles.css and the component stylesheets. Do not invent a new breakpoint system.',
+              '- Prefer responsive units and layouts (rem, %, flex, grid, min/max-width, clamp) over fixed pixel widths that overflow small screens.',
+              '- Treat these target widths: mobile <=480px, tablet <=768px, desktop >768px. Make sure content reflows, nothing is cut off, and horizontal scrolling is not introduced on mobile.',
+              '- Keep tap targets, font sizes and spacing usable on mobile; never delete existing @media queries.',
+              '- When you edit a component template, ALSO update its matching stylesheet (component .css/.scss, or global styles.css) so the new/changed markup stays responsive on phone, tablet and desktop.',
+              '- For a new component (NEWFILE), give it responsive styles from the start (mobile-first), matching the visual conventions already used in the app.',
               '- PREFER PARTIAL PROGRESS over giving up: if the issue has several parts and only SOME are safe to do with the files you can see, implement those parts and briefly note under ## Resolution which parts you intentionally skipped. Do NOT return NO_PATCH just because one part is large or architectural.',
               '- Only return NO_PATCH when you genuinely cannot make ANY safe change (e.g. the relevant file is not shown at all).',
               '- If the existing file you need to change is not shown in the FILE CONTENTS section, write exactly: NO_PATCH',
@@ -370,12 +426,6 @@ jobs:
             const idx     = lower.indexOf('## proposed patch');
             const section = idx >= 0 ? report.slice(idx) : report;
 
-            if (/\bNO_PATCH\b/.test(section.slice(0, 300))) {
-              core.info('⚠️ Model returned NO_PATCH');
-              core.setOutput('patch_applied', 'false');
-              return;
-            }
-
             // Parse FILE / SEARCH / REPLACE / END blocks
             const changed = [];
             const failures = [];
@@ -436,6 +486,20 @@ jobs:
                 blocks.push({ type: 'patch', file, search: search.join('\n'), replace: replace.join('\n') });
               }
               return blocks;
+            }
+
+            // Only treat the response as NO_PATCH when the model produced NO
+            // actual patch blocks. This lets partial-progress responses (which
+            // emit a real patch AND mention a skipped part) still be applied,
+            // instead of aborting on the word "NO_PATCH" appearing in prose.
+            if (parseBlocks(section).length === 0) {
+              if (/^\s*NO_PATCH\s*$/m.test(section) || /\bNO_PATCH\b/.test(section)) {
+                core.info('⚠️ Model returned NO_PATCH (no patch blocks present)');
+              } else {
+                core.info('⚠️ No patch blocks found in model response');
+              }
+              core.setOutput('patch_applied', 'false');
+              return;
             }
 
             // Resolve a model-provided path to a real file. If the exact path
