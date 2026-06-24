@@ -117,10 +117,10 @@ import { SupportService } from './core/services/support.service';
               </div>
             </li>
 
-            <!-- Theme toggle -->
+            <!-- Light/Dark Theme toggle -->
             <li class="nav-item">
               <button class="btn btn-outline-light btn-sm ms-2" (click)="toggleTheme()" title="Toggle theme">
-                {{ (currentTheme$ | async) === 'dark' ? '🌙' : ((currentTheme$ | async) === 'ocean' ? '🌊' : '☀️') }}
+                {{ (currentTheme$ | async) === 'dark' ? '🌙' : '☀️' }}
               </button>
             </li>
 
@@ -666,10 +666,9 @@ export class AppComponent {
   }
 
   toggleTheme(): void {
+    // Toggle only between light and dark themes
     const current = this.themeService.getCurrentTheme();
-    const themes: ThemeCode[] = ['light', 'dark', 'ocean'];
-    const currentIndex = themes.indexOf(current);
-    const next = themes[(currentIndex + 1) % themes.length];
+    const next = current === 'dark' ? 'light' : 'dark';
     this.themeService.setTheme(next);
   }
 
