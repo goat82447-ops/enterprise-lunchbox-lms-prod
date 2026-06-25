@@ -1,0 +1,895 @@
+name: DeepSeek 🐋 Healing Agent
+
+on:
+  issues:
+    types: [opened, reopened, edited]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: deepseek-healing-${{ github.event.issue.number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  heal-issue:
+    if: github.event_name == 'workflow_dispatch' || github.event.issue.pull_request == null
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      OPENROUTER_API_BASE_URL: ${{ vars.OPENROUTER_API_BASE_URL || 'https://openrouter.ai/api/v1' }}
+      OPENROUTER_MODEL: 'deepseek/deepseek-chat-v3-0324:free'
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Validate configuration
+        shell: bash
+        run: |
+          if [ -z "${OPENROUTER_API_KEY}" ]; then
+            echo "Missing required secret: OPENROUTER_API_KEY" >&2
+            exit 1
+          fi
+
+      - name: Collect repository context
+        id: collect_context
+        shell: bash
+        env:
+          ISSUE_TITLE: ${{ github.event.issue.title || '' }}
+          ISSUE_BODY: ${{ github.event.issue.body || '' }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || '' }}
+        run: |
+          # Skip context collection when no issue payload (e.g. workflow_dispatch)
+          if [ -z "${ISSUE_NUMBER}" ]; then
+            echo "⚠️ No issue number — skipping context collection"
+            echo "context_file=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          mkdir -p healing-reports
+          CONTEXT_FILE="healing-reports/deepseek-context-${ISSUE_NUMBER}.txt"
+
+          # All real source modules in this repo (only those that exist).
+          # Add new module roots here when the repo grows.
+          SRC_ROOTS=""
+          for root in \
+            "Frontend/lunchbox-app/src" \
+            "Backend/dotnet" \
+            "Backend/microservices/services" \
+            "DotnetRoutix-Server" \
+            "mcp-server"; do
+            [ -d "$root" ] && SRC_ROOTS="$SRC_ROOTS $root"
+          done
+          echo "Scanning source roots:$SRC_ROOTS"
+
+          {
+            echo "=== ISSUE ==="
+            echo "Title: ${ISSUE_TITLE}"
+            echo ""
+            printf '%s\n' "${ISSUE_BODY}"
+            echo ""
+          } > "$CONTEXT_FILE"
+
+          # Extract meaningful keywords. IMPORTANT: title words carry the most
+          # signal, so we list them FIRST and de-duplicate while PRESERVING order
+          # (awk '!seen'). We must NOT use `sort -u | head` here — alphabetical
+          # truncation silently drops critical terms like "login"/"roles"/"screen"
+          # that happen to sort late, which then never get searched for.
+          STOP='this|that|with|from|have|will|been|when|then|they|also|into|more|some|what|which|there|their|after|before|should|would|could|using|error|issue|problem|please|working|getting|cannot|doesnt|https|http|the|and|for|not|are|but|was|has|its'
+          extract_kw() {
+            printf '%s' "$1" \
+              | tr '[:upper:]' '[:lower:]' \
+              | grep -oE '[a-z][a-z0-9]{3,}' \
+              | grep -vxE "$STOP" || true
+          }
+          KEYWORDS=$( { extract_kw "${ISSUE_TITLE}"; extract_kw "${ISSUE_BODY}"; } \
+            | awk 'NF && !seen[$0]++' | head -30 || true)
+
+          # Title-only keywords carry the strongest signal about WHICH file the
+          # issue targets (e.g. "login" in a login issue). We rank their
+          # filename/content matches more heavily than generic body words like
+          # "user"/"page"/"button" that match hundreds of unrelated files.
+          TITLE_KW=$(extract_kw "${ISSUE_TITLE}" | awk 'NF && !seen[$0]++' | head -15 || true)
+          is_title_kw() {
+            for t in $TITLE_KW; do [ "$t" = "$1" ] && return 0; done
+            return 1
+          }
+
+          echo "=== KEYWORDS ===" >> "$CONTEXT_FILE"
+          printf '%s\n' "$KEYWORDS" >> "$CONTEXT_FILE"
+          echo "" >> "$CONTEXT_FILE"
+
+          # Search for relevant files using keywords across ALL modules
+          # (skip build output / vendored dirs). We rank by relevance:
+          #  - every CONTENT match counts once
+          #  - every FILENAME/PATH match counts 5x (a file literally named after
+          #    a keyword, e.g. login.component.ts for a "login" issue, is by far
+          #    the most likely target and must not be truncated away).
+          RELEVANT_FILES=""
+          for kw in $KEYWORDS; do
+            # Weight title keywords higher than generic body keywords.
+            if is_title_kw "$kw"; then C_REP=2; N_REP=8; else C_REP=1; N_REP=5; fi
+
+            # content matches (no per-keyword truncation — rank globally instead)
+            content_hits=$(grep -rIl "$kw" \
+              --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" \
+              --include="*.mjs" --include="*.cjs" --include="*.html" --include="*.scss" \
+              --include="*.css" --include="*.json" --include="*.cs" \
+              --include="*.yml" --include="*.yaml" \
+              --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=.git \
+              --exclude-dir=bin --exclude-dir=obj \
+              $SRC_ROOTS 2>/dev/null | head -40 || true)
+            c=0; while [ "$c" -lt "$C_REP" ]; do
+              RELEVANT_FILES="${RELEVANT_FILES}"$'\n'"${content_hits}"; c=$((c+1))
+            done
+
+            # filename/path matches — the strongest signal (a file literally
+            # named after a keyword). Weighted 8x for title words, 5x otherwise.
+            name_hits=$(find $SRC_ROOTS \
+              -not \( -path "*/node_modules/*" -o -path "*/dist/*" -o -path "*/bin/*" -o -path "*/obj/*" \) \
+              -type f -ipath "*${kw}*" 2>/dev/null | head -10 || true)
+            n=0; while [ "$n" -lt "$N_REP" ]; do
+              RELEVANT_FILES="${RELEVANT_FILES}"$'\n'"${name_hits}"; n=$((n+1))
+            done
+          done
+
+          # Sort files by weighted match frequency — most-relevant files first.
+          # Keep a generous set so the model sees the issue's file AND its
+          # closely-related neighbours (component + service + style + route).
+          TOP_FILES=$(printf '%s\n' "$RELEVANT_FILES" \
+            | grep -v '^[[:space:]]*$' \
+            | sort | uniq -c | sort -rn \
+            | awk '{print $2}' | head -14 || true)
+
+          echo "=== RELEVANT FILES ===" >> "$CONTEXT_FILE"
+          printf '%s\n' "$TOP_FILES" >> "$CONTEXT_FILE"
+          echo "" >> "$CONTEXT_FILE"
+
+          # Include FULL content of top matched files (no truncation) so the
+          # model copies real lines instead of guessing unseen code.
+          echo "=== FILE CONTENTS ===" >> "$CONTEXT_FILE"
+          while IFS= read -r f; do
+            { [ -z "$f" ] || [ ! -f "$f" ]; } && continue
+            echo "--- FILE: $f ---" >> "$CONTEXT_FILE"
+            # Cap very large files so a single huge file (e.g. app.ts) cannot eat
+            # the whole 180k context budget and starve the other relevant files.
+            # 1500 lines comfortably covers real component/service files.
+            total=$(wc -l < "$f" 2>/dev/null || echo 0)
+            if [ "$total" -gt 1500 ]; then
+              head -n 1500 "$f" >> "$CONTEXT_FILE"
+              echo "... [truncated $((total - 1500)) more lines — open the file to see the rest] ..." >> "$CONTEXT_FILE"
+            else
+              cat "$f" >> "$CONTEXT_FILE"
+            fi
+            echo "" >> "$CONTEXT_FILE"
+          done <<< "$TOP_FILES"
+
+          # Write exact file tree so AI uses correct paths (not guessed ones).
+          # Show the WHOLE app (all modules) so the model understands the full
+          # architecture, not just the keyword-matched files.
+          echo "=== EXACT FILE TREE (use ONLY these paths in patches) ===" >> "$CONTEXT_FILE"
+          find $SRC_ROOTS \
+            -not \( -path "*/node_modules/*" -o -path "*/dist/*" -o -path "*/bin/*" -o -path "*/obj/*" \) \
+            -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" -o -name "*.mjs" -o -name "*.cjs" -o -name "*.html" -o -name "*.scss" -o -name "*.css" -o -name "*.json" -o -name "*.cs" -o -name "*.yml" -o -name "*.yaml" \) \
+            2>/dev/null | sort | head -600 >> "$CONTEXT_FILE" || true
+          echo "" >> "$CONTEXT_FILE"
+
+          # High-level APP MAP so the model grasps the ENTIRE app at a glance —
+          # every feature component, service, guard, controller and route file
+          # across all modules. Cheap (paths only) but gives end-to-end context
+          # so multi-file fixes (component + service + route + style) are possible.
+          echo "=== APP STRUCTURE MAP (components, services, controllers across all modules) ===" >> "$CONTEXT_FILE"
+          find $SRC_ROOTS \
+            -not \( -path "*/node_modules/*" -o -path "*/dist/*" -o -path "*/bin/*" -o -path "*/obj/*" \) \
+            -type f \( -iname "*component*" -o -iname "*service*" -o -iname "*guard*" -o -iname "*controller*" -o -iname "*route*" -o -iname "*module*" \) \
+            2>/dev/null | sort | head -400 >> "$CONTEXT_FILE" || true
+          echo "" >> "$CONTEXT_FILE"
+
+          # Always include these baseline files (FULL content)
+          for baseline in \
+            "Frontend/lunchbox-app/src/app/app.routes.ts" \
+            "Frontend/lunchbox-app/src/app/app.config.ts" \
+            "Frontend/lunchbox-app/src/app/app.ts" \
+            "Frontend/lunchbox-app/src/app/app.html" \
+            "Frontend/lunchbox-app/src/styles.css" \
+            "Frontend/lunchbox-app/package.json" \
+            ".github/copilot-instructions.md"; do
+            [ -f "$baseline" ] || continue
+            echo "--- BASELINE: $baseline ---" >> "$CONTEXT_FILE"
+            cat "$baseline" >> "$CONTEXT_FILE"
+            echo "" >> "$CONTEXT_FILE"
+          done
+
+          echo "context_file=$CONTEXT_FILE" >> "$GITHUB_OUTPUT"
+          echo "✓ Context written: $(wc -l < "$CONTEXT_FILE") lines"
+
+      - name: Analyze issue and generate patch
+        id: analyze
+        uses: actions/github-script@v8
+        env:
+          ISSUE_TITLE: ${{ github.event.issue.title || '' }}
+          ISSUE_BODY: ${{ github.event.issue.body || '' }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || '' }}
+          ISSUE_CONTEXT_FILE: ${{ steps.collect_context.outputs.context_file }}
+        with:
+          script: |
+            const issueNumber = Number(process.env.ISSUE_NUMBER || 0);
+            if (!issueNumber) {
+              core.info('No issue number (workflow_dispatch without issue payload). Skipping.');
+              return;
+            }
+
+            const fs = require('fs');
+            const path = require('path');
+            const baseUrl = process.env.OPENROUTER_API_BASE_URL;
+            const model = process.env.OPENROUTER_MODEL;
+            const apiKey = process.env.OPENROUTER_API_KEY;
+
+            let repoContext = '';
+            const ctxFile = process.env.ISSUE_CONTEXT_FILE;
+            if (ctxFile && fs.existsSync(ctxFile)) {
+              repoContext = fs.readFileSync(ctxFile, 'utf8').slice(0, 220000);
+            }
+
+            const prompt = [
+              `Issue title: ${process.env.ISSUE_TITLE}`,
+              '',
+              'Issue body:',
+              process.env.ISSUE_BODY,
+              '',
+              'TASK: Analyze this issue and fix the code. The issue may be a BUG to fix OR a NEW FEATURE / enhancement to add. Handle both.',
+              '',
+              'Return EXACTLY these sections:',
+              '## Error Observed',
+              '## Root Cause',
+              '## Resolution',
+              '## Validation Steps',
+              '## Proposed Patch',
+              '',
+              '── FORMAT FOR ## Proposed Patch ──',
+              'You may emit one or MORE blocks. Two block types are allowed:',
+              '',
+              '(A) To CHANGE an existing file, use a search/replace block (NOT git diff):',
+              '',
+              'FILE: <exact path from EXACT FILE TREE below>',
+              '<<<SEARCH',
+              '<copy the exact lines from the file that need to change>',
+              '>>>REPLACE',
+              '<the new lines to put in their place>',
+              '>>>END',
+              '',
+              '(B) To ADD a brand-new file (for a new feature/component/service), use:',
+              '',
+              'NEWFILE: <new path under Frontend/ or Backend/ that does NOT exist yet>',
+              '<<<CONTENT',
+              '<the complete contents of the new file>',
+              '>>>END',
+              '',
+              'For a feature you will usually combine both: a NEWFILE for the new code,',
+              'plus a FILE search/replace to wire it in (e.g. add a route, import, or nav link).',
+              '',
+              'RULES:',
+              '- FILE path must exactly match a path in the EXACT FILE TREE section. Do NOT invent names like "app.component.html" — this project uses Angular standalone naming (app.ts, app.html).',
+              '- Valid module roots are: Frontend/, Backend/dotnet/, Backend/microservices/services/, DotnetRoutix-Server/, mcp-server/. Pick the module the issue is about.',
+              '- NEWFILE path must NOT already exist and must live under one of those module roots. Follow the existing folder conventions you can see in the EXACT FILE TREE.',
+              '- <<<SEARCH must be COPIED CHARACTER-FOR-CHARACTER from the FILE CONTENTS shown below. Do not retype from memory, do not fix indentation, do not paraphrase.',
+              '- Copy enough lines to be unique (3-10 lines), do not copy the whole file.',
+              '- DO NOT output @@ hunk headers or +/- diff lines. Use ONLY the <<<SEARCH / >>>REPLACE / >>>END markers shown above — a git/unified diff is NOT accepted.',
+              '- Only modify EXISTING files that appear in the EXACT FILE TREE.',
+              '',
+              'WHOLE-APP THINKING (do NOT tunnel-vision on a single file):',
+              '- Use the EXACT FILE TREE and APP STRUCTURE MAP to understand the ENTIRE app — its routes, shared services, models, guards and related components — before deciding what to change.',
+              '- A correct fix often spans MULTIPLE files. If resolving the issue properly needs a component AND its service AND a route AND a stylesheet, emit a patch block for EACH of them, not just one.',
+              '- Keep the whole app consistent: when you change a shared model, service signature, route path or component selector, update every place that references it that you can see in the context.',
+              '- Do not leave the app in a half-wired state (e.g. a new component with no route, or a renamed method still called by old code).',
+              '',
+              'UI / RESPONSIVE RULES (apply whenever the change touches HTML, templates, CSS or SCSS):',
+              '- Every UI change MUST work end-to-end on BOTH desktop and mobile. Do not fix one and break the other.',
+              '- Reuse the existing breakpoints and media queries you can see in styles.css and the component stylesheets. Do not invent a new breakpoint system.',
+              '- Prefer responsive units and layouts (rem, %, flex, grid, min/max-width, clamp) over fixed pixel widths that overflow small screens.',
+              '- Treat these target widths: mobile <=480px, tablet <=768px, desktop >768px. Make sure content reflows, nothing is cut off, and horizontal scrolling is not introduced on mobile.',
+              '- Keep tap targets, font sizes and spacing usable on mobile; never delete existing @media queries.',
+              '- When you edit a component template, ALSO update its matching stylesheet (component .css/.scss, or global styles.css) so the new/changed markup stays responsive on phone, tablet and desktop.',
+              '- For a new component (NEWFILE), give it responsive styles from the start (mobile-first), matching the visual conventions already used in the app.',
+              '- PREFER PARTIAL PROGRESS over giving up: if the issue has several parts and only SOME are safe to do with the files you can see, implement those parts and briefly note under ## Resolution which parts you intentionally skipped. Do NOT return NO_PATCH just because one part is large or architectural.',
+              '- Only return NO_PATCH when you genuinely cannot make ANY safe change (e.g. the relevant file is not shown at all).',
+              '- If the existing file you need to change is not shown in the FILE CONTENTS section, write exactly: NO_PATCH',
+              '- If you cannot produce ANY safe fix or feature, write exactly: NO_PATCH',
+              '',
+              'EXAMPLE:',
+              'FILE: Frontend/lunchbox-app/src/app/app.ts',
+              '<<<SEARCH',
+              '  toggleNav() {',
+              '    this.isNavOpen = !this.isNavOpen;',
+              '  }',
+              '>>>REPLACE',
+              '  toggleNav() {',
+              '    this.isNavOpen = !this.isNavOpen;',
+              '  }',
+              '',
+              '  closeNav() {',
+              '    this.isNavOpen = false;',
+              '  }',
+              '>>>END',
+              '',
+              'Repository context — EXACT FILE TREE and file contents:',
+              repoContext || 'No repository context available.',
+              '',
+              'Generate your response now.'
+            ].join('\n');
+
+            let content = '';
+            let apiError = '';
+
+            try {
+              const response = await fetch(`${baseUrl}/chat/completions`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${apiKey}`,
+                  'Content-Type': 'application/json',
+                  'HTTP-Referer': `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}`,
+                  'X-Title': `${process.env.GITHUB_REPOSITORY} Healing`
+                },
+                body: JSON.stringify({
+                  model,
+                  temperature: 0.1,
+                  messages: [
+                    {
+                      role: 'system',
+                      content: 'You are a code healing assistant that both fixes bugs and implements small new features. Produce patches ONLY in the FILE/<<<SEARCH/>>>REPLACE/>>>END and NEWFILE/<<<CONTENT/>>>END formats described by the user — never a git diff. Copy SEARCH text character-for-character from the provided file contents, and never invent file paths that are not in the repository context.'
+                    },
+                    { role: 'user', content: prompt }
+                  ]
+                })
+              });
+
+              if (!response.ok) {
+                const errorText = await response.text();
+                apiError = `API request failed (${response.status}): ${errorText.slice(0, 800)}`;
+              } else {
+                const data = await response.json();
+                content = data?.choices?.[0]?.message?.content?.trim() || '';
+                if (!content) apiError = 'API returned no content.';
+              }
+            } catch (err) {
+              apiError = `API exception: ${String(err).slice(0, 800)}`;
+            }
+
+            const body = apiError
+              ? [
+                  `## DeepSeek 🐋 Healing Agent (${model})`,
+                  '',
+                  '### Error',
+                  apiError,
+                  '',
+                  '> Verify `OPENROUTER_API_KEY` secret and account credits.'
+                ].join('\n')
+              : [
+                  `## DeepSeek 🐋 Healing Agent (${model})`,
+                  '',
+                  content,
+                  '',
+                  '> Generated automatically from the current issue details.'
+                ].join('\n');
+
+            const reportDir = path.join(process.env.GITHUB_WORKSPACE, 'healing-reports');
+            fs.mkdirSync(reportDir, { recursive: true });
+            const reportPath = path.join(reportDir, `deepseek-issue-${issueNumber}.md`);
+            fs.writeFileSync(reportPath, [
+              `# DeepSeek 🐋 Healing Report - Issue #${issueNumber}`,
+              '',
+              `**Issue:** ${process.env.ISSUE_TITLE}`,
+              `**Model:** ${model}`,
+              `**Generated at:** ${new Date().toISOString()}`,
+              '',
+              body
+            ].join('\n'), 'utf8');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              body
+            });
+
+            if (apiError) core.warning(apiError);
+            core.setOutput('report_path', `healing-reports/deepseek-issue-${issueNumber}.md`);
+            core.setOutput('analysis_status', apiError ? 'failed' : 'ok');
+
+      - name: Extract and apply patch
+        id: apply_patch
+        uses: actions/github-script@v8
+        env:
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          OPENROUTER_API_BASE_URL: ${{ env.OPENROUTER_API_BASE_URL }}
+          OPENROUTER_MODEL: ${{ env.OPENROUTER_MODEL }}
+          OPENROUTER_API_KEY: ${{ env.OPENROUTER_API_KEY }}
+        with:
+          script: |
+            const fs   = require('fs');
+            const { execSync } = require('child_process');
+
+            const issueNumber = process.env.ISSUE_NUMBER;
+            const reportPath  = `healing-reports/deepseek-issue-${issueNumber}.md`;
+
+            if (!fs.existsSync(reportPath)) {
+              core.info('⚠️ No report file found');
+              core.setOutput('patch_applied', 'false');
+              return;
+            }
+            core.info(`📄 Found report at ${reportPath}`);
+
+            const report  = fs.readFileSync(reportPath, 'utf8');
+            const lower   = report.toLowerCase();
+            const idx     = lower.indexOf('## proposed patch');
+            const section = idx >= 0 ? report.slice(idx) : report;
+
+            // Parse FILE / SEARCH / REPLACE / END blocks
+            const changed = [];
+            const failures = [];
+
+            const norm = (s) => s.replace(/\r\n/g, '\n');
+
+            // Tolerant parser for the model's patch blocks. Accepts marker
+            // variants (<<<SEARCH / >>>REPLACE / REPLACE / >>>END / END) and
+            // strips markdown code fences the model sometimes adds, which would
+            // otherwise become part of the SEARCH text and never match.
+            // Also supports NEWFILE: blocks for creating brand-new files
+            // (needed for feature additions, not just bug fixes).
+            function parseBlocks(text) {
+              const lines = norm(text).split('\n');
+              const isFence   = (l) => /^\s*```/.test(l);
+              const isSearch  = (l) => /[<>]{3}\s*SEARCH/i.test(l);
+              const isReplace = (l) => /^[<>]{0,3}\s*REPLACE\s*$/i.test(l);
+              const isEnd     = (l) => /^[<>]{0,3}\s*END\s*$/i.test(l);
+              const blocks = [];
+              let i = 0;
+              while (i < lines.length) {
+                // NEWFILE block: create a brand-new file from full content
+                const newM = lines[i].match(/^\s*(?:#+\s*)?(?:\*\*\s*)?NEWFILE:\s*(.+?)\s*\**\s*$/i);
+                if (newM) {
+                  const file = newM[1].replace(/[`*]/g, '').trim();
+                  i++;
+                  // optional <<<CONTENT / <<<SEARCH style opener
+                  if (i < lines.length && (isSearch(lines[i]) || /[<>]{3}\s*CONTENT/i.test(lines[i]))) i++;
+                  const content = [];
+                  while (i < lines.length && !isEnd(lines[i]) &&
+                         !/^\s*FILE:/.test(lines[i]) && !/^\s*NEWFILE:/.test(lines[i])) {
+                    if (!isFence(lines[i])) content.push(lines[i]);
+                    i++;
+                  }
+                  if (i < lines.length && isEnd(lines[i])) i++;
+                  blocks.push({ type: 'new', file, content: content.join('\n') });
+                  continue;
+                }
+
+                const fileM = lines[i].match(/^\s*(?:#+\s*)?(?:\*\*\s*)?FILE:\s*(.+?)\s*\**\s*$/i);
+                if (!fileM) { i++; continue; }
+                const file = fileM[1].replace(/[<>]{3}\s*SEARCH.*$/i, '').replace(/[`*]/g, '').trim();
+                i++;
+                while (i < lines.length && lines[i].trim() === '') i++;
+                if (i < lines.length && isSearch(lines[i])) i++;
+                const search = [];
+                while (i < lines.length && !isReplace(lines[i]) && !/^\s*FILE:/.test(lines[i]) && !/^\s*NEWFILE:/.test(lines[i])) {
+                  if (!isFence(lines[i])) search.push(lines[i]);
+                  i++;
+                }
+                if (i < lines.length && isReplace(lines[i])) i++;
+                const replace = [];
+                while (i < lines.length && !isEnd(lines[i]) && !/^\s*FILE:/.test(lines[i]) && !/^\s*NEWFILE:/.test(lines[i])) {
+                  if (!isFence(lines[i])) replace.push(lines[i]);
+                  i++;
+                }
+                if (i < lines.length && isEnd(lines[i])) i++;
+                blocks.push({ type: 'patch', file, search: search.join('\n'), replace: replace.join('\n') });
+              }
+              return blocks;
+            }
+
+            // Fallback parser: some models ignore the SEARCH/REPLACE format and
+            // emit a git-style unified diff (a FILE header then @@ hunks made of
+            // space/'-'/'+' lines). Convert each hunk into a search/replace block
+            // so those patches still apply instead of being dropped as "no patch".
+            function parseDiffBlocks(text) {
+              const lines = norm(text).split('\n');
+              // File-header variants we accept (in priority order):
+              //   FILE: path          (optionally  #### / **bold** wrapped)
+              //   diff --git a/x b/x  (standard git diff)
+              //   +++ b/path          (unified diff "new file" header)
+              const fileRe = /^\s*(?:#+\s*)?(?:\*\*\s*)?FILE:\s*(.+?)\s*\**\s*$/i;
+              const gitRe  = /^\s*diff --git\s+a\/.+?\s+b\/(.+?)\s*$/;
+              const plusRe = /^\s*\+\+\+\s+(?:b\/)?(.+?)\s*$/;       // +++ b/path
+              const minusRe = /^\s*---\s+(?:a\/|b\/)/;               // --- a/path (header, skip)
+              const clean = (s) => s.replace(/[`*]/g, '').trim();
+              const out = [];
+              let curFile = null;
+              let i = 0;
+              while (i < lines.length) {
+                const fm = lines[i].match(fileRe);
+                if (fm) { curFile = clean(fm[1]); i++; continue; }
+                const gm = lines[i].match(gitRe);
+                if (gm) { curFile = clean(gm[1]); i++; continue; }
+                const pm = lines[i].match(plusRe);
+                if (pm && clean(pm[1]) !== '/dev/null') { curFile = clean(pm[1]); i++; continue; }
+                if (minusRe.test(lines[i])) { i++; continue; } // skip "--- a/path" header
+                const hunk = lines[i].match(/^(\s*)@@/);
+                if (hunk && curFile) {
+                  const indent = hunk[1] || '';
+                  i++;
+                  const searchLines = [];
+                  const replaceLines = [];
+                  let any = false;
+                  while (i < lines.length) {
+                    let l = lines[i];
+                    if (/^\s*@@/.test(l) || fileRe.test(l) || gitRe.test(l) ||
+                        plusRe.test(l) || minusRe.test(l) || /^\s*NEWFILE:/.test(l)) break;
+                    if (indent && l.startsWith(indent)) l = l.slice(indent.length);
+                    const m = l.match(/^([ +\-\\])(.*)$/);
+                    if (!m) break;
+                    const marker = m[1];
+                    const rest = m[2];
+                    if (marker === '\\') { i++; continue; } // "\ No newline at end of file"
+                    if (marker === ' ') { searchLines.push(rest); replaceLines.push(rest); }
+                    else if (marker === '-') { searchLines.push(rest); }
+                    else if (marker === '+') { replaceLines.push(rest); }
+                    any = true;
+                    i++;
+                  }
+                  if (any) {
+                    out.push({
+                      type: 'patch', file: curFile,
+                      search: searchLines.join('\n'), replace: replaceLines.join('\n')
+                    });
+                  }
+                  continue;
+                }
+                i++;
+              }
+              return out;
+            }
+
+            // Prefer the explicit SEARCH/REPLACE + NEWFILE blocks; if none are
+            // present, recover changes from a unified-diff style response.
+            let blocks = parseBlocks(section);
+            if (blocks.length === 0) {
+              const recovered = parseDiffBlocks(section);
+              if (recovered.length) {
+                core.info(`ℹ️ Recovered ${recovered.length} change(s) from unified-diff format`);
+                blocks = recovered;
+              }
+            }
+
+            // Only treat the response as NO_PATCH when the model produced NO
+            // actual patch blocks. This lets partial-progress responses (which
+            // emit a real patch AND mention a skipped part) still be applied,
+            // instead of aborting on the word "NO_PATCH" appearing in prose.
+            if (blocks.length === 0) {
+              if (/^\s*NO_PATCH\s*$/m.test(section) || /\bNO_PATCH\b/.test(section)) {
+                core.info('⚠️ Model returned NO_PATCH (no patch blocks present)');
+              } else {
+                core.info('⚠️ No patch blocks found in model response');
+              }
+              core.setOutput('patch_applied', 'false');
+              return;
+            }
+
+            // Resolve a model-provided path to a real file. If the exact path
+            // does not exist, try (a) the same path with the Angular-CLI
+            // ".component" segment stripped (app.component.html -> app.html),
+            // then (b) a unique file with the same basename under Frontend/Backend.
+            function resolvePath(p) {
+              if (fs.existsSync(p)) return p;
+
+              const candidates = [];
+              // Strip ".component" before the extension: foo.component.ts -> foo.ts
+              const stripped = p.replace(/\.component(\.[a-z]+)$/i, '$1');
+              if (stripped !== p) candidates.push(stripped);
+
+              let tracked = [];
+              try {
+                tracked = execSync('git ls-files Frontend Backend DotnetRoutix-Server mcp-server', { encoding: 'utf8' })
+                  .split('\n').map((s) => s.trim()).filter(Boolean);
+              } catch (e) { /* ignore */ }
+
+              // (a) Direct existence of stripped candidate
+              for (const c of candidates) {
+                if (fs.existsSync(c)) {
+                  core.info(`↪ Resolved ${p} → ${c}`);
+                  return c;
+                }
+              }
+
+              // (b) Unique basename match (try original, then stripped basenames)
+              for (const cand of [p, ...candidates]) {
+                const base = cand.split('/').pop();
+                const hits = tracked.filter((f) => f.split('/').pop() === base);
+                if (hits.length === 1) {
+                  core.info(`↪ Resolved ${p} → ${hits[0]}`);
+                  return hits[0];
+                }
+              }
+              return null;
+            }
+
+            // Whitespace- AND blank-line-tolerant fallback: compare only the
+            // non-blank lines (with internal whitespace collapsed), then splice
+            // the real file range between the first and last matched lines.
+            function applyLineTrimmed(content, search, replace) {
+              const fileLines = content.split('\n');
+              const flat = (s) => s.replace(/\s+/g, ' ').trim();
+
+              const target = search.split('\n').map(flat).filter(Boolean);
+              if (target.length === 0) return null;
+
+              // Indices of non-blank file lines
+              const idxs = [];
+              for (let i = 0; i < fileLines.length; i++) {
+                if (flat(fileLines[i])) idxs.push(i);
+              }
+
+              for (let s = 0; s + target.length <= idxs.length; s++) {
+                let hit = true;
+                for (let j = 0; j < target.length; j++) {
+                  if (flat(fileLines[idxs[s + j]]) !== target[j]) { hit = false; break; }
+                }
+                if (hit) {
+                  const startLine = idxs[s];
+                  const endLine   = idxs[s + target.length - 1];
+                  let replLines = replace.split('\n');
+                  while (replLines.length && replLines[0].trim() === '') replLines.shift();
+                  while (replLines.length && replLines[replLines.length - 1].trim() === '') replLines.pop();
+                  return fileLines.slice(0, startLine)
+                    .concat(replLines)
+                    .concat(fileLines.slice(endLine + 1))
+                    .join('\n');
+                }
+              }
+              return null;
+            }
+
+            // Apply a list of parsed blocks to the working tree. Returns the
+            // list of human-readable failures (matched changes are pushed onto
+            // the shared `changed` array). Factored out so we can run it twice:
+            // once on the model's first patch, and again on a repaired patch.
+            function applyBlocks(blockList) {
+              const localFail = [];
+              for (const block of blockList) {
+                const rawPath = block.file.trim();
+
+                // Accept any real source module in this repo
+                const SRC_ROOT_RE = /^(Frontend|Backend|DotnetRoutix-Server|mcp-server)\//;
+                if (!SRC_ROOT_RE.test(rawPath)) {
+                  core.warning(`Skipping path outside source dirs: ${rawPath}`);
+                  localFail.push(`\`${rawPath}\` — outside known source modules`);
+                  continue;
+                }
+
+                // NEWFILE: create a brand-new file (feature additions)
+                if (block.type === 'new') {
+                  if (fs.existsSync(rawPath)) {
+                    core.warning(`NEWFILE target already exists: ${rawPath}`);
+                    localFail.push(`\`${rawPath}\` — NEWFILE skipped, file already exists`);
+                    continue;
+                  }
+                  if (!block.content || !block.content.trim()) {
+                    localFail.push(`\`${rawPath}\` — NEWFILE skipped, empty content`);
+                    continue;
+                  }
+                  const dir = require('path').dirname(rawPath);
+                  fs.mkdirSync(dir, { recursive: true });
+                  fs.writeFileSync(rawPath, norm(block.content) + '\n', 'utf8');
+                  execSync(`git add "${rawPath}"`);
+                  core.info(`✓ Created new file: ${rawPath}`);
+                  changed.push(rawPath);
+                  continue;
+                }
+
+                const search  = block.search;
+                const replace = block.replace;
+                const filepath = resolvePath(rawPath);
+                if (!filepath) {
+                  core.warning(`File not found: ${rawPath}`);
+                  localFail.push(`\`${rawPath}\` — file does not exist (no unique basename match)`);
+                  continue;
+                }
+
+                const raw = norm(fs.readFileSync(filepath, 'utf8'));
+                let newContent = null;
+
+                // 1) Exact match (after CRLF normalisation)
+                if (raw.includes(norm(search))) {
+                  newContent = raw.replace(norm(search), norm(replace));
+                } else {
+                  // 2) Whitespace-tolerant line-trimmed fallback
+                  newContent = applyLineTrimmed(raw, norm(search), norm(replace));
+                }
+
+                if (newContent === null) {
+                  core.warning(`Search text not found in ${filepath}`);
+                  localFail.push(`\`${filepath}\` — SEARCH block did not match the current file content`);
+                  continue;
+                }
+
+                fs.writeFileSync(filepath, newContent, 'utf8');
+                execSync(`git add "${filepath}"`);
+                core.info(`✓ Patched and staged: ${filepath}`);
+                changed.push(filepath);
+              }
+              return localFail;
+            }
+
+            // Second-chance repair: re-query the model with the REAL current file
+            // contents so it can correct SEARCH text that did not match, then
+            // re-apply. This is what pushes most issues over the line into an
+            // actual branch + PR instead of a "could not apply" comment.
+            async function repairBlocks(origBlocks) {
+              const baseUrl = process.env.OPENROUTER_API_BASE_URL;
+              const model   = process.env.OPENROUTER_MODEL;
+              const apiKey  = process.env.OPENROUTER_API_KEY;
+              if (!apiKey) return [];
+
+              const seen = new Set();
+              const fileSections = [];
+              for (const b of origBlocks) {
+                if (b.type !== 'patch') continue;
+                const fp = resolvePath((b.file || '').trim());
+                if (!fp || seen.has(fp)) continue;
+                seen.add(fp);
+                let txt = '';
+                try { txt = fs.readFileSync(fp, 'utf8'); } catch (e) { continue; }
+                const lines = txt.split('\n');
+                const capped = lines.length > 1200
+                  ? lines.slice(0, 1200).join('\n') + '\n... [truncated] ...'
+                  : txt;
+                fileSections.push(`--- FILE: ${fp} ---\n${capped}`);
+                if (fileSections.length >= 5) break;
+              }
+              if (!fileSections.length) return [];
+
+              const repairPrompt = [
+                'Your previous patch did NOT apply because the SEARCH text did not match the real file.',
+                'Below is the EXACT current content of each file. Re-emit corrected patch blocks that resolve the issue.',
+                'Copy the SEARCH lines CHARACTER-FOR-CHARACTER from the content below (exact indentation, no paraphrasing).',
+                'Use ONLY this format — no git diff, no @@ hunks:',
+                'FILE: <path>',
+                '<<<SEARCH',
+                '<exact lines copied from below>',
+                '>>>REPLACE',
+                '<the new lines>',
+                '>>>END',
+                'You may also add a new file with: NEWFILE: <path> / <<<CONTENT / >>>END.',
+                'Output ONLY patch blocks, nothing else.',
+                '',
+                '=== CURRENT FILE CONTENTS ===',
+                fileSections.join('\n\n')
+              ].join('\n');
+
+              const response = await fetch(`${baseUrl}/chat/completions`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${apiKey}`,
+                  'Content-Type': 'application/json',
+                  'HTTP-Referer': `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}`,
+                  'X-Title': `${process.env.GITHUB_REPOSITORY} Healing Repair`
+                },
+                body: JSON.stringify({
+                  model,
+                  temperature: 0.1,
+                  messages: [
+                    { role: 'system', content: 'You output ONLY FILE/<<<SEARCH/>>>REPLACE/>>>END or NEWFILE/<<<CONTENT/>>>END patch blocks. Copy SEARCH text exactly from the provided file content. Never output a git diff or @@ hunks.' },
+                    { role: 'user', content: repairPrompt }
+                  ]
+                })
+              });
+              if (!response.ok) return [];
+              const data = await response.json();
+              const txt = ((((data || {}).choices || [])[0] || {}).message || {}).content || '';
+              const trimmed = txt.trim();
+              if (!trimmed) return [];
+              let rb = parseBlocks(trimmed);
+              if (rb.length === 0) rb = parseDiffBlocks(trimmed);
+              return rb;
+            }
+
+            // First pass — apply the model's original patch.
+            failures.push(...applyBlocks(blocks));
+
+            // If nothing matched, run one automatic repair round so the issue
+            // still results in a branch + PR with the relevant code change.
+            if (changed.length === 0) {
+              try {
+                const repaired = await repairBlocks(blocks);
+                if (repaired.length) {
+                  core.info(`🔧 Repair attempt produced ${repaired.length} corrected block(s); re-applying`);
+                  failures.push(...applyBlocks(repaired));
+                }
+              } catch (e) {
+                core.warning(`Repair attempt failed: ${e.message}`);
+              }
+            }
+
+            if (changed.length === 0) {
+              core.info('❌ No files were modified');
+              core.setOutput('patch_applied', 'false');
+
+              // Leave visible feedback on the issue instead of failing silently
+              if (issueNumber && failures.length) {
+                const uniqueFailures = [...new Set(failures)];
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: Number(issueNumber),
+                  body: [
+                    '### ⚠️ Healing Agent could not apply an automatic patch',
+                    '',
+                    'The generated SEARCH/REPLACE block did not match the repository, so no PR was created:',
+                    '',
+                    ...uniqueFailures.map((f) => `- ${f}`),
+                    '',
+                    'This usually means the model guessed lines that differ from the real file ' +
+                    '(indentation, paraphrased code, or a section that was not included in its context). ' +
+                    'Re-run the workflow or refine the issue with the exact code snippet to change.'
+                  ].join('\n')
+                });
+              }
+              return;
+            }
+
+            core.info(`Changed: ${changed.join(', ')}`);
+            core.setOutput('patch_applied', 'true');
+
+      - name: Create healing PR
+        id: cpr
+        if: ${{ steps.apply_patch.outputs.patch_applied == 'true' }}
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: deepseek-healing/issue-${{ github.event.issue.number }}
+          title: "fix: deepseek healing patch for issue #${{ github.event.issue.number }}"
+          body: |
+            Automated code fix generated by DeepSeek 🐋 Healing Agent.
+
+            Closes #${{ github.event.issue.number }}
+
+            - Analysis status: `${{ steps.analyze.outputs.analysis_status }}`
+            - Report: `${{ steps.analyze.outputs.report_path }}`
+          commit-message: "fix(healing): apply deepseek patch for issue #${{ github.event.issue.number }}"
+          add-paths: |
+            Frontend/**
+            Backend/**
+            DotnetRoutix-Server/**
+            mcp-server/**
+            healing-reports/deepseek-issue-${{ github.event.issue.number }}.md
+
+      # PRs created with GITHUB_TOKEN do NOT trigger the pull_request event, so
+      # the reviewer would never run on this bot PR automatically. We explicitly
+      # dispatch the reviewer with the new PR number so EVERY healing PR is
+      # reviewed and commented on, just like a human-opened PR.
+      - name: Request automated PR review
+        if: ${{ steps.apply_patch.outputs.patch_applied == 'true' && steps.cpr.outputs.pull-request-number }}
+        uses: actions/github-script@v8
+        env:
+          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
+        with:
+          script: |
+            const prNumber = String(process.env.PR_NUMBER || '');
+            if (!prNumber) { core.info('No PR number to review.'); return; }
+            try {
+              await github.rest.actions.createWorkflowDispatch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: 'openrouter-pr-review.yml',
+                ref: context.payload.repository.default_branch,
+                inputs: { pr_number: prNumber }
+              });
+              core.info(`✓ Requested automated review for PR #${prNumber}`);
+            } catch (e) {
+              core.warning(`Could not dispatch PR review (the reviewer workflow must exist on the default branch): ${e.message}`);
+            }
