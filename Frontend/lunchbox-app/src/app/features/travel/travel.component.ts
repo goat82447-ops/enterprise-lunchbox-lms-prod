@@ -536,10 +536,24 @@ const CAPTAIN_KYC_STORAGE_KEY = 'delivery_captain_kyc_state';
       display: flex; align-items: center; gap: 8px;
       cursor: pointer; background: #fff; font-size: 13px; font-weight: 600;
     }
-    .pop-arrow {
-      background: #f9a825; border-radius: 50%; width: 22px; height: 22px;
-      display: flex; align-items: center; justify-content: center; font-size: 14px;
-    }
+      .pop-arrow {
+        background: #f9a825; border-radius: 50%; width: 22px; height: 22px;
+        display: flex; align-items: center; justify-content: center; font-size: 14px;
+      }
+
+      /* ── Improved contrast for Recent Stops & Popular Places ── */
+      .popular-card {
+        color: #000;               /* Ensure dark text for the whole card */
+      }
+      .popular-card .fw-semibold {
+        color: #000;               /* Dark heading (place name) */
+      }
+      .popular-card .small {
+        color: #555;               /* Slightly lighter but still high‑contrast description */
+      }
+      .popular-card span {
+        color: #000;               /* Dark icons / arrows */
+      }
 
     /* STEP 3 VEHICLE */
     .route-top-bar {
