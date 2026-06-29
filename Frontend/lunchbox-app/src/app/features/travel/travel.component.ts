@@ -275,68 +275,113 @@ const CAPTAIN_KYC_STORAGE_KEY = 'delivery_captain_kyc_state';
 
       <!-- ── STEP 4: Confirmed ── -->
       <div *ngIf="step === 4" class="confirm-screen">
-        <div class="confirm-icon">🎉</div>
-        <h4 class="confirm-title">Ride Booked!</h4>
-        <p class="confirm-sub">Your {{ selectedVehicle?.label }} is on the way</p>
+        <div class="confirm-content">
+          <div class="uber-status-card">
+            <div class="uber-status-top">
+              <div>
+                <div class="uber-status-title">Ride Confirmed</div>
+                <div class="uber-status-sub">Your {{ selectedVehicle?.label }} is on the way</div>
+              </div>
+              <div class="uber-fare-pill">₹{{ selectedVehicle ? calculateFare(selectedVehicle) : 0 }}</div>
+            </div>
+            <div class="uber-meta-row">
+              <span>⏱ Arrives in ~{{ selectedVehicle?.etaMin || etaMinutes || 3 }} min</span>
+              <span>📏 {{ distanceKm }} km</span>
+              <span>🆔 {{ currentBookingId || 'Pending ID' }}</span>
+            </div>
+            <div class="uber-eta-progress" aria-label="Captain arrival progress">
+              <div class="uber-eta-fill" [style.width.%]="etaProgressPercent"></div>
+            </div>
+            <div class="uber-eta-caption">Captain is heading to your pickup point</div>
+          </div>
 
-        <div class="driver-verify-banner" *ngIf="assignedCaptainName">
-          <span class="driver-name">Captain: {{ assignedCaptainName }}</span>
-          <span class="driver-verified-pill" *ngIf="assignedCaptainKycStatus === 'verified'">Verified Driver</span>
-        </div>
-        <div class="driver-verify-note" *ngIf="assignedCaptainName && assignedCaptainKycStatus !== 'verified'">
-          Captain assigned. Verified badge will appear only after admin approval.
+          <div class="uber-otp-card">
+            <div class="otp-heading">START RIDE OTP</div>
+            <div class="otp-code">{{ bookingOtp }}</div>
+            <div class="otp-help">Share this OTP with your captain when they arrive.</div>
+          </div>
+
+          <div class="confirm-card">
+            <div class="confirm-row">
+              <span class="cr-label">Pickup</span>
+              <span class="cr-val">{{ shortName(pickupAddress) }}</span>
+            </div>
+            <div class="confirm-row">
+              <span class="cr-label">Drop</span>
+              <span class="cr-val">{{ shortName(dropAddress) }}</span>
+            </div>
+            <div class="confirm-row">
+              <span class="cr-label">Vehicle</span>
+              <span class="cr-val">{{ selectedVehicle?.icon }} {{ selectedVehicle?.label }}</span>
+            </div>
+            <div class="confirm-row">
+              <span class="cr-label">Drop ETA</span>
+              <span class="cr-val">{{ getDropTime(selectedVehicle?.etaMin || 0) }}</span>
+            </div>
+          </div>
+
+          <div class="driver-verify-banner" *ngIf="assignedCaptainName; else searchingCaptainTemplate">
+            <div class="driver-main">
+              <div class="driver-avatar">{{ captainInitials }}</div>
+              <div class="driver-copy">
+                <div class="driver-name">{{ assignedCaptainName }}</div>
+                <div class="driver-sub">Your captain has been assigned</div>
+                <div class="driver-rating-row">
+                  <span class="driver-rating">★ {{ assignedCaptainRating | number: '1.1-1' }}</span>
+                  <span class="driver-dot">•</span>
+                  <span class="driver-plate">{{ assignedVehiclePlate }}</span>
+                </div>
+              </div>
+            </div>
+            <span class="driver-verified-pill" *ngIf="assignedCaptainKycStatus === 'verified'">Verified Driver</span>
+          </div>
+          <div class="driver-action-row" *ngIf="assignedCaptainName">
+            <button type="button" class="driver-action-btn" (click)="callCaptain()">📞 Call</button>
+            <button type="button" class="driver-action-btn" (click)="chatCaptain()">💬 Chat</button>
+          </div>
+          <ng-template #searchingCaptainTemplate>
+            <div class="driver-searching-banner">Finding your nearest captain...</div>
+          </ng-template>
+          <div class="driver-verify-note" *ngIf="assignedCaptainName && assignedCaptainKycStatus !== 'verified'">
+            Captain assigned. Verified badge will appear only after admin approval.
+          </div>
+
+          <div class="ola-cancel-sheet" *ngIf="!isRideCancelled">
+            <div class="ola-cancel-title">Cancel ride?</div>
+            <div class="ola-cancel-sub">Select a reason (Ola-style quick cancel)</div>
+            <div class="ola-reason-grid">
+              <button
+                type="button"
+                class="ola-reason-chip"
+                *ngFor="let reason of cancelReasonOptions"
+                [class.active]="cancelReason === reason"
+                (click)="cancelReason = reason"
+              >
+                {{ reason }}
+              </button>
+            </div>
+            <input
+              *ngIf="cancelReason === 'Other'"
+              class="cancel-input ola-other-input"
+              placeholder="Type your cancel reason"
+              [(ngModel)]="cancelReasonOther"
+            />
+            <div class="ola-cancel-note">Cancelling frequently may reduce faster captain priority.</div>
+            <button class="cancel-btn ola-cancel-cta" [disabled]="!canCancelRide" (click)="cancelBookedRide()">Confirm Cancellation</button>
+          </div>
+
+          <div class="cancelled-note" *ngIf="isRideCancelled">
+            Ride cancelled. Reason: {{ resolvedCancelReason }}
+          </div>
         </div>
 
-        <div class="confirm-card">
-          <div class="confirm-row">
-            <span class="cr-label">Pickup</span>
-            <span class="cr-val">{{ shortName(pickupAddress) }}</span>
+        <div class="confirm-sticky-actions">
+          <div class="sticky-primary-row">
+            <button class="confirm-btn" [disabled]="isRideCancelled" (click)="trackRide()">Track Ride</button>
+            <button class="secondary-solid-btn" [disabled]="!assignedCaptainName || isRideCancelled" (click)="callCaptain()">Call Captain</button>
           </div>
-          <div class="confirm-row">
-            <span class="cr-label">Drop</span>
-            <span class="cr-val">{{ shortName(dropAddress) }}</span>
-          </div>
-          <div class="confirm-row">
-            <span class="cr-label">Vehicle</span>
-            <span class="cr-val">{{ selectedVehicle?.icon }} {{ selectedVehicle?.label }}</span>
-          </div>
-          <div class="confirm-row">
-            <span class="cr-label">Distance</span>
-            <span class="cr-val">{{ distanceKm }} km</span>
-          </div>
-          <div class="confirm-row">
-            <span class="cr-label">Fare</span>
-            <span class="cr-val text-danger fw-bold">₹{{ selectedVehicle ? calculateFare(selectedVehicle) : 0 }}</span>
-          </div>
-          <div class="confirm-row">
-            <span class="cr-label">OTP</span>
-            <span class="cr-val fw-bold fs-4 text-success letter-spacing-wide">{{ bookingOtp }}</span>
-          </div>
+          <button class="outline-btn" (click)="resetFlow()">Book Another Ride</button>
         </div>
-
-        <p class="text-muted small mb-3 text-center">Share this OTP with your captain when they arrive</p>
-        <div class="cancel-card" *ngIf="!isRideCancelled">
-          <div class="cancel-title">Need to cancel this ride?</div>
-          <div class="cancel-sub">Select a reason so we can improve your experience.</div>
-          <select class="cancel-select" [(ngModel)]="cancelReason">
-            <option value="">Select cancel reason</option>
-            <option *ngFor="let reason of cancelReasonOptions" [value]="reason">{{ reason }}</option>
-          </select>
-          <input
-            *ngIf="cancelReason === 'Other'"
-            class="cancel-input"
-            placeholder="Type your cancel reason"
-            [(ngModel)]="cancelReasonOther"
-          />
-          <button class="cancel-btn" [disabled]="!canCancelRide" (click)="cancelBookedRide()">Cancel Ride</button>
-        </div>
-
-        <div class="cancelled-note" *ngIf="isRideCancelled">
-          Ride cancelled. Reason: {{ resolvedCancelReason }}
-        </div>
-
-        <button class="confirm-btn mb-2" [disabled]="isRideCancelled" (click)="trackRide()">📍 Track Ride</button>
-        <button class="outline-btn" (click)="resetFlow()">Book Another Ride</button>
       </div>
 
     </div>
@@ -346,6 +391,7 @@ const CAPTAIN_KYC_STORAGE_KEY = 'delivery_captain_kyc_state';
     .travel-shell {
       height: 100dvh; display: flex; flex-direction: column;
       background: #f8f9fa; overflow: hidden;
+      color: #0f172a;
     }
     .step-container { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
 
@@ -396,8 +442,9 @@ const CAPTAIN_KYC_STORAGE_KEY = 'delivery_captain_kyc_state';
     }
     .search-input {
       flex: 1; border: none; background: transparent;
-      font-size: 15px; outline: none; font-weight: 600;
+      font-size: 15px; outline: none; font-weight: 600; color: #0f172a;
     }
+    .search-input::placeholder { color: #94a3b8; }
     .clear-btn { background: none; border: none; font-size: 14px; color: #888; cursor: pointer; }
 
     /* SUGGESTIONS */
@@ -425,29 +472,6 @@ const CAPTAIN_KYC_STORAGE_KEY = 'delivery_captain_kyc_state';
       font-weight: 600; font-size: 15px; cursor: pointer; color: #444;
     }
 
-    .cancel-card {
-      width: 100%;
-      border: 1px solid #fee2e2;
-      background: #fff7f7;
-      border-radius: 14px;
-      padding: 12px;
-      margin-bottom: 10px;
-    }
-
-    .cancel-title {
-      font-size: 13px;
-      font-weight: 700;
-      color: #991b1b;
-      margin-bottom: 2px;
-    }
-
-    .cancel-sub {
-      font-size: 12px;
-      color: #7f1d1d;
-      margin-bottom: 8px;
-    }
-
-    .cancel-select,
     .cancel-input {
       width: 100%;
       border: 1px solid #fecaca;
@@ -527,33 +551,25 @@ const CAPTAIN_KYC_STORAGE_KEY = 'delivery_captain_kyc_state';
     .stop-search-box { flex: 1; }
     .action-pill {
       border: 1px solid #ddd; background: #fff; border-radius: 20px;
-      padding: 8px 14px; font-size: 12px; font-weight: 600; cursor: pointer;
+      padding: 8px 14px; font-size: 12px; font-weight: 600; cursor: pointer; color: #334155;
     }
-    .section-title { font-size: 14px; font-weight: 700; color: #222; }
+    .action-pill:disabled {
+      color: #94a3b8;
+      border-color: #e2e8f0;
+      background: #f8fafc;
+      opacity: 1;
+    }
+    .section-title { font-size: 14px; font-weight: 700; color: #0f172a; }
     .popular-grid { display: flex; gap: 10px; flex-wrap: wrap; padding-bottom: 10px; }
     .popular-card {
       border: 1px solid #eee; border-radius: 12px; padding: 10px 14px;
       display: flex; align-items: center; gap: 8px;
-      cursor: pointer; background: #fff; font-size: 13px; font-weight: 600;
+      cursor: pointer; background: #fff; font-size: 13px; font-weight: 600; color: #1e293b;
     }
-      .pop-arrow {
-        background: #f9a825; border-radius: 50%; width: 22px; height: 22px;
-        display: flex; align-items: center; justify-content: center; font-size: 14px;
-      }
-
-      /* ── Improved contrast for Recent Stops & Popular Places ── */
-      .popular-card {
-        color: #000;               /* Ensure dark text for the whole card */
-      }
-      .popular-card .fw-semibold {
-        color: #000;               /* Dark heading (place name) */
-      }
-      .popular-card .small {
-        color: #555;               /* Slightly lighter but still high‑contrast description */
-      }
-      .popular-card span {
-        color: #000;               /* Dark icons / arrows */
-      }
+    .pop-arrow {
+      background: #f9a825; border-radius: 50%; width: 22px; height: 22px;
+      display: flex; align-items: center; justify-content: center; font-size: 14px;
+    }
 
     /* STEP 3 VEHICLE */
     .route-top-bar {
@@ -576,16 +592,16 @@ const CAPTAIN_KYC_STORAGE_KEY = 'delivery_captain_kyc_state';
       box-shadow: 0 1px 4px rgba(0,0,0,.12);
     }
     .dist-row { display: flex; gap: 16px; padding: 4px 0 10px; border-bottom: 1px solid #f0f0f0; margin-bottom: 8px; }
-    .dist-label { font-size: 12px; color: #666; font-weight: 600; }
+    .dist-label { font-size: 12px; color: #475569; font-weight: 600; }
     .vehicle-card {
       display: flex; align-items: center; gap: 12px;
       padding: 12px 8px; border-radius: 14px; border: 2px solid transparent;
-      cursor: pointer; transition: border-color .15s, background .15s; margin-bottom: 4px;
+      cursor: pointer; transition: border-color .15s, background .15s; margin-bottom: 4px; color: #1e293b;
     }
     .vehicle-card.selected { border-color: #1a6e32; background: #f0fdf4; }
     .veh-icon { font-size: 30px; width: 48px; text-align: center; flex-shrink: 0; }
     .veh-info { flex: 1; }
-    .veh-name { font-size: 15px; font-weight: 700; }
+    .veh-name { font-size: 15px; font-weight: 700; color: #0f172a; }
     .veh-tag {
       background: #e8f5e9; color: #1a6e32; font-size: 10px; font-weight: 700;
       padding: 2px 7px; border-radius: 20px; margin-left: 6px; vertical-align: middle;
@@ -599,7 +615,7 @@ const CAPTAIN_KYC_STORAGE_KEY = 'delivery_captain_kyc_state';
     }
     .pay-pill {
       flex: 1; border: 1px solid #ddd; background: #fafafa;
-      border-radius: 20px; padding: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
+      border-radius: 20px; padding: 8px; font-size: 13px; font-weight: 600; cursor: pointer; color: #0f172a;
     }
 
     .travel-offers-box {
@@ -637,13 +653,126 @@ const CAPTAIN_KYC_STORAGE_KEY = 'delivery_captain_kyc_state';
 
     /* STEP 4 CONFIRM */
     .confirm-screen {
-      display: flex; flex-direction: column; align-items: center;
-      justify-content: flex-start; padding: 32px 20px 24px;
-      background: #fff; overflow-y: auto; height: 100%;
+      display: flex; flex-direction: column; align-items: stretch;
+      justify-content: flex-start; background: #fff; overflow: hidden; height: 100%;
     }
-    .confirm-icon { font-size: 64px; margin-bottom: 8px; }
-    .confirm-title { font-size: 24px; font-weight: 800; color: #111; margin-bottom: 4px; }
-    .confirm-sub { font-size: 14px; color: #666; margin-bottom: 20px; }
+    .confirm-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 18px 16px 10px;
+      display: grid;
+      gap: 10px;
+    }
+    .confirm-content > * {
+      animation: confirm-card-in 0.32s ease both;
+    }
+    .confirm-content > *:nth-child(2) { animation-delay: 0.04s; }
+    .confirm-content > *:nth-child(3) { animation-delay: 0.08s; }
+    .confirm-content > *:nth-child(4) { animation-delay: 0.12s; }
+    .confirm-content > *:nth-child(5) { animation-delay: 0.16s; }
+    .confirm-content > *:nth-child(6) { animation-delay: 0.2s; }
+    .uber-status-card {
+      border-radius: 16px;
+      background: linear-gradient(140deg, #111827 0%, #1f2937 100%);
+      color: #f8fafc;
+      padding: 14px;
+    }
+    .uber-status-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .uber-status-title {
+      font-size: 1.02rem;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+    }
+    .uber-status-sub {
+      font-size: 0.78rem;
+      color: #cbd5e1;
+      margin-top: 2px;
+    }
+    .uber-fare-pill {
+      border-radius: 999px;
+      background: #f59e0b;
+      color: #111827;
+      font-size: 0.88rem;
+      font-weight: 800;
+      padding: 6px 12px;
+      white-space: nowrap;
+    }
+    .uber-meta-row {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
+      font-size: 0.72rem;
+      color: #e2e8f0;
+    }
+    .uber-meta-row span {
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      padding: 6px 7px;
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .uber-eta-progress {
+      margin-top: 8px;
+      height: 6px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.16);
+      overflow: hidden;
+    }
+    .uber-eta-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #f59e0b 0%, #22c55e 100%);
+      transition: width .35s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .uber-eta-fill::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(110deg, transparent 0%, rgba(255, 255, 255, 0.45) 45%, transparent 100%);
+      transform: translateX(-100%);
+      animation: eta-shimmer 1.6s linear infinite;
+    }
+    .uber-eta-caption {
+      margin-top: 6px;
+      font-size: 0.7rem;
+      color: #e2e8f0;
+    }
+    .uber-otp-card {
+      border: 1px solid #bbf7d0;
+      background: #ecfdf5;
+      border-radius: 14px;
+      padding: 12px;
+      text-align: center;
+    }
+    .otp-heading {
+      font-size: 0.68rem;
+      font-weight: 700;
+      color: #166534;
+      letter-spacing: 0.12em;
+      margin-bottom: 6px;
+    }
+    .otp-code {
+      font-size: 1.9rem;
+      font-weight: 900;
+      letter-spacing: 0.32rem;
+      color: #14532d;
+      line-height: 1;
+      margin-bottom: 6px;
+    }
+    .otp-help {
+      font-size: 0.75rem;
+      color: #166534;
+    }
     .driver-verify-banner {
       width: 100%;
       border: 1px solid #e5e7eb;
@@ -656,7 +785,94 @@ const CAPTAIN_KYC_STORAGE_KEY = 'delivery_captain_kyc_state';
       align-items: center;
       gap: 8px;
     }
+    .driver-main {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .driver-avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #0f172a 0%, #334155 100%);
+      color: #fff;
+      font-size: 0.78rem;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .driver-copy {
+      min-width: 0;
+      display: grid;
+      gap: 1px;
+    }
     .driver-name { font-size: 12px; font-weight: 700; color: #1f2937; }
+    .driver-sub {
+      font-size: 0.7rem;
+      color: #64748b;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .driver-rating-row {
+      margin-top: 2px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.69rem;
+      color: #334155;
+      font-weight: 700;
+    }
+    .driver-rating {
+      color: #b45309;
+    }
+    .driver-dot {
+      opacity: 0.5;
+    }
+    .driver-plate {
+      border: 1px solid #cbd5e1;
+      border-radius: 999px;
+      padding: 1px 6px;
+      font-size: 0.64rem;
+      color: #1e293b;
+      background: #f8fafc;
+    }
+    .driver-searching-banner {
+      width: 100%;
+      border: 1px solid #dbeafe;
+      background: #eff6ff;
+      color: #1e40af;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+    .driver-action-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .driver-action-btn {
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      background: #fff;
+      color: #0f172a;
+      font-size: 0.76rem;
+      font-weight: 700;
+      padding: 8px;
+      cursor: pointer;
+      transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+    }
+    .driver-action-btn:hover {
+      border-color: #94a3b8;
+      box-shadow: 0 4px 10px rgba(15, 23, 42, 0.08);
+    }
+    .driver-action-btn:active {
+      transform: scale(0.98);
+    }
     .driver-verified-pill {
       display: inline-flex;
       align-items: center;
@@ -682,17 +898,144 @@ const CAPTAIN_KYC_STORAGE_KEY = 'delivery_captain_kyc_state';
       text-align: center;
     }
     .confirm-card {
-      width: 100%; border: 1px solid #eee; border-radius: 16px;
-      padding: 16px; margin-bottom: 16px; background: #fafafa;
+      width: 100%; border: 1px solid #e5e7eb; border-radius: 14px;
+      padding: 12px; background: #f8fafc;
     }
     .confirm-row {
       display: flex; justify-content: space-between; align-items: center;
       padding: 8px 0; border-bottom: 1px solid #f0f0f0;
     }
     .confirm-row:last-child { border-bottom: none; }
-    .cr-label { font-size: 12px; color: #888; font-weight: 600; }
-    .cr-val { font-size: 13px; color: #222; font-weight: 600; max-width: 55%; text-align: right; }
-    .letter-spacing-wide { letter-spacing: 4px; }
+    .cr-label { font-size: 12px; color: #64748b; font-weight: 700; }
+    .cr-val { font-size: 13px; color: #0f172a; font-weight: 700; max-width: 55%; text-align: right; }
+    .ola-cancel-sheet {
+      width: 100%;
+      border: 1px solid #fecaca;
+      border-radius: 14px;
+      background: #fff7f7;
+      padding: 12px;
+      display: grid;
+      gap: 8px;
+    }
+    .ola-cancel-title {
+      font-size: 0.9rem;
+      font-weight: 800;
+      color: #991b1b;
+    }
+    .ola-cancel-sub {
+      font-size: 0.76rem;
+      color: #7f1d1d;
+    }
+    .ola-reason-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .ola-reason-chip {
+      border: 1px solid #fecaca;
+      background: #ffffff;
+      color: #7f1d1d;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 0.74rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all .15s ease;
+    }
+    .ola-reason-chip.active {
+      border-color: #dc2626;
+      background: #dc2626;
+      color: #fff;
+      box-shadow: 0 4px 10px rgba(220, 38, 38, 0.25);
+    }
+    .ola-other-input {
+      margin-bottom: 0;
+      border-color: #fca5a5;
+      color: #7f1d1d;
+    }
+    .ola-cancel-note {
+      font-size: 0.7rem;
+      color: #7f1d1d;
+    }
+    .ola-cancel-cta {
+      background: #dc2626;
+      color: #fff;
+      font-weight: 800;
+    }
+    .ola-cancel-cta:disabled {
+      opacity: .45;
+    }
+    .confirm-sticky-actions {
+      border-top: 1px solid #e5e7eb;
+      background: rgba(255, 255, 255, 0.96);
+      backdrop-filter: blur(8px);
+      padding: 10px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+      display: grid;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .sticky-primary-row {
+      display: grid;
+      grid-template-columns: 1.3fr 1fr;
+      gap: 8px;
+    }
+    .confirm-sticky-actions .confirm-btn,
+    .confirm-sticky-actions .outline-btn {
+      margin: 0 !important;
+    }
+    .confirm-sticky-actions .confirm-btn,
+    .confirm-sticky-actions .outline-btn,
+    .secondary-solid-btn,
+    .cancel-btn,
+    .ola-reason-chip {
+      transition: transform .12s ease, box-shadow .16s ease, filter .16s ease;
+    }
+    .confirm-sticky-actions .confirm-btn:hover,
+    .secondary-solid-btn:hover,
+    .cancel-btn:hover {
+      filter: brightness(1.03);
+      box-shadow: 0 8px 18px rgba(15, 23, 42, 0.16);
+    }
+    .confirm-sticky-actions .outline-btn:hover,
+    .ola-reason-chip:hover {
+      box-shadow: 0 6px 14px rgba(15, 23, 42, 0.08);
+    }
+    .confirm-sticky-actions .confirm-btn:active,
+    .confirm-sticky-actions .outline-btn:active,
+    .secondary-solid-btn:active,
+    .cancel-btn:active,
+    .ola-reason-chip:active {
+      transform: scale(0.98);
+    }
+    .secondary-solid-btn {
+      border: none;
+      border-radius: 30px;
+      padding: 12px;
+      background: #0f172a;
+      color: #fff;
+      font-size: 0.84rem;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .secondary-solid-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    @keyframes confirm-card-in {
+      0% {
+        opacity: 0;
+        transform: translateY(10px) scale(0.99);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+    @keyframes eta-shimmer {
+      100% {
+        transform: translateX(100%);
+      }
+    }
     .flex-1 { flex: 1; }
   `]
 })
@@ -730,6 +1073,9 @@ export class TravelComponent implements OnInit, OnDestroy {
   cancelReason = '';
   cancelReasonOther = '';
   assignedCaptainName = '';
+  assignedCaptainPhone = '';
+  assignedCaptainRating = 4.8;
+  assignedVehiclePlate = '';
   assignedCaptainKycStatus: CaptainKycStatus | '' = '';
   showOffersPanel = false;
   appliedTravelOfferCode = '';
@@ -1096,6 +1442,39 @@ export class TravelComponent implements OnInit, OnDestroy {
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
+  get etaProgressPercent(): number {
+    const eta = this.selectedVehicle?.etaMin ?? this.etaMinutes ?? 3;
+    const clamped = Math.max(1, Math.min(12, eta));
+    const progress = ((12 - clamped) / 11) * 100;
+    return Math.max(8, Math.min(100, Math.round(progress)));
+  }
+
+  get captainInitials(): string {
+    const source = (this.assignedCaptainName || 'Captain').trim();
+    const parts = source.split(/\s+/).filter(Boolean);
+    if (parts.length === 0) {
+      return 'CP';
+    }
+    if (parts.length === 1) {
+      return parts[0].slice(0, 2).toUpperCase();
+    }
+    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  }
+
+  callCaptain(): void {
+    if (!this.assignedCaptainPhone) {
+      this.notifications.push('Captain phone is not available yet.', 'warning');
+      return;
+    }
+    if (typeof window !== 'undefined') {
+      window.location.href = `tel:${this.assignedCaptainPhone}`;
+    }
+  }
+
+  chatCaptain(): void {
+    this.notifications.push('In-app captain chat will be available soon.', 'info');
+  }
+
   get canCancelRide(): boolean {
     if (!this.cancelReason) {
       return false;
@@ -1191,6 +1570,9 @@ export class TravelComponent implements OnInit, OnDestroy {
     this.cancelReason = '';
     this.cancelReasonOther = '';
     this.assignedCaptainName = '';
+    this.assignedCaptainPhone = '';
+    this.assignedCaptainRating = 4.8;
+    this.assignedVehiclePlate = '';
     this.assignedCaptainKycStatus = '';
     this.showOffersPanel = false;
     this.appliedTravelOfferCode = '';
@@ -1199,6 +1581,9 @@ export class TravelComponent implements OnInit, OnDestroy {
   private refreshAssignedCaptainState(): void {
     if (!this.currentBookingId) {
       this.assignedCaptainName = '';
+      this.assignedCaptainPhone = '';
+      this.assignedCaptainRating = 4.8;
+      this.assignedVehiclePlate = '';
       this.assignedCaptainKycStatus = '';
       return;
     }
@@ -1206,17 +1591,42 @@ export class TravelComponent implements OnInit, OnDestroy {
     const booking = this.bookingService.getAllBookingsSnapshot().find((item) => item.id === this.currentBookingId);
     if (!booking) {
       this.assignedCaptainName = '';
+      this.assignedCaptainPhone = '';
+      this.assignedCaptainRating = 4.8;
+      this.assignedVehiclePlate = '';
       this.assignedCaptainKycStatus = '';
       return;
     }
 
     this.assignedCaptainName = booking.driverName || '';
+    this.assignedCaptainPhone = booking.driverPhone || '';
+    this.assignedCaptainRating = this.computeCaptainRating(booking.captainId || booking.id);
+    this.assignedVehiclePlate = this.computeVehiclePlate(booking.id, booking.vehicleType);
     if (!booking.captainId) {
       this.assignedCaptainKycStatus = '';
       return;
     }
 
     this.assignedCaptainKycStatus = this.readCaptainKycStatus(booking.captainId);
+  }
+
+  private computeCaptainRating(seed: string): number {
+    let hash = 0;
+    for (let i = 0; i < seed.length; i += 1) {
+      hash = ((hash << 5) - hash + seed.charCodeAt(i)) | 0;
+    }
+    const normalized = Math.abs(hash % 5);
+    return 4.6 + normalized * 0.1;
+  }
+
+  private computeVehiclePlate(bookingId: string, vehicleType: string): string {
+    const prefix = vehicleType === 'bike' ? 'TS09 BK' : vehicleType === 'auto' ? 'TS09 AU' : 'TS09 CB';
+    let hash = 0;
+    for (let i = 0; i < bookingId.length; i += 1) {
+      hash = ((hash << 5) - hash + bookingId.charCodeAt(i)) | 0;
+    }
+    const number = 1000 + (Math.abs(hash) % 9000);
+    return `${prefix} ${number}`;
   }
 
   private readCaptainKycStatus(captainId: string): CaptainKycStatus {
