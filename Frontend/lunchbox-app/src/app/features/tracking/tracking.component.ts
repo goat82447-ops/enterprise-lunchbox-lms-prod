@@ -101,8 +101,11 @@ import { SafeResourceUrlPipe } from '../../shared/pipes/safe-resource-url.pipe';
         </div>
       </div>
 
-      <div *ngIf="!booking && !activityBookings.length" class="alert alert-info">
-        No booking selected. Go to <a routerLink="/booking">Booking</a>.
+      <div *ngIf="!booking && !activityBookings.length" class="empty-activity text-center py-5">
+        <img src="assets/no-rides.svg" alt="No rides yet" class="empty-activity-img mb-3" />
+        <h4 class="mb-2">You haven't started any ride yet</h4>
+        <p class="text-muted mb-3">Your live tracking and past ride history will show up here once you book a ride. Start now!</p>
+        <a routerLink="/booking" class="btn btn-danger">Start your first ride</a>
       </div>
 
       <div *ngIf="booking" class="row g-4">
@@ -365,6 +368,8 @@ import { SafeResourceUrlPipe } from '../../shared/pipes/safe-resource-url.pipe';
     </div>
   `,
   styles: [`
+    .empty-activity { padding: 2rem 1rem; }
+    .empty-activity-img { width: 180px; max-width: 70%; height: auto; opacity: 0.95; }
     .activity-stats {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
