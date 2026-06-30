@@ -1,8 +1,8 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { distinctUntilChanged, firstValueFrom } from 'rxjs';
-import { AuthService } from './auth.service';
-import { environment } from '../../../environments/environment';
+import { AuthService } from '../core/services/auth.service';
+import { environment } from '../../environments/environment';
 
 type PushSubscriptionPayload = {
   endpoint: string;
