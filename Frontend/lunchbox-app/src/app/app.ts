@@ -13,7 +13,7 @@ import { ChatbotComponent } from './shared/components/chatbot/chatbot.component'
 import { CaptainRideAlertComponent } from './shared/components/captain-ride-alert/captain-rides.alert.component';
 import { environment } from '../environments/environment';
 import { SupportService } from './core/services/support.service';
-import { PushNotificationService } from './core/services/push-notification.service';
+import { PushNotificationService } from './services/push-notification.service';
 
 @Component({
   selector: 'app-root',
