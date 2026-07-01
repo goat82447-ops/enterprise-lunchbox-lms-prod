@@ -12,6 +12,7 @@ export const environment = {
   gatewayApiBase: 'https://dotnetroutix-server.onrender.com',
   webSocketUrl: 'wss://dotnetroutix-server.onrender.com/ws',
   googleMapsApiKey: '',
+  pushVapidPublicKey: '',
   voiceBookingEnabled: true,
   liveTrackingEnabled: true,
   chatSupportEnabled: true,
