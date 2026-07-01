@@ -27,7 +27,7 @@ permissions:
 
 env:
   OLLAMA_MODEL: ${{ github.event.inputs.model || 'mistral' }}
-  NODE_VERSION: "18"
+  NODE_VERSION: "20"  # Updated from 18 to 20
 
 jobs:
   heal:
