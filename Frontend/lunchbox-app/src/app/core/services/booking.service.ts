@@ -1,12 +1,11 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { BehaviorSubject, Observable, catchError, distinctUntilChanged, fromEvent, interval, map, of, retry, switchMap, timer } from 'rxjs';
+import { BehaviorSubject, Observable, catchError, distinctUntilChanged, interval, map, of, retry, switchMap, timer } from 'rxjs';
 import { Booking, BookingRequest, BookingStatus } from '../models/delivery.models';
 import { NotificationService } from './notification.service';
 import { AuthService } from './auth.service';
 import { environment } from '../../../environments/environment';
 
-const STORAGE_KEY = 'delivery_bookings';
 const BOOKINGS_API = `${environment.parcelApiBase}/api/bookings`;
 const EVENTS_API = `${environment.parcelApiBase}/api/events`;
 const BROADCAST_CHANNEL_NAME = 'routex_bookings';
@@ -15,7 +14,7 @@ const BROADCAST_CHANNEL_NAME = 'routex_bookings';
 export class BookingService {
   private static readonly FOOD_CONFIRMATION_DELAY_MINUTES = 2;
   private static readonly CAPTAIN_ACCEPT_TIMEOUT_MINUTES = 20;
-  private readonly bookingsSubject = new BehaviorSubject<Booking[]>(this.loadBookings());
+  private readonly bookingsSubject = new BehaviorSubject<Booking[]>([]);
   readonly bookings$: Observable<Booking[]> = this.bookingsSubject.asObservable();
   private readonly notifiedBookingIds = new Set<string>();
   private readonly notifiedSseBookingIds = new Set<string>();
@@ -44,24 +43,12 @@ export class BookingService {
           this.upsertBooking(event.data.booking as Booking);
         }
         if (event.data?.type === 'BOOKINGS_UPDATED') {
-          const latest = this.loadBookings();
-          this.bookingsSubject.next(latest);
+          this.syncBookingsFromServer();
         }
       };
     }
 
     interval(6000).subscribe(() => this.tickBookings());
-
-    if (typeof window !== 'undefined') {
-      fromEvent<StorageEvent>(window, 'storage').subscribe((event) => {
-        if (event.key !== STORAGE_KEY) {
-          return;
-        }
-
-        const latest = this.loadBookings();
-        this.bookingsSubject.next(latest);
-      });
-    }
 
     this.auth.user$.pipe(
       distinctUntilChanged((prev, curr) => (prev?.id ?? null) === (curr?.id ?? null))
@@ -746,7 +733,6 @@ export class BookingService {
 
   private persist(bookings: Booking[], notify: boolean = true): void {
     this.bookingsSubject.next(bookings);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(bookings));
     // Notify other tabs (captain tab) instantly via BroadcastChannel
     this.broadcastChannel?.postMessage({ type: 'BOOKINGS_UPDATED' });
 
@@ -755,17 +741,4 @@ export class BookingService {
     }
   }
 
-  private loadBookings(): Booking[] {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return [];
-    }
-
-    try {
-      return JSON.parse(raw) as Booking[];
-    } catch {
-      localStorage.removeItem(STORAGE_KEY);
-      return [];
-    }
-  }
 }
