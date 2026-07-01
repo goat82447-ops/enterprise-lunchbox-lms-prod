@@ -49,7 +49,9 @@ jobs:
       
       # Step 3: Install dependencies
       - name: 📦 Install dependencies
-        run: npm ci
+        run: |
+          cd Frontend/lunchbox-app
+          npm ci
       
       # Step 4: Install Ollama
       - name: 🤖 Install Ollama (LOCAL AI - NO API KEYS NEEDED!)
@@ -112,6 +114,7 @@ jobs:
       - name: 🔍 Capture build errors
         id: build
         run: |
+          cd Frontend/lunchbox-app
           echo "Running build to capture errors..."
           npm run build 2>&1 | tee build-output.txt || true
           
@@ -122,6 +125,7 @@ jobs:
       - name: 🏥 Run Putter Healing Agent
         id: putter
         run: |
+          cd Frontend/lunchbox-app
           echo "=========================================="
           echo "  🏥 PUTTER - Automated Healing Agent"
           echo "=========================================="
@@ -133,7 +137,7 @@ jobs:
           echo ""
           
           # Run putter in auto mode (no prompts)
-          node putter.js --auto || true
+          node ../../putter.js --auto || true
           
           echo ""
           echo "✅ Putter completed"
@@ -142,6 +146,7 @@ jobs:
       - name: ✅ Verify fixes
         continue-on-error: true
         run: |
+          cd Frontend/lunchbox-app
           echo "Verifying fixes..."
           npm run build 2>&1 || {
             echo "⚠️  Build still has issues, but PR will be created for review"
