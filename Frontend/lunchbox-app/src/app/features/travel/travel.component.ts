@@ -8,6 +8,7 @@ import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { AuthService } from '../../core/services/auth.service';
 import { BookingService } from '../../core/services/booking.service';
 import { NotificationService } from '../../core/services/notification.service';
+import { UserPreferencesService } from '../../core/services/user-preferences.service';
 
 interface PlaceSuggestion {
   display_name: string;
@@ -1040,8 +1041,6 @@ const CAPTAIN_KYC_STORAGE_KEY = 'delivery_captain_kyc_state';
   `]
 })
 export class TravelComponent implements OnInit, OnDestroy {
-  private static readonly RECENT_STOPS_KEY = 'travel_recent_stops';
-
   step = 1;
   locating = false;
 
@@ -1112,7 +1111,8 @@ export class TravelComponent implements OnInit, OnDestroy {
     private router: Router,
     private auth: AuthService,
     private bookingService: BookingService,
-    private notifications: NotificationService
+    private notifications: NotificationService,
+    private userPreferences: UserPreferencesService
   ) {}
 
   ngOnInit(): void {
@@ -1331,27 +1331,21 @@ export class TravelComponent implements OnInit, OnDestroy {
   }
 
   private loadRecentStops(): void {
-    try {
-      const raw = localStorage.getItem(TravelComponent.RECENT_STOPS_KEY);
-      if (!raw) {
-        this.recentStops = [];
-        return;
-      }
-
-      const parsed = JSON.parse(raw) as StopPoint[];
-      this.recentStops = Array.isArray(parsed) ? parsed.slice(0, 6) : [];
-    } catch {
-      this.recentStops = [];
-    }
+    this.userPreferences.getTravelRecentStops()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (stops) => {
+          this.recentStops = Array.isArray(stops) ? stops.slice(0, 6) : [];
+        },
+        error: () => {
+          this.recentStops = [];
+        }
+      });
   }
 
   private storeRecentStop(stop: StopPoint): void {
     this.recentStops = [stop, ...this.recentStops.filter(s => s.address !== stop.address)].slice(0, 6);
-    try {
-      localStorage.setItem(TravelComponent.RECENT_STOPS_KEY, JSON.stringify(this.recentStops));
-    } catch {
-      // Ignore storage failures.
-    }
+    this.userPreferences.saveTravelRecentStops(this.recentStops).subscribe({ error: () => void 0 });
   }
 
   private computeDistance(): void {
