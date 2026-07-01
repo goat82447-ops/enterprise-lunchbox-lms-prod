@@ -13,6 +13,7 @@ import { ChatbotComponent } from './shared/components/chatbot/chatbot.component'
 import { CaptainRideAlertComponent } from './shared/components/captain-ride-alert/captain-rides.alert.component';
 import { environment } from '../environments/environment';
 import { SupportService } from './core/services/support.service';
+import { PushNotificationService } from './core/services/push-notification.service';
 
 @Component({
   selector: 'app-root',
@@ -615,6 +616,7 @@ export class AppComponent {
   private router = inject(Router);
   private themeService = inject(ThemeService);
   private supportService = inject(SupportService);
+  private pushNotificationService = inject(PushNotificationService);
 
   isNavOpen = false;
   showNotificationCenter = false;
@@ -641,6 +643,7 @@ export class AppComponent {
   readonly feedbackStars = [1, 2, 3, 4, 5];
 
   constructor() {
+    this.pushNotificationService.initialize();
     this.routeHistory = [this.normalizeRoute(this.router.url || '/')];
 
     this.router.events
