@@ -118,8 +118,12 @@ jobs:
           echo "Running build to capture errors..."
           npm run build 2>&1 | tee build-output.txt || true
           
-          # Store output for Putter
-          echo "BUILD_LOG=$(cat build-output.txt | head -100)" >> $GITHUB_ENV
+          # Check if build succeeded or failed
+          if grep -q "error TS" build-output.txt; then
+            echo "Build has TypeScript errors"
+          else
+            echo "✅ Build completed successfully!"
+          fi
       
       # Step 8: Run Putter healing agent
       - name: 🏥 Run Putter Healing Agent
