@@ -7,6 +7,7 @@ export const environment = {
   webSocketUrl: 'ws://localhost:3000/ws',
   googleMapsApiKey: 'AIzaSyDemoKeyForDevelopment',
   voiceBookingEnabled: true,
+  pushVapidPublicKey: '',
   liveTrackingEnabled: true,
   chatSupportEnabled: true,
   pollingIntervalMs: 2000,
