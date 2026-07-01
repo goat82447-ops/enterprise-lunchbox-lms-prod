@@ -119,8 +119,8 @@ class Putter {
       }
 
       return true;
-    } catch (error) {
-      error(`Build detection failed: ${error.message}`);
+    } catch (err) {
+      error(`Build detection failed: ${err.message}`);
       return false;
     }
   }
@@ -194,8 +194,8 @@ Return ONLY valid JSON, no markdown formatting.`;
       info(`Summary: ${this.fixes.summary}`);
 
       return true;
-    } catch (error) {
-      error(`Error calling Ollama: ${error.message}`);
+    } catch (err) {
+      error(`Error calling Ollama: ${err.message}`);
       error('Make sure Ollama is running: ollama serve');
       return false;
     }
@@ -255,8 +255,8 @@ Return ONLY valid JSON, no markdown formatting.`;
 
         fs.writeFileSync(filePath, file.fix, 'utf8');
         success(`Applied: ${file.path}`);
-      } catch (error) {
-        error(`Failed to apply fix to ${file.path}: ${error.message}`);
+      } catch (err) {
+        error(`Failed to apply fix to ${file.path}: ${err.message}`);
       }
     }
   }
@@ -312,8 +312,8 @@ Return ONLY valid JSON, no markdown formatting.`;
 
       success('Changes committed!');
       return true;
-    } catch (error) {
-      error(`Commit failed: ${error.message}`);
+    } catch (err) {
+      error(`Commit failed: ${err.message}`);
       return false;
     }
   }
@@ -334,8 +334,8 @@ Return ONLY valid JSON, no markdown formatting.`;
       await execAsync(`git push origin ${this.branchName}`);
       success('Pushed to GitHub!');
       return true;
-    } catch (error) {
-      error(`Push failed: ${error.message}`);
+    } catch (err) {
+      error(`Push failed: ${err.message}`);
       warning('You may need to set up GitHub credentials');
       return false;
     }
@@ -434,11 +434,19 @@ ${this.fixes.files.map((f) => `- \`${f.path}\`\n  - ${f.originalError}`).join('\
 
       header('✨ PUTTER Complete!');
       success('Healing workflow finished successfully');
-    } catch (error) {
-      error(`Pipeline failed: ${error.message}`);
+    } catch (err) {
+      error(`Pipeline failed: ${err.message}`);
       process.exit(1);
     }
   }
+}
+
+/**
+ * Helper: Get argument value
+ */
+function getArgValue(args, flag) {
+  const index = args.indexOf(flag);
+  return index !== -1 && args[index + 1] ? args[index + 1] : null;
 }
 
 /**
@@ -446,9 +454,18 @@ ${this.fixes.files.map((f) => `- \`${f.path}\`\n  - ${f.originalError}`).join('\
  */
 async function main() {
   const args = process.argv.slice(2);
+  
+  // ============================================
+  // CHANGE THIS: Add/modify issue parameters
+  // ============================================
   const options = {
     auto: args.includes('--auto'),
     dryRun: args.includes('--dry-run'),
+    // Issue parameters
+    issueNumber: getArgValue(args, '--issue'),
+    issueTitle: getArgValue(args, '--title'),
+    issueBody: getArgValue(args, '--body'),
+    model: getArgValue(args, '--model') || 'codellama',
   };
 
   // Show requirements
@@ -462,6 +479,16 @@ async function main() {
 ║  - Local LLM (Ollama)                               ║
 ╚══════════════════════════════════════════════════════╝
 `);
+  
+  // Show issue info if provided
+  if (options.issueNumber) {
+    console.log(`
+🔍 Issue Details:
+   Issue #: ${options.issueNumber}
+   Title: ${options.issueTitle}
+   Model: ${options.model}
+`);
+  }
 
   // Check requirements
   try {
@@ -478,7 +505,7 @@ async function main() {
     // Check npm
     execSync('npm --version', { stdio: 'ignore' });
     success('✅ npm is installed');
-  } catch (error) {
+  } catch (err) {
     error('❌ Prerequisites not met:');
     console.log(`
 1. Install Ollama: https://ollama.ai
@@ -494,8 +521,8 @@ async function main() {
 }
 
 // Run
-main().catch((error) => {
-  error(`Fatal error: ${error.message}`);
+main().catch((err) => {
+  error(`Fatal error: ${err.message}`);
   process.exit(1);
 });
 
