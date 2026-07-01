@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
+import { UserPreferencesService, UserSettingsPreferences } from '../../core/services/user-preferences.service';
 
 type PaymentPreference = 'upi' | 'card' | 'wallet' | 'cash' | 'auto';
 
@@ -466,7 +467,11 @@ export class SettingsComponent implements OnInit {
     tripRecording: false
   };
 
-  constructor(public router: Router, private auth: AuthService) {}
+  constructor(
+    public router: Router,
+    private auth: AuthService,
+    private userPreferences: UserPreferencesService
+  ) {}
 
   ngOnInit(): void {
     const user = this.auth.getCurrentUser();
@@ -474,30 +479,8 @@ export class SettingsComponent implements OnInit {
     this.profile.email = user?.email || '';
     this.profile.mobile = user?.mobile || '';
     this.avatarPreview = user?.profileImageUrl || '/assets/rider-dummy.svg';
-
-    this.addresses = this.readArray<AddressItem>('rx_multi_addresses');
-    this.emergencyContacts = this.readArray<ContactItem>('rx_emergency_contacts');
-    this.trustedContacts = this.readArray<ContactItem>('rx_trusted_contacts');
-
     this.selectedLanguage = localStorage.getItem('rx_language') || 'English';
-    this.paymentPreference = (localStorage.getItem('rx_payment_preference') as PaymentPreference) || 'upi';
-    this.autoPaymentEnabled = localStorage.getItem('rx_auto_payment') === 'true';
-
-    this.notificationPrefs = {
-      sms: localStorage.getItem('rx_notif_sms') !== 'false',
-      email: localStorage.getItem('rx_notif_email') !== 'false',
-      push: localStorage.getItem('rx_notif_push') !== 'false',
-      rideUpdates: localStorage.getItem('rx_notif_ride_updates') !== 'false',
-      paymentAlerts: localStorage.getItem('rx_notif_payment_alerts') !== 'false'
-    };
-
-    this.safetyPrefs = {
-      sosEnabled: localStorage.getItem('rx_safety_sos') !== 'false',
-      shareLiveLocation: localStorage.getItem('rx_safety_live_location') !== 'false',
-      emergencyCalling: localStorage.getItem('rx_safety_emergency_call') !== 'false',
-      driverVerification: localStorage.getItem('rx_safety_driver_verify') !== 'false',
-      tripRecording: localStorage.getItem('rx_safety_trip_recording') === 'true'
-    };
+    this.loadPreferencesFromServer();
   }
 
   onAvatarSelected(event: Event): void {
@@ -588,27 +571,12 @@ export class SettingsComponent implements OnInit {
   }
 
   saveAll(): void {
-    localStorage.setItem('rx_multi_addresses', JSON.stringify(this.addresses));
-    localStorage.setItem('rx_emergency_contacts', JSON.stringify(this.emergencyContacts));
-    localStorage.setItem('rx_trusted_contacts', JSON.stringify(this.trustedContacts));
-
+    // Keep language local as an intentional client-side preference.
     localStorage.setItem('rx_language', this.selectedLanguage);
-    localStorage.setItem('rx_payment_preference', this.paymentPreference);
-    localStorage.setItem('rx_auto_payment', String(this.autoPaymentEnabled));
-
-    localStorage.setItem('rx_notif_sms', String(this.notificationPrefs.sms));
-    localStorage.setItem('rx_notif_email', String(this.notificationPrefs.email));
-    localStorage.setItem('rx_notif_push', String(this.notificationPrefs.push));
-    localStorage.setItem('rx_notif_ride_updates', String(this.notificationPrefs.rideUpdates));
-    localStorage.setItem('rx_notif_payment_alerts', String(this.notificationPrefs.paymentAlerts));
-
-    localStorage.setItem('rx_safety_sos', String(this.safetyPrefs.sosEnabled));
-    localStorage.setItem('rx_safety_live_location', String(this.safetyPrefs.shareLiveLocation));
-    localStorage.setItem('rx_safety_emergency_call', String(this.safetyPrefs.emergencyCalling));
-    localStorage.setItem('rx_safety_driver_verify', String(this.safetyPrefs.driverVerification));
-    localStorage.setItem('rx_safety_trip_recording', String(this.safetyPrefs.tripRecording));
-
-    this.showToast('Preferences saved');
+    this.userPreferences.saveSettingsPreferences(this.toPreferencesPayload()).subscribe({
+      next: () => this.showToast('Preferences saved'),
+      error: () => this.showToast('Unable to save preferences right now')
+    });
   }
 
   confirmDeleteAccount(): void {
@@ -616,7 +584,7 @@ export class SettingsComponent implements OnInit {
     this.deleteError = '';
     this.auth.deleteAccount().subscribe({
       next: () => {
-        localStorage.clear();
+        localStorage.removeItem('rx_language');
         this.auth.logout();
         this.router.navigate(['/login']);
       },
@@ -627,13 +595,54 @@ export class SettingsComponent implements OnInit {
     });
   }
 
-  private readArray<T>(key: string): T[] {
-    try {
-      const raw = localStorage.getItem(key);
-      return raw ? (JSON.parse(raw) as T[]) : [];
-    } catch {
-      return [];
-    }
+  private loadPreferencesFromServer(): void {
+    this.userPreferences.getSettingsPreferences().subscribe({
+      next: (prefs) => {
+        if (!prefs) {
+          return;
+        }
+
+        this.addresses = Array.isArray(prefs.addresses) ? prefs.addresses : [];
+        this.emergencyContacts = Array.isArray(prefs.emergencyContacts) ? prefs.emergencyContacts : [];
+        this.trustedContacts = Array.isArray(prefs.trustedContacts) ? prefs.trustedContacts : [];
+        this.paymentPreference = prefs.paymentPreference || 'upi';
+        this.autoPaymentEnabled = !!prefs.autoPaymentEnabled;
+        this.notificationPrefs = {
+          sms: prefs.notificationPrefs?.sms ?? true,
+          email: prefs.notificationPrefs?.email ?? true,
+          push: prefs.notificationPrefs?.push ?? true,
+          rideUpdates: prefs.notificationPrefs?.rideUpdates ?? true,
+          paymentAlerts: prefs.notificationPrefs?.paymentAlerts ?? true
+        };
+        this.safetyPrefs = {
+          sosEnabled: prefs.safetyPrefs?.sosEnabled ?? true,
+          shareLiveLocation: prefs.safetyPrefs?.shareLiveLocation ?? true,
+          emergencyCalling: prefs.safetyPrefs?.emergencyCalling ?? true,
+          driverVerification: prefs.safetyPrefs?.driverVerification ?? true,
+          tripRecording: prefs.safetyPrefs?.tripRecording ?? false
+        };
+
+        // Local language is source of truth if already chosen on this device.
+        if (!localStorage.getItem('rx_language') && prefs.selectedLanguage) {
+          this.selectedLanguage = prefs.selectedLanguage;
+          localStorage.setItem('rx_language', this.selectedLanguage);
+        }
+      },
+      error: () => void 0
+    });
+  }
+
+  private toPreferencesPayload(): UserSettingsPreferences {
+    return {
+      selectedLanguage: this.selectedLanguage,
+      paymentPreference: this.paymentPreference,
+      autoPaymentEnabled: this.autoPaymentEnabled,
+      addresses: this.addresses,
+      emergencyContacts: this.emergencyContacts,
+      trustedContacts: this.trustedContacts,
+      notificationPrefs: this.notificationPrefs,
+      safetyPrefs: this.safetyPrefs
+    };
   }
 
   private makeId(): string {
