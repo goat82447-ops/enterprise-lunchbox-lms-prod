@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { UserPreferencesService, UserSettingsPreferences } from '../../core/services/user-preferences.service';
-import { PushNotificationService } from '../../core/services/push-notification.service';
+import { PushNotificationService, PushStatsResponse } from '../../core/services/push-notification.service';
 
 type PaymentPreference = 'upi' | 'card' | 'wallet' | 'cash' | 'auto';
 
@@ -141,12 +141,39 @@ interface ContactItem {
 
       <section class="card">
         <h3>Notifications</h3>
+        <div class="radio-group">
+          <label><input type="radio" name="notificationMode" value="all" [(ngModel)]="notificationPrefs.mode" (ngModelChange)="onNotificationModeChanged($event)" /> All</label>
+          <label><input type="radio" name="notificationMode" value="trip-only" [(ngModel)]="notificationPrefs.mode" (ngModelChange)="onNotificationModeChanged($event)" /> Trip Updates Only</label>
+          <label><input type="radio" name="notificationMode" value="critical-only" [(ngModel)]="notificationPrefs.mode" (ngModelChange)="onNotificationModeChanged($event)" /> Critical Alerts Only</label>
+          <label><input type="radio" name="notificationMode" value="off" [(ngModel)]="notificationPrefs.mode" (ngModelChange)="onNotificationModeChanged($event)" /> Off</label>
+        </div>
         <div class="toggle-grid">
           <label class="toggle-row"><span>SMS Notifications</span><input type="checkbox" [(ngModel)]="notificationPrefs.sms" (ngModelChange)="saveAll()" /></label>
           <label class="toggle-row"><span>Email Notifications</span><input type="checkbox" [(ngModel)]="notificationPrefs.email" (ngModelChange)="saveAll()" /></label>
           <label class="toggle-row"><span>Push Notifications</span><input type="checkbox" [(ngModel)]="notificationPrefs.push" (ngModelChange)="onPushPreferenceChanged($event)" /></label>
-          <label class="toggle-row"><span>Ride Updates</span><input type="checkbox" [(ngModel)]="notificationPrefs.rideUpdates" (ngModelChange)="saveAll()" /></label>
-          <label class="toggle-row"><span>Payment Alerts</span><input type="checkbox" [(ngModel)]="notificationPrefs.paymentAlerts" (ngModelChange)="saveAll()" /></label>
+          <label class="toggle-row"><span>Ride Updates</span><input type="checkbox" [(ngModel)]="notificationPrefs.rideUpdates" (ngModelChange)="onNotificationChannelChanged()" /></label>
+          <label class="toggle-row"><span>Payment Alerts</span><input type="checkbox" [(ngModel)]="notificationPrefs.paymentAlerts" (ngModelChange)="onNotificationChannelChanged()" /></label>
+        </div>
+        <button class="btn btn-light" type="button" (click)="sendTestPush()" [disabled]="isSendingTestPush || !notificationPrefs.push || notificationPrefs.mode === 'off'">
+          {{ isSendingTestPush ? 'Sending Test...' : 'Send Test Push' }}
+        </button>
+        <div class="radio-group test-target-group">
+          <label><input type="radio" name="testPushTarget" value="self" [(ngModel)]="testPushTarget" /> Test My Device</label>
+          <label><input type="radio" name="testPushTarget" value="captain" [(ngModel)]="testPushTarget" /> Test Captain Target</label>
+          <label><input type="radio" name="testPushTarget" value="rider" [(ngModel)]="testPushTarget" /> Test Rider Target</label>
+        </div>
+        <button class="btn btn-light" type="button" (click)="refreshPushStats()" [disabled]="isRefreshingPushStats">
+          {{ isRefreshingPushStats ? 'Refreshing Stats...' : 'Refresh Push Stats' }}
+        </button>
+        <div class="stats-box" *ngIf="pushStats">
+          <div><strong>Push Configured:</strong> {{ pushStats.pushConfigured ? 'Yes' : 'No' }}</div>
+          <div><strong>Total Subscriptions:</strong> {{ pushStats.totals.all }}</div>
+          <div><strong>Active:</strong> {{ pushStats.totals.active }} | <strong>Inactive:</strong> {{ pushStats.totals.inactive }}</div>
+          <div><strong>Current User Active:</strong> {{ pushStats.currentUser.active }} / {{ pushStats.currentUser.all }}</div>
+          <div class="stats-role-line">
+            <strong>Active by Role:</strong>
+            <span *ngFor="let item of pushStatsRoleEntries">{{ item.key }}={{ item.value }} </span>
+          </div>
         </div>
       </section>
 
@@ -352,6 +379,43 @@ interface ContactItem {
         gap: 6px;
       }
 
+      .radio-group {
+        display: grid;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+
+      .radio-group label {
+        border: 1px solid #e7ebef;
+        border-radius: 10px;
+        padding: 8px 10px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+      }
+
+      .test-target-group {
+        margin-top: 10px;
+      }
+
+      .stats-box {
+        margin-top: 10px;
+        border: 1px solid #e7ebef;
+        border-radius: 10px;
+        padding: 10px;
+        font-size: 12px;
+        background: #f8fafc;
+        display: grid;
+        gap: 4px;
+      }
+
+      .stats-role-line {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+
       .toggle-row {
         border: 1px solid #e7ebef;
         border-radius: 10px;
@@ -436,6 +500,11 @@ export class SettingsComponent implements OnInit {
   deletingAccount = false;
   deleteError = '';
   toastMsg = '';
+  isSendingTestPush = false;
+  isRefreshingPushStats = false;
+  testPushTarget: 'self' | 'captain' | 'rider' = 'self';
+  pushStats: PushStatsResponse | null = null;
+  pushStatsRoleEntries: Array<{ key: string; value: number }> = [];
 
   addresses: AddressItem[] = [];
   emergencyContacts: ContactItem[] = [];
@@ -457,7 +526,8 @@ export class SettingsComponent implements OnInit {
     email: true,
     push: true,
     rideUpdates: true,
-    paymentAlerts: true
+    paymentAlerts: true,
+    mode: 'all' as 'all' | 'trip-only' | 'critical-only' | 'off'
   };
 
   safetyPrefs = {
@@ -483,6 +553,8 @@ export class SettingsComponent implements OnInit {
     this.avatarPreview = user?.profileImageUrl || '/assets/rider-dummy.svg';
     this.selectedLanguage = localStorage.getItem('rx_language') || 'English';
     this.loadPreferencesFromServer();
+    this.pushNotifications.updatePreferenceSnapshot(this.notificationPrefs);
+    void this.refreshPushStats();
   }
 
   onAvatarSelected(event: Event): void {
@@ -575,6 +647,7 @@ export class SettingsComponent implements OnInit {
   saveAll(): void {
     // Keep language local as an intentional client-side preference.
     localStorage.setItem('rx_language', this.selectedLanguage);
+    this.pushNotifications.updatePreferenceSnapshot(this.notificationPrefs);
     this.userPreferences.saveSettingsPreferences(this.toPreferencesPayload()).subscribe({
       next: () => this.showToast('Preferences saved'),
       error: () => this.showToast('Unable to save preferences right now')
@@ -583,12 +656,66 @@ export class SettingsComponent implements OnInit {
 
   onPushPreferenceChanged(enabled: boolean): void {
     this.notificationPrefs.push = !!enabled;
+    this.pushNotifications.updatePreferenceSnapshot(this.notificationPrefs);
     if (this.notificationPrefs.push) {
       this.pushNotifications.enableFromUserGesture();
     } else {
       this.pushNotifications.disablePush();
     }
     this.saveAll();
+  }
+
+  onNotificationModeChanged(mode: 'all' | 'trip-only' | 'critical-only' | 'off'): void {
+    this.notificationPrefs.mode = mode;
+    this.pushNotifications.updatePreferenceSnapshot(this.notificationPrefs);
+    if (mode === 'off') {
+      this.notificationPrefs.push = false;
+      this.pushNotifications.disablePush();
+    } else if (!this.notificationPrefs.push) {
+      this.notificationPrefs.push = true;
+      this.pushNotifications.enableFromUserGesture();
+    } else {
+      this.pushNotifications.syncCurrentSubscription();
+    }
+    this.saveAll();
+  }
+
+  onNotificationChannelChanged(): void {
+    this.pushNotifications.updatePreferenceSnapshot(this.notificationPrefs);
+    this.pushNotifications.syncCurrentSubscription();
+    this.saveAll();
+  }
+
+  async sendTestPush(): Promise<void> {
+    if (this.isSendingTestPush) {
+      return;
+    }
+    this.isSendingTestPush = true;
+    this.pushNotifications.updatePreferenceSnapshot(this.notificationPrefs);
+    try {
+      const result = await this.pushNotifications.sendTestNotificationFromSettings(this.testPushTarget);
+      this.showToast(result.message);
+    } finally {
+      this.isSendingTestPush = false;
+    }
+  }
+
+  async refreshPushStats(): Promise<void> {
+    if (this.isRefreshingPushStats) {
+      return;
+    }
+    this.isRefreshingPushStats = true;
+    try {
+      this.pushStats = await this.pushNotifications.getPushStats();
+      this.pushStatsRoleEntries = Object.entries(this.pushStats.activeByRole || {}).map(([key, value]) => ({
+        key,
+        value: Number(value || 0)
+      }));
+    } catch {
+      this.showToast('Unable to load push stats right now');
+    } finally {
+      this.isRefreshingPushStats = false;
+    }
   }
 
   confirmDeleteAccount(): void {
@@ -624,8 +751,10 @@ export class SettingsComponent implements OnInit {
           email: prefs.notificationPrefs?.email ?? true,
           push: prefs.notificationPrefs?.push ?? true,
           rideUpdates: prefs.notificationPrefs?.rideUpdates ?? true,
-          paymentAlerts: prefs.notificationPrefs?.paymentAlerts ?? true
+          paymentAlerts: prefs.notificationPrefs?.paymentAlerts ?? true,
+          mode: prefs.notificationPrefs?.mode ?? 'all'
         };
+        this.pushNotifications.updatePreferenceSnapshot(this.notificationPrefs);
         this.safetyPrefs = {
           sosEnabled: prefs.safetyPrefs?.sosEnabled ?? true,
           shareLiveLocation: prefs.safetyPrefs?.shareLiveLocation ?? true,
