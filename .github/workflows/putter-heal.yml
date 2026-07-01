@@ -1,11 +1,13 @@
 name: 🏥 Putter Healing Agent - FREE & UNLIMITED (No API Keys!)
 
 on:
+  # Trigger on Build/CI failure (automatic)
   workflow_run:
-    workflows: ["Build", "CI"]
+    workflows: ["build"]  # Match your actual build workflow name
     types: [completed]
     branches: [main, develop]
-  # Optional: Allow manual trigger with model selection
+  
+  # Manual trigger (always runnable)
   workflow_dispatch:
     inputs:
       model:
@@ -30,8 +32,6 @@ env:
 jobs:
   heal:
     runs-on: ubuntu-latest
-    # Only run if previous workflow failed
-    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
     
     steps:
       # Step 1: Checkout code
