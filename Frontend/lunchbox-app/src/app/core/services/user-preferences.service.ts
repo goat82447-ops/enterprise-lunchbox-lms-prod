@@ -17,6 +17,7 @@ export interface UserSettingsPreferences {
     push: boolean;
     rideUpdates: boolean;
     paymentAlerts: boolean;
+    mode: 'all' | 'trip-only' | 'critical-only' | 'off';
   };
   safetyPrefs: {
     sosEnabled: boolean;
