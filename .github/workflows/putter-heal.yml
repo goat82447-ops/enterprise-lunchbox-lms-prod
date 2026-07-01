@@ -1,300 +1,50 @@
-name: 🏥 Putter Healing Agent - FREE & UNLIMITED (No API Keys!)
+name: 🏥 Auto-Heal Build Errors
 
 on:
-  # Trigger on Build/CI failure (automatic)
-  workflow_run:
-    workflows: ["build"]  # Match your actual build workflow name
-    types: [completed]
+  push:
     branches: [main, develop]
-  
-  # Manual trigger (always runnable)
-  workflow_dispatch:
-    inputs:
-      model:
-        description: 'AI Model (mistral, codellama, llama2)'
-        required: false
-        default: 'mistral'
-        type: choice
-        options:
-          - mistral
-          - codellama
-          - llama2
-
-permissions:
-  contents: write
-  pull-requests: write
-  checks: read
-
-env:
-  OLLAMA_MODEL: ${{ github.event.inputs.model || 'mistral' }}
-  NODE_VERSION: "20"  # Updated from 18 to 20
 
 jobs:
   heal:
     runs-on: ubuntu-latest
-    
     steps:
-      # Step 1: Checkout code
-      - name: 📥 Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          fetch-depth: 0
+          node-version: "20"
       
-      # Step 2: Setup Node.js
-      - name: 🔧 Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-      
-      # Step 3: Install dependencies
-      - name: 📦 Install dependencies
-        run: |
-          cd Frontend/lunchbox-app
-          npm ci
-      
-      # Step 4: Install Ollama
-      - name: 🤖 Install Ollama (LOCAL AI - NO API KEYS NEEDED!)
-        run: |
-          echo "========================================="
-          echo "  🏥 PUTTER Healing Agent"
-          echo "========================================="
-          echo ""
-          echo "⚡ IMPORTANT:"
-          echo "  ✅ NO API keys required"
-          echo "  ✅ NO external service calls"
-          echo "  ✅ COMPLETELY FREE"
-          echo "  ✅ UNLIMITED tokens"
-          echo "  ✅ Runs 100% LOCAL on GitHub runner"
-          echo ""
-          echo "Installing Ollama (LOCAL AI)..."
-          curl -fsSL https://ollama.ai/install.sh | sh
-          echo "✅ Ollama installed"
-      
-      # Step 5: Start Ollama service
-      - name: 🚀 Start Ollama service
-        run: |
-          # Start Ollama in background
-          ollama serve > /tmp/ollama.log 2>&1 &
-          OLLAMA_PID=$!
-          echo "Ollama PID: $OLLAMA_PID"
-          
-          # Wait for Ollama to start
-          echo "Waiting for Ollama to be ready..."
-          for i in {1..30}; do
-            if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
-              echo "✅ Ollama is ready!"
-              break
-            fi
-            echo "⏳ Attempt $i/30..."
-            sleep 2
-          done
-          
-          # Check if Ollama is running
-          if ! curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
-            echo "❌ Ollama failed to start"
-            cat /tmp/ollama.log
-            exit 1
-          fi
-      
-      # Step 6: Pull FREE AI model
-      - name: 🧠 Pull FREE AI model (${{ env.OLLAMA_MODEL }})
-        run: |
-          echo "Pulling model: ${{ env.OLLAMA_MODEL }}"
-          echo "This is FREE and takes 1-3 minutes (first time only)..."
-          
-          ollama pull ${{ env.OLLAMA_MODEL }}
-          
-          echo "✅ Model pulled successfully"
-          echo ""
-          echo "Model info:"
-          ollama list
-      
-      # Step 7: Run tests/build to capture errors
-      - name: 🔍 Capture build errors
-        id: build
-        run: |
-          cd Frontend/lunchbox-app
-          echo "Running build to capture errors..."
-          npm run build 2>&1 | tee build-output.txt || true
-          
-          # Check if build succeeded or failed
-          if grep -q "error TS" build-output.txt; then
-            echo "Build has TypeScript errors"
-          else
-            echo "✅ Build completed successfully!"
-          fi
-      
-      # Step 8: Run Putter healing agent
-      - name: 🏥 Run Putter Healing Agent
-        id: putter
-        run: |
-          cd Frontend/lunchbox-app
-          echo "=========================================="
-          echo "  🏥 PUTTER - Automated Healing Agent"
-          echo "=========================================="
-          echo ""
-          echo "Settings:"
-          echo "  Model: ${{ env.OLLAMA_MODEL }} (FREE)"
-          echo "  Cost: $0"
-          echo "  Tokens: UNLIMITED ✅"
-          echo ""
-          
-          # Run putter in auto mode (no prompts)
-          node ../../putter.js --auto || true
-          
-          echo ""
-          echo "✅ Putter completed"
-      
-      # Step 9: Verify fixes
-      - name: ✅ Verify fixes
+      - name: 📦 Install & Build
         continue-on-error: true
         run: |
           cd Frontend/lunchbox-app
-          echo "Verifying fixes..."
-          npm run build 2>&1 || {
-            echo "⚠️  Build still has issues, but PR will be created for review"
-          }
+          npm ci
+          npm run build 2>&1 | tee build.log
       
-      # Step 10: Setup Git credentials for PR
-      - name: 🔐 Setup Git credentials
+      - name: 🤖 Run Putter if errors
+        if: contains(fromJson('["error"]'), 'error')
         run: |
-          git config --local user.email "putter-healing@github.com"
-          git config --local user.name "Putter Healing Agent"
+          curl -fsSL https://ollama.ai/install.sh | sh
+          ollama serve &
+          sleep 5
+          ollama pull codellama
+          cd Frontend/lunchbox-app
+          node ../../putter.js --auto || true
       
-      # Step 11: Create Pull Request (if not already created by putter)
-      - name: 📝 Create/Update Pull Request
+      - name: 📝 Create PR
+        if: always()
         uses: actions/github-script@v7
         with:
           script: |
-            const fs = require('fs');
             const { execSync } = require('child_process');
-            
-            try {
-              // Get current branch
-              const branchName = execSync('git rev-parse --abbrev-ref HEAD').toString().trim();
-              
-              // Check if branch is a putter branch
-              if (!branchName.includes('healing-putter')) {
-                console.log('No putter branch found, skipping PR creation');
-                return;
-              }
-              
-              console.log('Creating PR for branch: ' + branchName);
-              
-              // Get commit info
-              const commitMsg = execSync('git log -1 --pretty=%B').toString();
-              
-              const prBody = '## 🏥 Automated Healing with Putter\n\n' +
-                '**Status:** ✅ Auto-fixes generated\n\n' +
-                '### ⚡ Automation Details\n' +
-                '- **AI Model:** ' + process.env.OLLAMA_MODEL + ' (FREE)\n' +
-                '- **Cost:** $0 ✅\n' +
-                '- **Tokens:** UNLIMITED ✅\n' +
-                '- **Runtime:** Local (Ollama)\n\n' +
-                '### 📊 What was fixed\n' +
-                commitMsg + '\n\n' +
-                '### 🔍 Review Checklist\n' +
-                '- [ ] Changes look correct\n' +
-                '- [ ] Build passes locally\n' +
-                '- [ ] No unintended side effects\n' +
-                '- [ ] Ready to merge\n\n' +
-                '### 💡 How to test\n' +
-                '```bash\n' +
-                'git checkout ' + branchName + '\n' +
-                'npm run build\n' +
-                'npm test\n' +
-                '```\n\n' +
-                '---\n' +
-                '*Generated by Putter.js - Free Automated Healing Agent*\n' +
-                '*No API costs • Unlimited tokens • Completely local*';
-              
-              // Check if PR already exists
-              const prs = await github.rest.pulls.list({
+            const changedFiles = execSync('git diff --name-only || true').toString();
+            if (changedFiles.trim().length > 0) {
+              const pr = await github.rest.pulls.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                state: 'open',
-                head: context.repo.owner + ':' + branchName,
+                title: '🏥 Auto-fixed build errors',
+                head: context.ref,
+                base: 'main',
+                body: 'Automatic fix by Putter healing agent'
               });
-              
-              if (prs.data.length > 0) {
-                console.log('PR already exists: ' + prs.data[0].html_url);
-              } else {
-                const pr = await github.rest.pulls.create({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  title: '🏥 [PUTTER] Auto-fix build errors with FREE AI',
-                  head: branchName,
-                  base: context.ref,
-                  body: prBody,
-                  draft: false,
-                });
-                
-                console.log('✅ PR created: ' + pr.data.html_url);
-                
-                // Add labels
-                await github.rest.issues.addLabels({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: pr.data.number,
-                  labels: ['automated', 'healing', 'bugfix'],
-                });
-                
-                console.log('✅ Labels added');
-              }
-            } catch (error) {
-              console.error('PR creation error:', error.message);
-              console.log('Note: This may fail if not run from default branch');
+              console.log('PR:', pr.data.html_url);
             }
-      
-      # Step 12: Add workflow summary
-      - name: 📋 Summary
-        if: always()
-        run: |
-          echo "## 🏥 Putter Healing Agent Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| AI Model | ${{ env.OLLAMA_MODEL }} (FREE) |" >> $GITHUB_STEP_SUMMARY
-          echo "| Cost | \$0 ✅ |" >> $GITHUB_STEP_SUMMARY
-          echo "| Tokens | UNLIMITED ✅ |" >> $GITHUB_STEP_SUMMARY
-          echo "| Runtime | ~2-5 minutes |" >> $GITHUB_STEP_SUMMARY
-          echo "| Status | ✅ Completed |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### How it works:" >> $GITHUB_STEP_SUMMARY
-          echo "1. Build fails on main branch" >> $GITHUB_STEP_SUMMARY
-          echo "2. This workflow triggers automatically" >> $GITHUB_STEP_SUMMARY
-          echo "3. Ollama (FREE, LOCAL AI) analyzes errors" >> $GITHUB_STEP_SUMMARY
-          echo "4. Putter.js generates and applies fixes" >> $GITHUB_STEP_SUMMARY
-          echo "5. Changes committed to new branch" >> $GITHUB_STEP_SUMMARY
-          echo "6. PR created for review" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### ⚠️ Note:" >> $GITHUB_STEP_SUMMARY
-          echo "First run may take 2-3 minutes to download the AI model." >> $GITHUB_STEP_SUMMARY
-          echo "Subsequent runs use cached model and are faster." >> $GITHUB_STEP_SUMMARY
-      
-      # Step 13: Debug - show Ollama logs if failed
-      - name: 🐛 Debug - Ollama logs (if failed)
-        if: failure()
-        run: |
-          echo "=== Ollama Logs ==="
-          cat /tmp/ollama.log || echo "No logs found"
-          
-          echo ""
-          echo "=== Running Processes ==="
-          ps aux | grep ollama || echo "No ollama process"
-          
-          echo ""
-          echo "=== Ollama Status ==="
-          curl -s http://localhost:11434/api/tags || echo "Ollama not responding"
-
-  # Cleanup job
-  cleanup:
-    runs-on: ubuntu-latest
-    if: always()
-    needs: heal
-    steps:
-      - name: 🧹 Cleanup
-        run: |
-          echo "Workflow completed"
-          echo "Check the PR created by Putter for the fixes!"
