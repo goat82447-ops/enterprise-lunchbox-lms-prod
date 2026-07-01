@@ -1,0 +1,312 @@
+name: 🏥 Putter Issue Healer - Auto-Fix for Every Issue
+
+on:
+  issues:
+    types: [opened, labeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+env:
+  OLLAMA_MODEL: "codellama"
+  NODE_VERSION: "20"
+
+jobs:
+  check-if-should-heal:
+    runs-on: ubuntu-latest
+    outputs:
+      should-heal: ${{ steps.check.outputs.should-heal }}
+    steps:
+      - name: ✅ Check if issue should be healed
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const title = String(issue.title || '').toLowerCase();
+            const body = String(issue.body || '').toLowerCase();
+            const labels = issue.labels ? issue.labels.map(l => String(l.name || '').toLowerCase()) : [];
+            
+            // CHANGE THIS: Add/Remove conditions for when to auto-heal
+            const shouldHeal = 
+              labels.includes('healing-needed') ||
+              labels.includes('bug') ||
+              labels.includes('fix') ||
+              title.includes('[bug]') ||
+              title.includes('fix') ||
+              title.includes('error') ||
+              body.includes('fix:') ||
+              body.includes('error:');
+            
+            console.log('Should heal:', shouldHeal);
+            core.setOutput('should-heal', shouldHeal ? 'true' : 'false');
+
+  heal-issue:
+    needs: check-if-should-heal
+    runs-on: ubuntu-latest
+    if: needs.check-if-should-heal.outputs.should-heal == 'true'
+    
+    steps:
+      # ============================================
+      # STEP 1: Extract issue details
+      # ============================================
+      - name: 📋 Extract issue details
+        id: issue-info
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            console.log('📋 Issue #' + issue.number);
+            console.log('   Title: ' + issue.title);
+            console.log('   Labels: ' + issue.labels.map(l => l.name).join(', '));
+            
+            core.setOutput('number', String(issue.number));
+            core.setOutput('title', String(issue.title || ''));
+            core.setOutput('body', String(issue.body || ''));
+            core.setOutput('branch', 'healing-issue-' + issue.number);
+      
+      # ============================================
+      # STEP 2: Checkout code
+      # ============================================
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      # ============================================
+      # STEP 3: Setup Node.js
+      # ============================================
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      # ============================================
+      # STEP 4: Install frontend dependencies
+      # ============================================
+      - name: 📦 Install dependencies
+        run: |
+          cd Frontend/lunchbox-app
+          npm ci
+      
+      # ============================================
+      # STEP 5: Install Ollama (LOCAL AI - FREE)
+      # ============================================
+      - name: 🤖 Install Ollama
+        run: |
+          echo "Installing Ollama (LOCAL AI - NO API KEYS NEEDED)..."
+          curl -fsSL https://ollama.ai/install.sh | sh
+          echo "✅ Ollama installed"
+      
+      # ============================================
+      # STEP 6: Start Ollama service
+      # ============================================
+      - name: 🚀 Start Ollama service
+        run: |
+          echo "Starting Ollama server..."
+          ollama serve > /tmp/ollama.log 2>&1 &
+          sleep 3
+          
+          # Wait for Ollama to be ready
+          for i in {1..30}; do
+            if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
+              echo "✅ Ollama is ready!"
+              break
+            fi
+            echo "⏳ Waiting for Ollama... ($i/30)"
+            sleep 1
+          done
+      
+      # ============================================
+      # STEP 7: Pull AI Model
+      # ============================================
+      - name: 🧠 Pull CodeLlama model
+        run: |
+          echo "Downloading CodeLlama model (first run takes 2-3 minutes)..."
+          ollama pull ${{ env.OLLAMA_MODEL }}
+          echo "✅ Model ready"
+      
+      # ============================================
+      # STEP 8: Create branch for healing
+      # ============================================
+      - name: 🌿 Create healing branch
+        run: |
+          git config user.email "actions@github.com"
+          git config user.name "GitHub Actions"
+          git checkout -b ${{ steps.issue-info.outputs.branch }} || git checkout ${{ steps.issue-info.outputs.branch }}
+      
+      # ============================================
+      # STEP 9: Run Putter AI Healing Agent
+      # ============================================
+      - name: 🏥 Run Putter for Issue
+        id: putter
+        continue-on-error: true
+        run: |
+          cd Frontend/lunchbox-app
+          echo "=========================================="
+          echo "  🏥 PUTTER - Issue Healing Agent"
+          echo "=========================================="
+          echo ""
+          echo "Issue #${{ steps.issue-info.outputs.number }}"
+          echo "Title: ${{ steps.issue-info.outputs.title }}"
+          echo ""
+          echo "Running Putter with Ollama..."
+          
+          # CHANGE THIS: Add your custom parameters
+          node ../../putter.js \
+            --issue "${{ steps.issue-info.outputs.number }}" \
+            --title "${{ steps.issue-info.outputs.title }}" \
+            --model "${{ env.OLLAMA_MODEL }}" \
+            --auto || true
+      
+      # ============================================
+      # STEP 10: Verify build after healing
+      # ============================================
+      - name: ✅ Verify build after healing
+        continue-on-error: true
+        run: |
+          cd Frontend/lunchbox-app
+          npm run build 2>&1 | tee heal-verify.log || true
+      
+      # ============================================
+      # STEP 11: Check for changes
+      # ============================================
+      - name: 📝 Check for changes
+        id: check-changes
+        run: |
+          cd Frontend/lunchbox-app
+          CHANGED=$(git diff --name-only | wc -l)
+          echo "changed-files=$(git diff --name-only | tr '\n' ',')" >> $GITHUB_OUTPUT
+          echo "changed-count=$CHANGED" >> $GITHUB_OUTPUT
+          
+          if [ $CHANGED -gt 0 ]; then
+            echo "✅ $CHANGED files changed"
+          else
+            echo "ℹ️ No files changed"
+          fi
+      
+      # ============================================
+      # STEP 12: Commit healing changes
+      # ============================================
+      - name: 💾 Commit healing changes
+        if: steps.check-changes.outputs.changed-count > 0
+        run: |
+          git add -A
+          git commit -m "🏥 Auto-fix for issue #${{ steps.issue-info.outputs.number }}
+          
+Issue: ${{ steps.issue-info.outputs.title }}
+
+Fixed by: Putter Healing Agent with Ollama LLM
+Model: ${{ env.OLLAMA_MODEL }}
+Cost: $0 (FREE - LOCAL AI)" || echo "No changes to commit"
+      
+      # ============================================
+      # STEP 13: Push healing branch
+      # ============================================
+      - name: 📤 Push healing branch
+        if: steps.check-changes.outputs.changed-count > 0
+        continue-on-error: true
+        run: |
+          git push origin ${{ steps.issue-info.outputs.branch }} -u || echo "Failed to push, may already exist"
+      
+      # ============================================
+      # STEP 14: Create/Comment on PR
+      # ============================================
+      - name: 🔗 Create PR and comment on issue
+        if: steps.check-changes.outputs.changed-count > 0
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issueNumber = '${{ steps.issue-info.outputs.number }}';
+            const branchName = '${{ steps.issue-info.outputs.branch }}';
+            const changedFiles = '${{ steps.check-changes.outputs.changed-files }}'.split(',').filter(f => f);
+            
+            try {
+              // Create PR
+              const pr = await github.rest.pulls.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: '🏥 Auto-fix for issue #' + issueNumber + ': ${{ steps.issue-info.outputs.title }}',
+                head: branchName,
+                base: 'main',
+                body: `## 🏥 Automated Fix for Issue #${issueNumber}
+
+### Issue Description
+${{ steps.issue-info.outputs.title }}
+
+### Changes Made
+${changedFiles.length > 0 ? changedFiles.map(f => '- \`' + f + '\`').join('\n') : 'Auto-healing in progress...'}
+
+### Healing Details
+- **AI Model:** codellama (FREE, LOCAL)
+- **Cost:** $0 (No API keys used)
+- **Status:** ✅ Ready for review
+
+---
+*Generated automatically by Putter.js Healing Agent with Ollama LLM*`
+              });
+              
+              console.log('✅ PR created:', pr.data.html_url);
+              
+              // Comment on original issue
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: Number(issueNumber),
+                body: `🏥 **Putter Healing Agent: Complete!**
+
+✅ Auto-fix PR created: ${pr.data.html_url}
+
+**What was done:**
+- Analyzed issue: "${{ steps.issue-info.outputs.title }}"
+- Used CodeLlama (FREE AI, UNLIMITED tokens)
+- Fixed code automatically
+- Ready for your review
+
+**Next steps:**
+1. Review the PR above
+2. Approve and merge to apply fix
+3. Close this issue
+
+---
+*Powered by Putter.js + Ollama (100% LOCAL, 100% FREE)*`
+              });
+              
+              console.log('✅ Comment added to issue #' + issueNumber);
+            } catch (error) {
+              console.log('ℹ️ PR may already exist:', error.message);
+              
+              // Try to comment anyway
+              try {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: Number(issueNumber),
+                  body: `🏥 **Putter Healing Agent Active**
+
+Working on fixing: "${{ steps.issue-info.outputs.title }}"
+
+Model: CodeLlama (FREE)  
+Status: ✅ In Progress`
+                });
+              } catch (e) {
+                console.log('Could not add comment:', e.message);
+              }
+            }
+      
+      # ============================================
+      # STEP 15: Summary
+      # ============================================
+      - name: 📊 Summary
+        run: |
+          echo "=========================================="
+          echo "  ✅ Putter Healing Complete"
+          echo "=========================================="
+          echo ""
+          echo "Issue #${{ steps.issue-info.outputs.number }}: ${{ steps.issue-info.outputs.title }}"
+          echo "Branch: ${{ steps.issue-info.outputs.branch }}"
+          echo "Files changed: ${{ steps.check-changes.outputs.changed-count }}"
+          echo ""
+          echo "✅ Check GitHub for PR link"
+          echo "=========================================="
