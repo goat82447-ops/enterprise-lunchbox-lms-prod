@@ -17,32 +17,32 @@ type PushSubscriptionPayload = {
     sms: boolean;
     email: boolean;
   };
+};
 
-  export type PushStatsResponse = {
-    pushConfigured: boolean;
-    requestedBy: {
-      userId: string;
+export type PushStatsResponse = {
+  pushConfigured: boolean;
+  requestedBy: {
+    userId: string;
+    role: string;
+    isAdmin: boolean;
+  };
+  totals: {
+    all: number;
+    active: number;
+    inactive: number;
+  };
+  activeByRole: Record<string, number>;
+  currentUser: {
+    all: number;
+    active: number;
+    devices: Array<{
+      deviceId: string;
       role: string;
-      isAdmin: boolean;
-    };
-    totals: {
-      all: number;
-      active: number;
-      inactive: number;
-    };
-    activeByRole: Record<string, number>;
-    currentUser: {
-      all: number;
-      active: number;
-      devices: Array<{
-        deviceId: string;
-        role: string;
-        mode: string;
-        isActive: boolean;
-        updatedAt: string;
-        endpointTail: string;
-      }>;
-    };
+      mode: string;
+      isActive: boolean;
+      updatedAt: string;
+      endpointTail: string;
+    }>;
   };
 };
 
@@ -126,12 +126,6 @@ export class PushNotificationService {
       return { ok: false, message: 'Push notifications are not supported on this device.' };
     }
 
-    async getPushStats(): Promise<PushStatsResponse> {
-      return firstValueFrom(
-        this.http.get<PushStatsResponse>(PUSH_STATS_API, { headers: this.getSessionHeaders() })
-      );
-    }
-
     const permission = await this.resolvePermission(true);
     if (permission !== 'granted') {
       return { ok: false, message: 'Notification permission not granted.' };
@@ -170,6 +164,12 @@ export class PushNotificationService {
         return { ok: false, message: 'Unable to send test notification right now.' };
       }
     }
+  }
+
+  async getPushStats(): Promise<PushStatsResponse> {
+    return firstValueFrom(
+      this.http.get<PushStatsResponse>(PUSH_STATS_API, { headers: this.getSessionHeaders() })
+    );
   }
 
   private async ensureSubscription(forcePrompt: boolean): Promise<void> {
