@@ -35,23 +35,33 @@ export class PushNotificationService {
           this.unsubscribeFromServer();
           return;
         }
-        this.ensureSubscription();
+        void this.ensureSubscription(false);
       });
   }
 
-  private async ensureSubscription(): Promise<void> {
+  enableFromUserGesture(): void {
+    void this.ensureSubscription(true);
+  }
+
+  disablePush(): void {
+    this.unsubscribeFromServer();
+    void this.unsubscribeFromBrowser();
+  }
+
+  private async ensureSubscription(forcePrompt: boolean): Promise<void> {
     if (!('PushManager' in window)) {
       return;
     }
 
-    const registration = await navigator.serviceWorker.register(PUSH_SW_PATH);
-    const permission = await Notification.requestPermission();
+    const permission = await this.resolvePermission(forcePrompt);
     if (permission !== 'granted') {
       return;
     }
 
+    const registration = await navigator.serviceWorker.register(PUSH_SW_PATH);
     const vapidPublicKey = await this.resolveVapidPublicKey();
     if (!vapidPublicKey) {
+      console.warn('[PushNotificationService] Missing VAPID public key');
       return;
     }
 
@@ -73,7 +83,9 @@ export class PushNotificationService {
       auth: json.keys['auth']
     };
     this.http.post(PUSH_SUBSCRIBE_API, payload, { headers: this.getSessionHeaders() })
-      .subscribe({ error: () => void 0 });
+      .subscribe({
+        error: (err) => console.warn('[PushNotificationService] Subscribe failed', err)
+      });
   }
 
   private unsubscribeFromServer(): void {
@@ -81,8 +93,20 @@ export class PushNotificationService {
       return;
     }
     this.http.post(PUSH_UNSUBSCRIBE_API, { endpoint: this.currentEndpoint }, { headers: this.getSessionHeaders() })
-      .subscribe({ error: () => void 0 });
+      .subscribe({
+        error: (err) => console.warn('[PushNotificationService] Unsubscribe failed', err)
+      });
     this.currentEndpoint = '';
+  }
+
+  private async unsubscribeFromBrowser(): Promise<void> {
+    try {
+      const registration = await navigator.serviceWorker.getRegistration(PUSH_SW_PATH);
+      const existing = await registration?.pushManager.getSubscription();
+      await existing?.unsubscribe();
+    } catch (err) {
+      console.warn('[PushNotificationService] Browser unsubscribe failed', err);
+    }
   }
 
   private async resolveVapidPublicKey(): Promise<string> {
@@ -98,6 +122,19 @@ export class PushNotificationService {
   private getSessionHeaders(): HttpHeaders {
     const token = this.auth.getSessionToken();
     return token ? new HttpHeaders({ 'x-session-token': token }) : new HttpHeaders();
+  }
+
+  private async resolvePermission(forcePrompt: boolean): Promise<NotificationPermission> {
+    if (Notification.permission === 'granted') {
+      return 'granted';
+    }
+    if (Notification.permission === 'denied') {
+      return 'denied';
+    }
+    if (!forcePrompt) {
+      return 'default';
+    }
+    return Notification.requestPermission();
   }
 
   private urlBase64ToArrayBuffer(base64String: string): ArrayBuffer {
