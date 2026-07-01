@@ -1,10 +1,22 @@
-name: 🏥 Putter Healing Agent - FREE & UNLIMITED
+name: 🏥 Putter Healing Agent - FREE & UNLIMITED (No API Keys!)
 
 on:
   workflow_run:
     workflows: ["Build", "CI"]
     types: [completed]
     branches: [main, develop]
+  # Optional: Allow manual trigger with model selection
+  workflow_dispatch:
+    inputs:
+      model:
+        description: 'AI Model (mistral, codellama, llama2)'
+        required: false
+        default: 'mistral'
+        type: choice
+        options:
+          - mistral
+          - codellama
+          - llama2
 
 permissions:
   contents: write
@@ -12,7 +24,7 @@ permissions:
   checks: read
 
 env:
-  OLLAMA_MODEL: mistral  # FREE models: mistral, codellama, llama2
+  OLLAMA_MODEL: ${{ github.event.inputs.model || 'mistral' }}
   NODE_VERSION: "18"
 
 jobs:
@@ -40,9 +52,20 @@ jobs:
         run: npm ci
       
       # Step 4: Install Ollama
-      - name: 🤖 Install Ollama
+      - name: 🤖 Install Ollama (LOCAL AI - NO API KEYS NEEDED!)
         run: |
-          echo "Installing Ollama (LOCAL AI - FREE & UNLIMITED)..."
+          echo "========================================="
+          echo "  🏥 PUTTER Healing Agent"
+          echo "========================================="
+          echo ""
+          echo "⚡ IMPORTANT:"
+          echo "  ✅ NO API keys required"
+          echo "  ✅ NO external service calls"
+          echo "  ✅ COMPLETELY FREE"
+          echo "  ✅ UNLIMITED tokens"
+          echo "  ✅ Runs 100% LOCAL on GitHub runner"
+          echo ""
+          echo "Installing Ollama (LOCAL AI)..."
           curl -fsSL https://ollama.ai/install.sh | sh
           echo "✅ Ollama installed"
       
