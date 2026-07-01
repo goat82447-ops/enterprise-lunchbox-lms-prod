@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { UserPreferencesService, UserSettingsPreferences } from '../../core/services/user-preferences.service';
+import { PushNotificationService } from '../../core/services/push-notification.service';
 
 type PaymentPreference = 'upi' | 'card' | 'wallet' | 'cash' | 'auto';
 
@@ -143,7 +144,7 @@ interface ContactItem {
         <div class="toggle-grid">
           <label class="toggle-row"><span>SMS Notifications</span><input type="checkbox" [(ngModel)]="notificationPrefs.sms" (ngModelChange)="saveAll()" /></label>
           <label class="toggle-row"><span>Email Notifications</span><input type="checkbox" [(ngModel)]="notificationPrefs.email" (ngModelChange)="saveAll()" /></label>
-          <label class="toggle-row"><span>Push Notifications</span><input type="checkbox" [(ngModel)]="notificationPrefs.push" (ngModelChange)="saveAll()" /></label>
+          <label class="toggle-row"><span>Push Notifications</span><input type="checkbox" [(ngModel)]="notificationPrefs.push" (ngModelChange)="onPushPreferenceChanged($event)" /></label>
           <label class="toggle-row"><span>Ride Updates</span><input type="checkbox" [(ngModel)]="notificationPrefs.rideUpdates" (ngModelChange)="saveAll()" /></label>
           <label class="toggle-row"><span>Payment Alerts</span><input type="checkbox" [(ngModel)]="notificationPrefs.paymentAlerts" (ngModelChange)="saveAll()" /></label>
         </div>
@@ -470,7 +471,8 @@ export class SettingsComponent implements OnInit {
   constructor(
     public router: Router,
     private auth: AuthService,
-    private userPreferences: UserPreferencesService
+    private userPreferences: UserPreferencesService,
+    private pushNotifications: PushNotificationService
   ) {}
 
   ngOnInit(): void {
@@ -577,6 +579,16 @@ export class SettingsComponent implements OnInit {
       next: () => this.showToast('Preferences saved'),
       error: () => this.showToast('Unable to save preferences right now')
     });
+  }
+
+  onPushPreferenceChanged(enabled: boolean): void {
+    this.notificationPrefs.push = !!enabled;
+    if (this.notificationPrefs.push) {
+      this.pushNotifications.enableFromUserGesture();
+    } else {
+      this.pushNotifications.disablePush();
+    }
+    this.saveAll();
   }
 
   confirmDeleteAccount(): void {
