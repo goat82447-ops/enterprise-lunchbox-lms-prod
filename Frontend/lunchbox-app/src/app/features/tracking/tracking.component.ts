@@ -7,6 +7,7 @@ import { Booking } from '../../core/models/delivery.models';
 import { BookingService } from '../../core/services/booking.service';
 import { AuthService } from '../../core/services/auth.service';
 import { NotificationService } from '../../core/services/notification.service';
+import { UserPreferencesService } from '../../core/services/user-preferences.service';
 import { SafeResourceUrlPipe } from '../../shared/pipes/safe-resource-url.pipe';
 
 @Component({
@@ -922,8 +923,6 @@ import { SafeResourceUrlPipe } from '../../shared/pipes/safe-resource-url.pipe';
   `]
 })
 export class TrackingComponent implements OnInit, OnDestroy {
-  private static readonly REFUND_STORE_KEY = 'rx_refund_requests';
-  private static readonly FAVORITE_DRIVER_STORE_KEY = 'rx_favorite_drivers';
   private static readonly AUTO_CLOSE_DELAY_MS = 5 * 60 * 1000;
   private static readonly RATE_PER_KM_RS = 10;
   private static readonly MIN_RIDE_END_MINUTES = 2;
@@ -1010,12 +1009,12 @@ export class TrackingComponent implements OnInit, OnDestroy {
     private bookingService: BookingService,
     private authService: AuthService,
     private notifications: NotificationService,
-    private router: Router
+    private router: Router,
+    private userPreferences: UserPreferencesService
   ) {}
 
   ngOnInit(): void {
-    this.refundRequests = this.readRefundRequests();
-    this.favoriteDrivers = this.readFavoriteDrivers();
+    this.loadTrackingPreferences();
 
     this.foodCountdownIntervalId = setInterval(() => {
       this.nowTickMs = Date.now();
@@ -1701,7 +1700,7 @@ export class TrackingComponent implements OnInit, OnDestroy {
     }
 
     this.refundRequests[booking.id] = 'Under Review';
-    localStorage.setItem(TrackingComponent.REFUND_STORE_KEY, JSON.stringify(this.refundRequests));
+    this.persistTrackingPreferences();
     this.notifications.push('Refund request submitted. Status: Under Review', 'success');
   }
 
@@ -1723,7 +1722,7 @@ export class TrackingComponent implements OnInit, OnDestroy {
       this.notifications.push('Driver added to favorites.', 'success');
     }
 
-    localStorage.setItem(TrackingComponent.FAVORITE_DRIVER_STORE_KEY, JSON.stringify(Array.from(this.favoriteDrivers)));
+    this.persistTrackingPreferences();
   }
 
   isFavoriteDriver(phone: string): boolean {
@@ -1747,23 +1746,26 @@ export class TrackingComponent implements OnInit, OnDestroy {
     return `${minutes}:${String(seconds).padStart(2, '0')}`;
   }
 
-  private readRefundRequests(): Record<string, string> {
-    try {
-      const raw = localStorage.getItem(TrackingComponent.REFUND_STORE_KEY);
-      return raw ? (JSON.parse(raw) as Record<string, string>) : {};
-    } catch {
-      return {};
-    }
+  private loadTrackingPreferences(): void {
+    this.userPreferences.getTrackingPreferences()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (prefs) => {
+          this.refundRequests = prefs?.refundRequests ?? {};
+          this.favoriteDrivers = new Set((prefs?.favoriteDrivers ?? []).map((phone) => this.normalizePhone(phone)));
+        },
+        error: () => {
+          this.refundRequests = {};
+          this.favoriteDrivers = new Set<string>();
+        }
+      });
   }
 
-  private readFavoriteDrivers(): Set<string> {
-    try {
-      const raw = localStorage.getItem(TrackingComponent.FAVORITE_DRIVER_STORE_KEY);
-      const entries = raw ? (JSON.parse(raw) as string[]) : [];
-      return new Set(entries.map((x) => this.normalizePhone(x)));
-    } catch {
-      return new Set<string>();
-    }
+  private persistTrackingPreferences(): void {
+    this.userPreferences.saveTrackingPreferences({
+      refundRequests: this.refundRequests,
+      favoriteDrivers: Array.from(this.favoriteDrivers)
+    }).subscribe({ error: () => void 0 });
   }
 
   private syncAutoCloseTracking(booking: Booking): void {
