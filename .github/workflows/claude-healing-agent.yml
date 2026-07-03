@@ -1,0 +1,204 @@
+name: Claude Healing Agent
+
+on:
+  issues:
+    types: [opened, labeled]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: claude-healing-${{ github.event.issue.number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  heal-issue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ANTHROPIC_API_BASE_URL: ${{ vars.ANTHROPIC_API_BASE_URL || 'https://api.anthropic.com/v1' }}
+      ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL || 'claude-sonnet-4-5' }}
+      ANTHROPIC_VERSION: ${{ vars.ANTHROPIC_VERSION || '2023-06-01' }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate Claude configuration
+        shell: bash
+        run: |
+          if [ -z "${ANTHROPIC_API_KEY}" ]; then
+            echo "Missing required secret: ANTHROPIC_API_KEY" >&2
+            exit 1
+          fi
+          if [ -z "${ANTHROPIC_MODEL}" ]; then
+            echo "Missing required variable: ANTHROPIC_MODEL" >&2
+            exit 1
+          fi
+
+      - name: Analyze issue and publish diagnostics
+        id: analyze
+        uses: actions/github-script@v7
+        env:
+          ISSUE_TITLE: ${{ github.event.issue.title || '' }}
+          ISSUE_BODY: ${{ github.event.issue.body || '' }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || '' }}
+        with:
+          script: |
+            const issueNumber = Number(process.env.ISSUE_NUMBER || 0);
+            if (!issueNumber) {
+              core.info('No issue context available (workflow_dispatch without issue payload). Skipping.');
+              return;
+            }
+
+            const fs = require('fs');
+            const path = require('path');
+            const baseUrl = process.env.ANTHROPIC_API_BASE_URL;
+            const model = process.env.ANTHROPIC_MODEL;
+            const apiVersion = process.env.ANTHROPIC_VERSION;
+            const apiKey = process.env.ANTHROPIC_API_KEY;
+
+            const systemPrompt = 'You are a software issue healing assistant for a production repository. Never invent facts. Provide exact root cause only when evidence is sufficient; otherwise explicitly mark insufficient evidence and request required logs.';
+
+            const prompt = [
+              `Issue title: ${process.env.ISSUE_TITLE}`,
+              '',
+              'Issue body:',
+              `${process.env.ISSUE_BODY}`,
+              '',
+              'Return markdown with these exact headings:',
+              '## Error Observed',
+              '## Root Cause',
+              '## Resolution',
+              '## Validation Steps',
+              '',
+              'Rules:',
+              '- Use only evidence from the issue text/logs.',
+              '- Do not guess.',
+              '- If exact root cause is not provable from provided details, write "Insufficient evidence for exact root cause" and list exactly what logs/steps are missing.',
+              '- In Resolution, provide only actions tied to observed evidence.',
+              '- Keep response concise and actionable.'
+            ].join('\n');
+
+            let content = '';
+            let apiError = '';
+
+            try {
+              const response = await fetch(`${baseUrl}/messages`, {
+                method: 'POST',
+                headers: {
+                  'x-api-key': apiKey,
+                  'anthropic-version': apiVersion,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  model,
+                  max_tokens: 1024,
+                  temperature: 0.2,
+                  system: systemPrompt,
+                  messages: [
+                    {
+                      role: 'user',
+                      content: prompt
+                    }
+                  ]
+                })
+              });
+
+              if (!response.ok) {
+                const errorText = await response.text();
+                apiError = `Claude API request failed (${response.status}): ${errorText.slice(0, 1000)}`;
+              } else {
+                const data = await response.json();
+                content = (Array.isArray(data?.content)
+                  ? data.content.filter(b => b?.type === 'text').map(b => b.text).join('\n')
+                  : '').trim();
+                if (!content) {
+                  apiError = 'Claude API returned no message content.';
+                }
+              }
+            } catch (err) {
+              apiError = `Claude API request threw an exception: ${String(err).slice(0, 1000)}`;
+            }
+
+            const body = apiError
+              ? [
+                  `## Claude Healing Agent (${model})`,
+                  '',
+                  '### Error Observed',
+                  'Claude analysis step failed before generating diagnostics.',
+                  '',
+                  '### Root Cause',
+                  apiError,
+                  '',
+                  '### Resolution',
+                  '1. Verify `ANTHROPIC_API_KEY` repository secret is valid and active.',
+                  '2. Verify the account has API billing/credits enabled.',
+                  '3. Confirm `ANTHROPIC_MODEL` is a model your key can access.',
+                  '4. Re-run this workflow after updating the secret.',
+                  '',
+                  '> Automated fallback comment because model analysis failed.'
+                ].join('\n')
+              : [
+                  `## Claude Healing Agent (${model})`,
+                  '',
+                  content,
+                  '',
+                  '> Generated automatically from the current issue details.'
+                ].join('\n');
+
+            const reportDir = path.join(process.env.GITHUB_WORKSPACE, 'healing-reports');
+            fs.mkdirSync(reportDir, { recursive: true });
+            const reportPath = path.join(reportDir, `issue-${issueNumber}.md`);
+            const reportMarkdown = [
+              `# Claude Healing Report - Issue #${issueNumber}`,
+              '',
+              `**Issue:** ${process.env.ISSUE_TITLE}`,
+              `**Model:** ${model}`,
+              `**Generated at:** ${new Date().toISOString()}`,
+              '',
+              body
+            ].join('\n');
+            fs.writeFileSync(reportPath, reportMarkdown, 'utf8');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              body
+            });
+
+            await core.summary
+              .addHeading(`Claude Healing Agent (${model})`)
+              .addRaw(apiError ? '**Status:** Failed to analyze with Claude' : '**Status:** Analysis posted successfully')
+              .addEOL()
+              .addEOL()
+              .addRaw(apiError ? `**Error:** ${apiError}` : 'Issue comment posted with structured diagnostics.')
+              .write();
+
+            if (apiError) core.warning(apiError);
+            core.setOutput('report_path', `healing-reports/issue-${issueNumber}.md`);
+            core.setOutput('analysis_status', apiError ? 'failed' : 'ok');
+
+      - name: Create or update healing PR
+        if: ${{ steps.analyze.outputs.report_path != '' }}
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: claude-healing/issue-${{ github.event.issue.number }}
+          title: Claude healing report for issue #${{ github.event.issue.number }}
+          body: |
+            Automated healing analysis report generated from issue details.
+
+            Closes #${{ github.event.issue.number }}
+
+            - Analysis status: `${{ steps.analyze.outputs.analysis_status }}`
+            - Report file: `${{ steps.analyze.outputs.report_path }}`
+          commit-message: "chore(healing): add Claude report for issue #${{ github.event.issue.number }}"
+          add-paths: |
+            healing-reports/issue-${{ github.event.issue.number }}.md
